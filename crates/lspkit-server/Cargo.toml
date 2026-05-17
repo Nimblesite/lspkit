@@ -1,0 +1,27 @@
+[package]
+name = "lspkit-server"
+description = "Hand-rolled JSON-RPC LSP server scaffolding: Content-Length framing, dispatcher, capability builder, URI helpers, diagnostics fan-out, progress, cancellation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lspkit.workspace = true
+lspkit-vfs.workspace = true
+
+tokio.workspace = true
+tokio-util.workspace = true
+async-trait.workspace = true
+futures-util.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+lsp-types.workspace = true
+
+thiserror.workspace = true
+tracing.workspace = true

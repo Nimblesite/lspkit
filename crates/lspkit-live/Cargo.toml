@@ -1,0 +1,23 @@
+[package]
+name = "lspkit-live"
+description = "File-watcher, debouncer, and single-flight scheduler that drive an EngineApi session."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lspkit.workspace = true
+
+tokio.workspace = true
+tokio-util.workspace = true
+notify.workspace = true
+async-trait.workspace = true
+futures-util.workspace = true
+
+thiserror.workspace = true
+tracing.workspace = true

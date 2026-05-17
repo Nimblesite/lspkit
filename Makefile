@@ -37,10 +37,11 @@ build:
 
 ## test: Fail-fast tests + coverage + threshold enforcement.
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].
+##       Uses cargo-nextest (stable-compatible fail-fast; default behaviour).
 test:
 	@echo "==> Testing (fail-fast + coverage + threshold)..."
 	rustup component add llvm-tools-preview 2>/dev/null || true
-	cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info -- --fail-fast
+	cargo llvm-cov nextest --workspace --all-targets --lcov --output-path lcov.info
 	$(MAKE) _coverage_check
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
@@ -66,7 +67,7 @@ ci: lint test build
 setup:
 	@echo "==> Setting up development environment..."
 	rustup component add rustfmt clippy llvm-tools-preview
-	cargo install cargo-llvm-cov cargo-watch
+	cargo install cargo-llvm-cov cargo-nextest cargo-watch
 	@echo "==> Setup complete. Run 'make ci' to validate."
 
 ## help: List all available targets

@@ -65,7 +65,10 @@ impl FileWatcher {
             }
         });
 
-        Ok(Self { _inner: watcher, rx: out_rx })
+        Ok(Self {
+            _inner: watcher,
+            rx: out_rx,
+        })
     }
 
     /// Await the next change event. Returns `None` when the watcher is dropped.

@@ -61,7 +61,13 @@ impl Sidecar {
     /// Construct, but do not yet spawn, a sidecar definition.
     #[must_use]
     pub fn new(program: impl Into<String>, args: Vec<String>, config: LifecycleConfig) -> Self {
-        Self { program: program.into(), args, child: None, config, restart_count: 0 }
+        Self {
+            program: program.into(),
+            args,
+            child: None,
+            config,
+            restart_count: 0,
+        }
     }
 
     /// Spawn the child process.
@@ -92,7 +98,11 @@ impl Sidecar {
     #[must_use]
     pub fn next_backoff(&self) -> Duration {
         let factor = 2_u32.saturating_pow(self.restart_count.min(20));
-        let scaled = self.config.initial_backoff.checked_mul(factor).unwrap_or(self.config.max_backoff);
+        let scaled = self
+            .config
+            .initial_backoff
+            .checked_mul(factor)
+            .unwrap_or(self.config.max_backoff);
         scaled.min(self.config.max_backoff)
     }
 

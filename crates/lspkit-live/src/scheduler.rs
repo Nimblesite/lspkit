@@ -25,7 +25,10 @@ pub struct ScheduleConfig {
 
 impl Default for ScheduleConfig {
     fn default() -> Self {
-        Self { quiet: Duration::from_millis(100), cap: Duration::from_millis(500) }
+        Self {
+            quiet: Duration::from_millis(100),
+            cap: Duration::from_millis(500),
+        }
     }
 }
 
@@ -57,7 +60,9 @@ pub fn spawn(
             } else {
                 let deadline = compute_deadline(first_event_at, config);
                 let Ok(event) = time::timeout_at(deadline, events_rx.recv()).await else {
-                    let trigger = Trigger { events: std::mem::take(&mut buffered) };
+                    let trigger = Trigger {
+                        events: std::mem::take(&mut buffered),
+                    };
                     first_event_at = None;
                     if tx.send(trigger).is_err() {
                         return;

@@ -56,6 +56,79 @@ pub struct JsonRpcError {
     pub data: Option<Value>,
 }
 
+impl JsonRpcError {
+    /// Construct a new error with `code` and `message` and no `data`.
+    #[must_use]
+    pub fn new(code: i32, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            data: None,
+        }
+    }
+
+    /// Attach structured `data` to the error.
+    #[must_use]
+    pub fn with_data(mut self, data: Value) -> Self {
+        self.data = Some(data);
+        self
+    }
+}
+
+impl Message {
+    /// Construct a request with `id`, `method`, and `params`.
+    #[must_use]
+    pub fn request(id: RequestId, method: impl Into<String>, params: Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_owned(),
+            id: Some(id),
+            method: Some(method.into()),
+            params: Some(params),
+            result: None,
+            error: None,
+        }
+    }
+
+    /// Construct a notification with `method` and `params`.
+    #[must_use]
+    pub fn notification(method: impl Into<String>, params: Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_owned(),
+            id: None,
+            method: Some(method.into()),
+            params: Some(params),
+            result: None,
+            error: None,
+        }
+    }
+
+    /// Construct a successful response carrying `result`.
+    #[must_use]
+    pub fn response(id: RequestId, result: Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_owned(),
+            id: Some(id),
+            method: None,
+            params: None,
+            result: Some(result),
+            error: None,
+        }
+    }
+
+    /// Construct a failed response carrying `error`.
+    #[must_use]
+    pub fn response_error(id: RequestId, error: JsonRpcError) -> Self {
+        Self {
+            jsonrpc: "2.0".to_owned(),
+            id: Some(id),
+            method: None,
+            params: None,
+            result: None,
+            error: Some(error),
+        }
+    }
+}
+
 /// Errors from reading or writing JSON-RPC messages.
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
@@ -118,7 +191,9 @@ pub struct MessageWriter<W: AsyncWrite + Unpin + Send> {
 impl<W: AsyncWrite + Unpin + Send> MessageWriter<W> {
     /// Wrap an async writer.
     pub fn new(writer: W) -> Self {
-        Self { inner: Mutex::new(writer) }
+        Self {
+            inner: Mutex::new(writer),
+        }
     }
 
     /// Write a single Content-Length-framed message.

@@ -46,7 +46,10 @@ impl Session {
     #[must_use]
     pub fn new() -> Self {
         let (events, _) = broadcast::channel(32);
-        Self { generation: Arc::new(AtomicU64::new(0)), events }
+        Self {
+            generation: Arc::new(AtomicU64::new(0)),
+            events,
+        }
     }
 
     /// Current generation.
@@ -98,6 +101,8 @@ impl Default for Session {
 
 impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Session").field("generation", &self.generation()).finish()
+        f.debug_struct("Session")
+            .field("generation", &self.generation())
+            .finish()
     }
 }

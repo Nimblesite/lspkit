@@ -7,9 +7,9 @@
 use std::io;
 use std::path::PathBuf;
 
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::EnvFilter;
 
 /// Builder for a stdio-safe tracing subscriber.
 #[non_exhaustive]
@@ -54,7 +54,9 @@ impl TracingBuilder {
         };
 
         let stderr_layer = fmt::layer().with_writer(io::stderr);
-        let registry = tracing_subscriber::registry().with(env_filter).with(stderr_layer);
+        let registry = tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stderr_layer);
 
         if let Some(path) = self.json_file {
             let file = std::fs::OpenOptions::new()
@@ -68,7 +70,9 @@ impl TracingBuilder {
                 .try_init()
                 .map_err(|e| TracingError::Init(e.to_string()))
         } else {
-            registry.try_init().map_err(|e| TracingError::Init(e.to_string()))
+            registry
+                .try_init()
+                .map_err(|e| TracingError::Init(e.to_string()))
         }
     }
 }

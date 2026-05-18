@@ -23,3 +23,9 @@ thiserror = { workspace = true, optional = true }
 [features]
 default = []
 tracing-setup = ["dep:tracing", "dep:tracing-subscriber", "dep:thiserror"]
+
+[dev-dependencies]
+tokio = { workspace = true }
+futures-util.workspace = true
+async-trait.workspace = true
+tokio-util.workspace = true

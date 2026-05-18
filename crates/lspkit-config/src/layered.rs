@@ -68,8 +68,8 @@ pub fn load_from_ancestor<T>(start: &Path, file_name: &str) -> Result<LoadedConf
 where
     T: DeserializeOwned,
 {
-    let path = find_ancestor(start, file_name)
-        .ok_or_else(|| LoadError::NotFound(file_name.to_owned()))?;
+    let path =
+        find_ancestor(start, file_name).ok_or_else(|| LoadError::NotFound(file_name.to_owned()))?;
     load_from_path(&path)
 }
 
@@ -82,11 +82,16 @@ pub fn load_from_path<T>(path: &Path) -> Result<LoadedConfig<T>, LoadError>
 where
     T: DeserializeOwned,
 {
-    let text =
-        std::fs::read_to_string(path).map_err(|source| LoadError::Io { path: path.to_path_buf(), source })?;
+    let text = std::fs::read_to_string(path).map_err(|source| LoadError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
     let value: T = toml::from_str(&text).map_err(|err| LoadError::Parse {
         path: path.to_path_buf(),
         message: err.to_string(),
     })?;
-    Ok(LoadedConfig { source: path.to_path_buf(), value })
+    Ok(LoadedConfig {
+        source: path.to_path_buf(),
+        value,
+    })
 }

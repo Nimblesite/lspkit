@@ -60,7 +60,11 @@ impl<E: EngineApi> Adapter<E> {
     /// New adapter wrapping `engine`.
     #[must_use]
     pub fn new(engine: Arc<E>) -> Self {
-        Self { engine, registry: ToolRegistry::new(), handlers: Vec::new() }
+        Self {
+            engine,
+            registry: ToolRegistry::new(),
+            handlers: Vec::new(),
+        }
     }
 
     /// Register a tool with its description and handler.
@@ -93,7 +97,10 @@ impl<E: EngineApi> Adapter<E> {
             .map(|(_, h)| h.clone())
             .ok_or_else(|| AdapterError::UnknownTool(name.to_owned()))?;
         let output = handler.invoke(self.engine.as_ref(), input).await?;
-        Ok(ToolInvocation { name: name.to_owned(), output })
+        Ok(ToolInvocation {
+            name: name.to_owned(),
+            output,
+        })
     }
 }
 

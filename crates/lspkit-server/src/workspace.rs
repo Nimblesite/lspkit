@@ -21,7 +21,10 @@ impl WorkspaceFolder {
     /// Construct a folder.
     #[must_use]
     pub fn new(root: impl Into<PathBuf>, name: impl Into<String>) -> Self {
-        Self { root: root.into(), name: name.into() }
+        Self {
+            root: root.into(),
+            name: name.into(),
+        }
     }
 }
 
@@ -62,7 +65,9 @@ impl Workspace {
     /// Snapshot the current folder list.
     #[must_use]
     pub fn folders(&self) -> Vec<WorkspaceFolder> {
-        self.folders.read().map_or_else(|_| Vec::new(), |g| g.clone())
+        self.folders
+            .read()
+            .map_or_else(|_| Vec::new(), |g| g.clone())
     }
 
     /// Find the folder containing `path`, if any.

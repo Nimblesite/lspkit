@@ -28,5 +28,5 @@ pub use crate::diagnostics::{
 pub use crate::dispatch::{DispatchError, Dispatcher, HandlerResult};
 pub use crate::jsonrpc::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
 pub use crate::progress::{NoopReporter, ProgressReporter, ProgressSink, ProgressUpdate};
-pub use crate::uri::{UriError, path_to_uri, uri_to_path};
+pub use crate::uri::{path_to_uri, uri_to_path, UriError};
 pub use crate::workspace::{Workspace, WorkspaceFolder};

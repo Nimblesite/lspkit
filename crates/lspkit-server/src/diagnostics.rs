@@ -42,6 +42,38 @@ pub struct Diagnostic {
     pub source: Option<String>,
 }
 
+impl Diagnostic {
+    /// Construct a diagnostic with required fields. Optional fields default to `None`.
+    #[must_use]
+    pub fn new(
+        severity: Severity,
+        message: impl Into<String>,
+        range: (u32, u32, u32, u32),
+    ) -> Self {
+        Self {
+            severity,
+            message: message.into(),
+            range,
+            code: None,
+            source: None,
+        }
+    }
+
+    /// Attach a diagnostic `code`.
+    #[must_use]
+    pub fn with_code(mut self, code: impl Into<String>) -> Self {
+        self.code = Some(code.into());
+        self
+    }
+
+    /// Attach a `source` identifier.
+    #[must_use]
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.source = Some(source.into());
+        self
+    }
+}
+
 /// Diagnostics for a single document at a specific engine generation.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
@@ -52,6 +84,18 @@ pub struct DiagnosticsBatch {
     pub generation: Generation,
     /// The findings.
     pub diagnostics: Vec<Diagnostic>,
+}
+
+impl DiagnosticsBatch {
+    /// Construct a batch tagging `diagnostics` for `uri` at `generation`.
+    #[must_use]
+    pub fn new(uri: DocumentUri, generation: Generation, diagnostics: Vec<Diagnostic>) -> Self {
+        Self {
+            uri,
+            generation,
+            diagnostics,
+        }
+    }
 }
 
 /// A consumer of diagnostic batches.
@@ -101,7 +145,9 @@ impl DiagnosticsBus {
 impl std::fmt::Debug for DiagnosticsBus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let count = self.sinks.lock().map_or(0, |g| g.len());
-        f.debug_struct("DiagnosticsBus").field("sinks", &count).finish()
+        f.debug_struct("DiagnosticsBus")
+            .field("sinks", &count)
+            .finish()
     }
 }
 
@@ -109,8 +155,6 @@ impl std::fmt::Debug for DiagnosticsBus {
 ///
 /// # Errors
 /// Returns [`crate::uri::UriError`] if the path cannot be expressed as a URI.
-pub fn document_uri_from_path(
-    path: &std::path::Path,
-) -> Result<DocumentUri, crate::uri::UriError> {
+pub fn document_uri_from_path(path: &std::path::Path) -> Result<DocumentUri, crate::uri::UriError> {
     Ok(DocumentUri::new(path_to_uri(path)?))
 }

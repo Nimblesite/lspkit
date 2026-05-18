@@ -11,4 +11,4 @@ pub mod encoding;
 
 pub use crate::document::{DocumentUri, DocumentVersion, Vfs, VfsError};
 pub use crate::edit::{EditError, Position, Range, TextEdit};
-pub use crate::encoding::{PositionEncoding, UnknownEncoding, negotiate};
+pub use crate::encoding::{negotiate, PositionEncoding, UnknownEncoding};

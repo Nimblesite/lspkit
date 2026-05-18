@@ -22,6 +22,34 @@ pub struct ProgressUpdate {
     pub done: bool,
 }
 
+impl ProgressUpdate {
+    /// Construct an in-progress update.
+    #[must_use]
+    pub fn new(
+        token: impl Into<String>,
+        message: impl Into<String>,
+        percentage: Option<u32>,
+    ) -> Self {
+        Self {
+            token: token.into(),
+            message: message.into(),
+            percentage,
+            done: false,
+        }
+    }
+
+    /// Construct a final update with `percentage` of `100`.
+    #[must_use]
+    pub fn final_update(token: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            token: token.into(),
+            message: message.into(),
+            percentage: Some(100),
+            done: true,
+        }
+    }
+}
+
 /// A receiver for progress updates.
 #[async_trait]
 pub trait ProgressReporter: Send + Sync + 'static {
@@ -48,13 +76,19 @@ pub struct ProgressSink {
 impl ProgressSink {
     /// Construct a sink that forwards updates to `inner` under `token`.
     pub fn new(inner: Arc<dyn ProgressReporter>, token: impl Into<String>) -> Self {
-        Self { inner, token: token.into() }
+        Self {
+            inner,
+            token: token.into(),
+        }
     }
 
     /// No-op sink that drops every update.
     #[must_use]
     pub fn noop() -> Self {
-        Self { inner: Arc::new(NoopReporter), token: String::new() }
+        Self {
+            inner: Arc::new(NoopReporter),
+            token: String::new(),
+        }
     }
 
     /// Send a single update.
@@ -84,6 +118,8 @@ impl ProgressSink {
 
 impl std::fmt::Debug for ProgressSink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ProgressSink").field("token", &self.token).finish_non_exhaustive()
+        f.debug_struct("ProgressSink")
+            .field("token", &self.token)
+            .finish_non_exhaustive()
     }
 }

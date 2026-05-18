@@ -102,7 +102,10 @@ fn position_to_byte(
 ) -> Result<usize, EditError> {
     let line_idx = pos.line as usize;
     if line_idx > rope.len_lines() {
-        return Err(EditError::OutOfBounds { line: pos.line, character: pos.character });
+        return Err(EditError::OutOfBounds {
+            line: pos.line,
+            character: pos.character,
+        });
     }
     let line_byte_start = rope.line_to_byte(line_idx.min(rope.len_lines()));
     let line = rope.line(line_idx.min(rope.len_lines().saturating_sub(1)));
@@ -135,19 +138,17 @@ fn utf16_to_utf8_offset(line: &str, utf16_units: usize) -> Result<usize, EditErr
 }
 
 fn utf32_to_utf8_offset(line: &str, code_points: usize) -> Result<usize, EditError> {
-    line.char_indices()
-        .nth(code_points)
-        .map_or_else(
-            || {
-                if line.chars().count() == code_points {
-                    Ok(line.len())
-                } else {
-                    Err(EditError::OutOfBounds {
-                        line: u32::MAX,
-                        character: u32::try_from(code_points).unwrap_or(u32::MAX),
-                    })
-                }
-            },
-            |(byte_idx, _)| Ok(byte_idx),
-        )
+    line.char_indices().nth(code_points).map_or_else(
+        || {
+            if line.chars().count() == code_points {
+                Ok(line.len())
+            } else {
+                Err(EditError::OutOfBounds {
+                    line: u32::MAX,
+                    character: u32::try_from(code_points).unwrap_or(u32::MAX),
+                })
+            }
+        },
+        |(byte_idx, _)| Ok(byte_idx),
+    )
 }

@@ -5,4 +5,6 @@
 
 pub mod layered;
 
-pub use crate::layered::{LoadError, LoadedConfig, find_ancestor, load_from_ancestor, load_from_path};
+pub use crate::layered::{
+    find_ancestor, load_from_ancestor, load_from_path, LoadError, LoadedConfig,
+};

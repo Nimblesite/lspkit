@@ -9,6 +9,6 @@ pub mod scheduler;
 pub mod session;
 pub mod watcher;
 
-pub use crate::scheduler::{ScheduleConfig, Trigger, spawn as spawn_scheduler};
+pub use crate::scheduler::{spawn as spawn_scheduler, ScheduleConfig, Trigger};
 pub use crate::session::{Analyzer, AnalyzerError, AnalyzerResult, Session};
 pub use crate::watcher::{ChangeEvent, FileWatcher, WatcherError};

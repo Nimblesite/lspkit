@@ -63,5 +63,8 @@ pub struct UnknownEncoding(pub String);
 /// When `client_supported` is empty, returns [`PositionEncoding::Utf16`].
 #[must_use]
 pub fn negotiate(client_supported: &[PositionEncoding]) -> PositionEncoding {
-    client_supported.first().copied().unwrap_or(PositionEncoding::Utf16)
+    client_supported
+        .first()
+        .copied()
+        .unwrap_or(PositionEncoding::Utf16)
 }

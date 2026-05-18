@@ -88,12 +88,18 @@ impl Vfs {
     /// New empty VFS using the given position encoding.
     #[must_use]
     pub fn new(encoding: PositionEncoding) -> Self {
-        Self { docs: Arc::new(DashMap::new()), encoding }
+        Self {
+            docs: Arc::new(DashMap::new()),
+            encoding,
+        }
     }
 
     /// Insert (or replace) a document. Called from `textDocument/didOpen`.
     pub fn open(&self, uri: DocumentUri, text: &str, version: DocumentVersion) {
-        let entry = DocumentEntry { rope: Rope::from_str(text), version };
+        let entry = DocumentEntry {
+            rope: Rope::from_str(text),
+            version,
+        };
         self.docs.insert(uri, entry);
     }
 
@@ -114,7 +120,10 @@ impl Vfs {
             .get_mut(uri)
             .ok_or_else(|| VfsError::NotFound(uri.as_str().to_owned()))?;
         if version.get() <= entry.version.get() {
-            return Err(VfsError::StaleVersion { have: entry.version.get(), got: version.get() });
+            return Err(VfsError::StaleVersion {
+                have: entry.version.get(),
+                got: version.get(),
+            });
         }
         edit::apply(&mut entry.rope, edits, self.encoding)?;
         entry.version = version;

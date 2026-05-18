@@ -46,7 +46,9 @@ pub fn path_to_uri(path: &Path) -> Result<String, UriError> {
     if !path.is_absolute() {
         return Err(UriError::InvalidPath(path.to_path_buf()));
     }
-    let as_str = path.to_str().ok_or_else(|| UriError::InvalidPath(path.to_path_buf()))?;
+    let as_str = path
+        .to_str()
+        .ok_or_else(|| UriError::InvalidPath(path.to_path_buf()))?;
     let normalized = as_str.replace('\\', "/");
     let encoded = percent_encode(&normalized);
     if normalized.starts_with('/') {
@@ -88,15 +90,9 @@ fn percent_encode(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for byte in input.bytes() {
         match byte {
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'_'
-            | b'.'
-            | b'~'
-            | b'/'
-            | b':' => out.push(byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' | b':' => {
+                out.push(byte as char);
+            }
             _ => {
                 let _ = write!(out, "%{byte:02X}");
             }

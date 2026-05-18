@@ -146,7 +146,9 @@ impl Progress {
     /// A `Progress` that drops every report.
     #[must_use]
     pub fn noop() -> Self {
-        Self { inner: ProgressInner::Noop }
+        Self {
+            inner: ProgressInner::Noop,
+        }
     }
 
     /// Report a progress message and an optional percentage in `[0, 100]`.

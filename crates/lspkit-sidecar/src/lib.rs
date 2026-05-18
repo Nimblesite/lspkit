@@ -15,4 +15,4 @@ pub mod transport;
 
 pub use crate::correlator::{CorrelationError, Correlator, RequestId};
 pub use crate::lifecycle::{LifecycleConfig, LifecycleError, Sidecar};
-pub use crate::transport::{DEFAULT_MAX_FRAME, TransportError, read_frame, write_frame};
+pub use crate::transport::{read_frame, write_frame, TransportError, DEFAULT_MAX_FRAME};

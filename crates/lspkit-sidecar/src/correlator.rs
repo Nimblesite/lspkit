@@ -45,7 +45,10 @@ impl<R> Correlator<R> {
     /// New correlator with no pending requests.
     #[must_use]
     pub fn new() -> Self {
-        Self { next_id: AtomicU64::new(1), pending: Mutex::new(HashMap::new()) }
+        Self {
+            next_id: AtomicU64::new(1),
+            pending: Mutex::new(HashMap::new()),
+        }
     }
 
     /// Number of pending requests.
@@ -80,12 +83,16 @@ impl<R: Send + 'static> Correlator<R> {
             .ok()
             .and_then(|mut guard| guard.remove(&id))
             .ok_or(CorrelationError::UnknownId(id.get()))?;
-        sender.send(response).map_err(|_| CorrelationError::AlreadyResolved(id.get()))
+        sender
+            .send(response)
+            .map_err(|_| CorrelationError::AlreadyResolved(id.get()))
     }
 }
 
 impl<R> std::fmt::Debug for Correlator<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Correlator").field("pending", &self.pending_count()).finish()
+        f.debug_struct("Correlator")
+            .field("pending", &self.pending_count())
+            .finish()
     }
 }

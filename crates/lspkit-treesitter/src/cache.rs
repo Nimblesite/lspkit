@@ -92,6 +92,8 @@ impl ParseCache {
 
 impl std::fmt::Debug for ParseCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ParseCache").field("entries", &self.entries.len()).finish()
+        f.debug_struct("ParseCache")
+            .field("entries", &self.entries.len())
+            .finish()
     }
 }

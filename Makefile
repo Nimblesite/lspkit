@@ -90,18 +90,22 @@ help:
 
 _coverage_check:
 	@if [ ! -f "$(COVERAGE_THRESHOLDS_FILE)" ]; then echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) not found"; exit 1; fi; \
-	THRESHOLD=$$(jq -r '.default_threshold' "$(COVERAGE_THRESHOLDS_FILE)"); \
-	LH=$$(grep '^LH:' lcov.info | awk -F: '{sum+=$$2} END{print sum+0}'); \
-	LF=$$(grep '^LF:' lcov.info | awk -F: '{sum+=$$2} END{print sum+0}'); \
-	if [ "$$LF" -eq 0 ]; then echo "FAIL: No lines in lcov.info"; exit 1; fi; \
-	PCT=$$(awk "BEGIN{printf \"%.1f\", $$LH/$$LF*100}"); \
-	PCT_INT=$$(awk "BEGIN{printf \"%d\", $$LH/$$LF*100}"); \
-	echo "Line coverage: $${PCT}% (threshold: $${THRESHOLD}%)"; \
-	if [ "$$PCT_INT" -lt "$${THRESHOLD}" ]; then \
-	  echo "FAIL: $${PCT}% < $${THRESHOLD}%"; exit 1; \
-	else \
-	  echo "OK: $${PCT}% >= $${THRESHOLD}%"; \
-	fi
+	if [ ! -f lcov.info ]; then echo "FAIL: lcov.info not found"; exit 1; fi; \
+	FAILED=0; \
+	for CRATE in $$(jq -r '.per_crate | keys[]' "$(COVERAGE_THRESHOLDS_FILE)"); do \
+	  THRESHOLD=$$(jq -r --arg c "$$CRATE" '.per_crate[$$c]' "$(COVERAGE_THRESHOLDS_FILE)"); \
+	  COV=$$(awk -v crate="$$CRATE" 'BEGIN{lh=0;lf=0;in_block=0} /^SF:/{in_block=(index($$0,"/crates/" crate "/src/")>0)?1:0} in_block&&/^LH:/{sub(/^LH:/,""); lh+=$$0} in_block&&/^LF:/{sub(/^LF:/,""); lf+=$$0} /^end_of_record/{in_block=0} END{printf "%d %d", lh, lf}' lcov.info); \
+	  LH=$${COV% *}; LF=$${COV#* }; \
+	  if [ "$$LF" -eq 0 ]; then echo "FAIL: $$CRATE — no lines in lcov.info"; FAILED=1; continue; fi; \
+	  PCT=$$(awk "BEGIN{printf \"%.2f\", $$LH/$$LF*100}"); \
+	  PCT_INT=$$(awk "BEGIN{printf \"%d\", $$LH/$$LF*100}"); \
+	  if [ "$$PCT_INT" -lt "$$THRESHOLD" ]; then \
+	    printf "FAIL: %-20s %s%% < %s%%\n" "$$CRATE" "$$PCT" "$$THRESHOLD"; FAILED=1; \
+	  else \
+	    printf "OK:   %-20s %s%% >= %s%%\n" "$$CRATE" "$$PCT" "$$THRESHOLD"; \
+	  fi; \
+	done; \
+	if [ "$$FAILED" -ne 0 ]; then echo "FAIL: one or more crates below per-crate threshold"; exit 1; fi
 
 # =============================================================================
 # Repo-Specific Targets

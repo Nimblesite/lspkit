@@ -1,8 +1,26 @@
 //! End-to-end tests for [`lspkit_server::jsonrpc`] framing and types.
 
-use lspkit_server::{JsonRpcError, Message, MessageWriter, RequestId};
+use lspkit_server::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
 use serde_json::{json, Value};
 use tokio::io::BufReader;
+
+/// Decode a single framed message from `raw`. Panics with `label` if framing fails.
+async fn decode_ok(raw: Vec<u8>) -> Message {
+    let cursor = std::io::Cursor::new(raw);
+    let mut reader = BufReader::new(cursor);
+    lspkit_server::jsonrpc::read_message(&mut reader)
+        .await
+        .expect("read ok")
+}
+
+/// Drive `read_message` on `raw` and return the expected framing error.
+async fn decode_err(raw: Vec<u8>) -> FramingError {
+    let cursor = std::io::Cursor::new(raw);
+    let mut reader = BufReader::new(cursor);
+    lspkit_server::jsonrpc::read_message(&mut reader)
+        .await
+        .expect_err("must reject")
+}
 
 #[tokio::test]
 async fn write_and_read_round_trip_request() {
@@ -25,11 +43,7 @@ async fn write_and_read_round_trip_request() {
     );
     assert!(on_wire.contains("\"method\":\"initialize\""));
 
-    let cursor = std::io::Cursor::new(buffer);
-    let mut reader = BufReader::new(cursor);
-    let decoded = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect("read ok");
+    let decoded = decode_ok(buffer).await;
     assert_eq!(decoded.jsonrpc, "2.0");
     assert_eq!(decoded.method.as_deref(), Some("initialize"));
     assert_eq!(decoded.id, Some(RequestId::Number(1)));
@@ -58,11 +72,7 @@ async fn write_and_read_notification() {
         "notifications must not serialize an id"
     );
 
-    let cursor = std::io::Cursor::new(buffer);
-    let mut reader = BufReader::new(cursor);
-    let decoded = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect("read ok");
+    let decoded = decode_ok(buffer).await;
     assert_eq!(decoded.jsonrpc, "2.0");
     assert!(decoded.id.is_none(), "notifications have no id");
     assert_eq!(decoded.method.as_deref(), Some("textDocument/didChange"));
@@ -95,11 +105,7 @@ async fn write_and_read_response_success() {
         "success response must not carry error"
     );
 
-    let cursor = std::io::Cursor::new(buffer);
-    let mut reader = BufReader::new(cursor);
-    let decoded = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect("read ok");
+    let decoded = decode_ok(buffer).await;
     assert_eq!(decoded.jsonrpc, "2.0");
     assert_eq!(decoded.id, Some(RequestId::String("req-1".to_owned())));
     assert_eq!(decoded.result, Some(json!({"ok": true})));
@@ -126,11 +132,7 @@ async fn write_and_read_response_error() {
     assert!(on_wire.contains("\"code\":-32601"));
     assert!(on_wire.contains("Method not found"));
 
-    let cursor = std::io::Cursor::new(buffer);
-    let mut reader = BufReader::new(cursor);
-    let decoded = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect("read ok");
+    let decoded = decode_ok(buffer).await;
     assert_eq!(decoded.jsonrpc, "2.0");
     assert_eq!(decoded.id, Some(RequestId::Number(7)));
     assert!(decoded.result.is_none(), "error response carries no result");
@@ -144,24 +146,14 @@ async fn write_and_read_response_error() {
 
 #[tokio::test]
 async fn read_message_rejects_missing_content_length() {
-    let raw = b"X-Other: 1\r\n\r\n{}".to_vec();
-    let cursor = std::io::Cursor::new(raw);
-    let mut reader = BufReader::new(cursor);
-    let err = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect_err("must reject");
+    let err = decode_err(b"X-Other: 1\r\n\r\n{}".to_vec()).await;
     let rendered = format!("{err}");
     assert!(rendered.contains("Content-Length") || rendered.contains("missing"));
 }
 
 #[tokio::test]
 async fn read_message_rejects_bad_content_length_value() {
-    let raw = b"Content-Length: not-a-number\r\n\r\n{}".to_vec();
-    let cursor = std::io::Cursor::new(raw);
-    let mut reader = BufReader::new(cursor);
-    let err = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect_err("must reject");
+    let err = decode_err(b"Content-Length: not-a-number\r\n\r\n{}".to_vec()).await;
     assert!(format!("{err}").contains("Content-Length"));
 }
 
@@ -171,21 +163,13 @@ async fn read_message_rejects_invalid_json_body() {
     let header = format!("Content-Length: {}\r\n\r\n", body.len());
     let mut raw = header.into_bytes();
     raw.extend_from_slice(body);
-    let cursor = std::io::Cursor::new(raw);
-    let mut reader = BufReader::new(cursor);
-    let err = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect_err("must reject");
+    let err = decode_err(raw).await;
     assert!(format!("{err}").contains("JSON"));
 }
 
 #[tokio::test]
 async fn read_message_reports_closed_stream() {
-    let cursor = std::io::Cursor::new(Vec::<u8>::new());
-    let mut reader = BufReader::new(cursor);
-    let err = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect_err("must reject");
+    let err = decode_err(Vec::<u8>::new()).await;
     assert!(format!("{err}").contains("closed"));
 }
 
@@ -198,12 +182,10 @@ async fn read_message_tolerates_extra_headers() {
     )
     .into_bytes();
     raw.extend_from_slice(&body);
-    let cursor = std::io::Cursor::new(raw);
-    let mut reader = BufReader::new(cursor);
-    let decoded = lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect("read ok");
+    let decoded = decode_ok(raw).await;
     assert_eq!(decoded.method.as_deref(), Some("ping"));
+    assert_eq!(decoded.jsonrpc, "2.0");
+    assert!(decoded.id.is_none());
 }
 
 #[tokio::test]

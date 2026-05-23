@@ -32,6 +32,24 @@ async fn settle() {
     }
 }
 
+/// Send `event`, then drive virtual time past the quiet window and settle.
+async fn send_and_quiet(tx: &mpsc::UnboundedSender<ChangeEvent>, event: ChangeEvent) {
+    tx.send(event).expect("send");
+    settle().await;
+    time::advance(QUIET + Duration::from_millis(20)).await;
+    settle().await;
+}
+
+/// Convenience: build a `Touched` event for `name`.
+fn touched(name: &str) -> ChangeEvent {
+    ChangeEvent::Touched(vec![PathBuf::from(name)])
+}
+
+/// Convenience: build a `Removed` event for `name`.
+fn removed(name: &str) -> ChangeEvent {
+    ChangeEvent::Removed(vec![PathBuf::from(name)])
+}
+
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn config_default_is_sane() {
     let cfg = ScheduleConfig::default();
@@ -47,11 +65,7 @@ async fn config_default_is_sane() {
 async fn single_event_fires_after_quiet_window() {
     let (tx, mut triggers) = build();
 
-    tx.send(ChangeEvent::Touched(vec![PathBuf::from("a.rs")]))
-        .expect("send");
-    settle().await;
-    time::advance(QUIET + Duration::from_millis(20)).await;
-    settle().await;
+    send_and_quiet(&tx, touched("a.rs")).await;
 
     let trig = triggers.recv().await.expect("trigger");
     assert_eq!(trig.events.len(), 1);
@@ -106,11 +120,7 @@ async fn cap_fires_even_under_sustained_activity() {
 async fn closing_input_after_fire_closes_trigger_channel() {
     let (tx, mut triggers) = build();
 
-    tx.send(ChangeEvent::Touched(vec![PathBuf::from("z.rs")]))
-        .expect("send");
-    settle().await;
-    time::advance(QUIET + Duration::from_millis(20)).await;
-    settle().await;
+    send_and_quiet(&tx, touched("z.rs")).await;
 
     let first = triggers.recv().await.expect("first");
     assert_eq!(first.events.len(), 1);
@@ -133,11 +143,7 @@ async fn closing_input_with_no_events_closes_trigger_channel() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn trigger_is_clone_and_debug() {
     let (tx, mut triggers) = build();
-    tx.send(ChangeEvent::Touched(vec![PathBuf::from("a")]))
-        .expect("send");
-    settle().await;
-    time::advance(QUIET + Duration::from_millis(20)).await;
-    settle().await;
+    send_and_quiet(&tx, touched("a")).await;
     let trig = triggers.recv().await.expect("trigger");
     let cloned = trig.clone();
     assert_eq!(cloned.events.len(), trig.events.len());
@@ -162,19 +168,11 @@ async fn dropping_trigger_receiver_terminates_task_gracefully() {
 async fn second_burst_after_first_fire_yields_second_trigger() {
     let (tx, mut triggers) = build();
 
-    tx.send(ChangeEvent::Touched(vec![PathBuf::from("a")]))
-        .expect("send");
-    settle().await;
-    time::advance(QUIET + Duration::from_millis(20)).await;
-    settle().await;
+    send_and_quiet(&tx, touched("a")).await;
     let first = triggers.recv().await.expect("first");
     assert_eq!(first.events.len(), 1);
 
-    tx.send(ChangeEvent::Removed(vec![PathBuf::from("b")]))
-        .expect("send");
-    settle().await;
-    time::advance(QUIET + Duration::from_millis(20)).await;
-    settle().await;
+    send_and_quiet(&tx, removed("b")).await;
     let second = triggers.recv().await.expect("second");
     assert_eq!(second.events.len(), 1);
 

@@ -1,25 +1,12 @@
 //! Integration tests for edits under `PositionEncoding::Utf8`.
 
-use lspkit_vfs::{
-    DocumentUri, DocumentVersion, Position, PositionEncoding, Range, TextEdit, Vfs, VfsError,
-};
+use lspkit_vfs::{DocumentUri, Position, PositionEncoding, Range, TextEdit, Vfs, VfsError};
+
+mod common;
+use common::{apply_one, edit};
 
 fn store_with(text: &str) -> (Vfs, DocumentUri) {
-    let store = Vfs::new(PositionEncoding::Utf8);
-    let doc = DocumentUri::new("file:///doc.txt");
-    store.open(doc.clone(), text, DocumentVersion::new(1));
-    (store, doc)
-}
-
-fn edit(start: (u32, u32), end: (u32, u32), text: &str) -> TextEdit {
-    TextEdit::new(
-        Range::new(Position::new(start.0, start.1), Position::new(end.0, end.1)),
-        text.to_owned(),
-    )
-}
-
-fn apply_one(store: &Vfs, doc: &DocumentUri, edit: TextEdit) -> Result<(), VfsError> {
-    store.change(doc, &[edit], DocumentVersion::new(2))
+    common::store_with(PositionEncoding::Utf8, text)
 }
 
 #[test]

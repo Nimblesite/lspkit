@@ -30,12 +30,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          # Cache the workspace across all steps in this job; key already
+          # includes rustc version + Cargo.lock hash via the action defaults.
+          shared-key: ci
 
-      - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --locked
-
-      - name: Install cargo-nextest
-        run: cargo install cargo-nextest --locked
+      # Prebuilt binaries via taiki-e/install-action — seconds vs. minutes
+      # compared to `cargo install --locked` building from source.
+      - name: Install cargo-llvm-cov + cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
 
       # fmt, lint, test are three separate, non-overlapping steps.
       - name: Format check

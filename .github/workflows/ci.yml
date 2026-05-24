@@ -14,8 +14,8 @@ concurrency:
 jobs:
   ci:
     name: CI
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-22.04-8-cores
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -23,22 +23,19 @@ jobs:
         with:
           components: rustfmt, clippy, llvm-tools-preview
 
+      # Rust-aware cache: registry + git + target/ with built-in restore-keys,
+      # rustc-version-aware key, and target/ cleanup before save (avoids bloat).
+      # Survives Cargo.toml dev-dep changes via partial restore, unlike the
+      # previous hashFiles(**/Cargo.toml) key.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
 
       - name: Install cargo-nextest
         run: cargo install cargo-nextest --locked
-
-      - name: Cache cargo registry & target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
 
       # fmt, lint, test are three separate, non-overlapping steps.
       - name: Format check

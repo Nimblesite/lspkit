@@ -1,0 +1,13 @@
+{
+  "_agent_pmo": "74cf183",
+  "recommendations": [
+    "nimblesite.commandtree",
+    "nimblesite.too-many-cooks",
+    "nimblesite.typeDiagram",
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb",
+    "tamasfe.even-better-toml",
+    "serayuzgur.crates",
+    "usernamehw.errorlens"
+  ]
+}

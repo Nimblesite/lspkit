@@ -1,0 +1,74 @@
+# agent-pmo:74cf183
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-22.04-8-cores
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
+
+      # Rust-aware cache: registry + git + target/ with built-in restore-keys,
+      # rustc-version-aware key, and target/ cleanup before save (avoids bloat).
+      # Survives Cargo.toml dev-dep changes via partial restore, unlike the
+      # previous hashFiles(**/Cargo.toml) key.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          # Cache the workspace across all steps in this job; key already
+          # includes rustc version + Cargo.lock hash via the action defaults.
+          shared-key: ci
+
+      # Prebuilt binaries via taiki-e/install-action — seconds vs. minutes
+      # compared to `cargo install --locked` building from source.
+      - name: Install cargo-llvm-cov + cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+
+      # fmt, lint, test are three separate, non-overlapping steps.
+      - name: Format check
+        run: make fmt CHECK=1
+
+      - name: Lint
+        run: make lint
+
+      # make test = fail-fast + coverage + threshold enforcement.
+      # Thresholds live in coverage-thresholds.json.
+      - name: Test
+        run: make test
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            lcov.info
+          retention-days: 7
+
+      - name: Build
+        run: make build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            target/release/
+          retention-days: 7

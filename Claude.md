@@ -1,3 +1,4 @@
+<!-- agent-pmo:74cf183 -->
 # LSP Toolkit
 
 Reusable Rust components for building LSPs and related tooling. Consumed by:
@@ -74,3 +75,56 @@ Hierarchical, non-numeric: `[GROUP-TOPIC]` / `[GROUP-TOPIC-DETAIL]` (e.g. `[PARS
 ## Multi-Agent Coordination (Too Many Cooks)
 
 If the TMC server is available: register on start (name, intent, files), lock files before editing, broadcast your plan, check messages periodically, release locks when done. Never edit a locked file — wait or take another approach.
+
+## Build Commands
+
+Cross-platform GNU Make. Exactly 7 standard targets:
+
+```bash
+make build   # cargo build --release --workspace
+make test    # FAIL-FAST tests + coverage + threshold (ONLY test entry point)
+make lint    # cargo clippy -- -D warnings (no formatting)
+make fmt     # cargo fmt --all  (pass CHECK=1 for read-only check)
+make clean   # cargo clean
+make ci      # lint + test + build (full CI simulation)
+make setup   # post-create dev environment setup (devcontainer hook)
+```
+
+Repo-specific helpers live in the `Repo-Specific Targets` section of the Makefile (e.g. `make doc`). `make test` runs `cargo llvm-cov` with `--fail-fast`, asserts measured ≥ threshold from `coverage-thresholds.json`, and exits non-zero on any failure. To debug a single test, invoke `cargo test <name> -- --nocapture` directly — that is not a Makefile target.
+
+`make fmt`, `make lint`, `make test` are three separate non-overlapping targets.
+
+## Repo Structure
+
+```
+lsp_toolkit/
+├── CLAUDE.md                       # canonical agent instructions (this file)
+├── AGENTS.md                       # pointer → CLAUDE.md
+├── Makefile                        # 7 standard targets + Repo-Specific section
+├── rustfmt.toml
+├── coverage-thresholds.json        # single source of truth for thresholds
+├── opencode.json                   # OpenCode pointer
+├── .cursorrules / .windsurfrules   # pointers
+├── .claude/skills/                 # ci-prep, code-dedup, fix-bug, spec-check,
+│                                   # submit-pr, upgrade-packages
+├── .clinerules/                    # Cline pointer
+├── .devcontainer/devcontainer.json
+├── .github/
+│   ├── copilot-instructions.md     # pointer
+│   ├── pull_request_template.md
+│   └── workflows/ci.yml
+├── .vscode/extensions.json
+├── docs/
+│   ├── specs/                      # behaviour & requirements (spec IDs live here)
+│   └── plans/                      # how-to-achieve-goals + TODO checklists
+└── crates/                         # workspace crates (lspkit, lspkit-server,
+                                    # lspkit-vfs, lspkit-live, lspkit-mcp,
+                                    # lspkit-config, lspkit-treesitter,
+                                    # lspkit-sidecar — see docs/specs/)
+```
+
+The canonical spec for the eight crates and the "one engine, two surfaces" pattern lives in [docs/specs/lsp-toolkit-spec.md](docs/specs/lsp-toolkit-spec.md).
+
+### Cargo workspace lints (when Cargo.toml is created)
+
+The Rust hard rules above are enforced via `[workspace.lints.rust]` and `[workspace.lints.clippy]` in `Cargo.toml`. The required deny-list is in [REPO-STANDARDS-SPEC](../AgentPMOWorkflow/docs/specs/REPO-STANDARDS-SPEC.md) under `[LINT-RUST]` and mirrored in `agent-pmo-skill/templates/linting/cargo-workspace-lints.toml`. Copy that block into the workspace `Cargo.toml` when scaffolding crates.

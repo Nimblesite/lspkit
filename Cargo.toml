@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0-dev"
+version = "0.0.1"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT"
@@ -70,11 +70,11 @@ tree-sitter = "0.25"
 # Internal workspace dependencies.
 # Versions are the `0.0.0-dev` placeholder; the release stamps the tag into
 # both `[workspace.package].version` and these requirements. [SWR-VERSION-BUILD-STAMPING]
-lspkit = { version = "0.0.0-dev", path = "crates/lspkit" }
-lspkit-server = { version = "0.0.0-dev", path = "crates/lspkit-server" }
-lspkit-vfs = { version = "0.0.0-dev", path = "crates/lspkit-vfs" }
-lspkit-live = { version = "0.0.0-dev", path = "crates/lspkit-live" }
-lspkit-mcp = { version = "0.0.0-dev", path = "crates/lspkit-mcp" }
-lspkit-config = { version = "0.0.0-dev", path = "crates/lspkit-config" }
-lspkit-treesitter = { version = "0.0.0-dev", path = "crates/lspkit-treesitter" }
-lspkit-sidecar = { version = "0.0.0-dev", path = "crates/lspkit-sidecar" }
+lspkit = { version = "0.0.1", path = "crates/lspkit" }
+lspkit-server = { version = "0.0.1", path = "crates/lspkit-server" }
+lspkit-vfs = { version = "0.0.1", path = "crates/lspkit-vfs" }
+lspkit-live = { version = "0.0.1", path = "crates/lspkit-live" }
+lspkit-mcp = { version = "0.0.1", path = "crates/lspkit-mcp" }
+lspkit-config = { version = "0.0.1", path = "crates/lspkit-config" }
+lspkit-treesitter = { version = "0.0.1", path = "crates/lspkit-treesitter" }
+lspkit-sidecar = { version = "0.0.1", path = "crates/lspkit-sidecar" }

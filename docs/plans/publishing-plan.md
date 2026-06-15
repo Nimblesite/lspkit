@@ -210,7 +210,7 @@ keywords = ["lsp", "mcp", "language-server"]   # ≤5
 categories = ["development-tools"]             # validate against crates.io list
 ```
 
-The `LICENSE-MIT` and `LICENSE-APACHE` files at the workspace root need to be readable from each crate dir at package time — set `license-file` is **not** needed since SPDX `license` is set; `include = ["src/**/*", "../../LICENSE-*", "README.md"]` per crate keeps published tarballs lean.
+The single `LICENSE-MIT` file at the workspace root is staged into each crate dir at publish time (the `cp` step in `release.yml`) so the published tarball ships the license text — `license-file` is **not** needed since the SPDX `license = "MIT"` is set. `[SWR-REL-LICENSE]`
 
 ## Rollback
 
@@ -237,7 +237,7 @@ Order matters; each line is one PR or one step. Strike through when done.
 - [ ] Change `[workspace.package].version` in [Cargo.toml](../../Cargo.toml) from `0.0.1` → `0.0.0-dev`.
 - [ ] Change every `lspkit-*` row under `[workspace.dependencies]` in the same file from `version = "0.0.1"` → `version = "0.0.0-dev"`.
 - [ ] Add `description`, `readme = "../../README.md"`, `documentation`, `keywords`, `categories`, `include` to each of the eight `crates/lspkit*/Cargo.toml` files.
-- [ ] Add workspace-root `LICENSE-MIT` and `LICENSE-APACHE` (the `Cargo.toml` already declares `MIT OR Apache-2.0`).
+- [x] Add workspace-root `LICENSE-MIT` (the `Cargo.toml` declares `license = "MIT"`; staged into each crate at publish time).
 - [ ] Add `deny.toml` at repo root with advisory/license/source/bans tables; minimum: deny `unsafe-code`, deny unmaintained, allow `MIT/Apache-2.0/BSD-*/Unicode-DFS-2016/CC0-1.0`.
 - [ ] Add `scripts/stamp-version.sh` (uses `toml-cli`; rewrites `[workspace.package].version` and `lspkit-*` rows under `[workspace.dependencies]`; verifies all eight resolve identically).
 - [ ] Add `scripts/cargo-publish-or-skip.sh` (copy from Shipwright; one crate per call; idempotent skip on `already uploaded`/`already exists`; `--allow-dirty --locked`).
@@ -246,6 +246,11 @@ Order matters; each line is one PR or one step. Strike through when done.
 - [ ] Configure Dependabot for GitHub Actions in `.github/dependabot.yml` (so SHA pins get PR'd forward).
 
 ### crates.io trusted publisher registration (one-time, all eight crates)
+
+> **Web-UI only.** crates.io's trusted-publishing API rejects `cargo login` tokens (verified: HTTP 403,
+> insufficient scope), so this is done at crates.io → *Account/crate → Trusted Publishing → Add* using a
+> **pending publisher** for each not-yet-published name. The account that registers the pending publisher
+> becomes the crate's **initial owner** — ownership is moved to the Nimblesite org team below after first publish.
 
 - [ ] `lspkit` — register pending trusted publisher (owner `Nimblesite`, repo `lspkit`, workflow `release.yml`, env `release`).
 - [ ] `lspkit-vfs` — same.

@@ -139,7 +139,7 @@ The toolkit ships eight crates to crates.io as a single coordinated release. Rul
   4. Every `uses:` in the release workflow pinned to a 40-char commit SHA (Dependabot tracks).
   5. Top-level workflow `permissions: contents: read`; `id-token: write` job-scoped to the publish job only.
   6. `--locked` on every cargo invocation in the release workflow; `Cargo.lock` committed.
-- **[REL-METADATA]** Every published crate carries `license = "MIT OR Apache-2.0"`, `repository`, `description`, `readme`, and `documentation` fields. Both `LICENSE-MIT` and `LICENSE-APACHE` files ship in each crate (workspace-rooted symlinks acceptable per `cargo package` rules).
+- **[REL-METADATA]** Every published crate carries `license = "MIT"`, `repository`, `description`, `readme`, and `documentation` fields. A single `LICENSE-MIT` file ships in each crate, staged from the workspace-root `LICENSE-MIT` at publish time. The declared SPDX license matches the one license file that actually ships. `[SWR-REL-LICENSE]`
 - **[REL-PROVENANCE]** GitHub Release artifacts (if any) carry `actions/attest-build-provenance` attestations. Provenance for crates.io packages is roadmap; not blocking for `0.0.x`.
 
 ## Acceptance — externally verifiable

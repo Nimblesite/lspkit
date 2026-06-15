@@ -97,7 +97,7 @@ Repo-specific helpers live in the `Repo-Specific Targets` section of the Makefil
 ## Repo Structure
 
 ```
-lsp_toolkit/
+lspkit/
 ├── CLAUDE.md                       # canonical agent instructions (this file)
 ├── AGENTS.md                       # pointer → CLAUDE.md
 ├── Makefile                        # 7 standard targets + Repo-Specific section
@@ -123,7 +123,7 @@ lsp_toolkit/
                                     # lspkit-sidecar — see docs/specs/)
 ```
 
-The canonical spec for the eight crates and the "one engine, two surfaces" pattern lives in [docs/specs/lsp-toolkit-spec.md](docs/specs/lsp-toolkit-spec.md).
+The canonical spec for the eight crates and the "one engine, two surfaces" pattern lives in [docs/specs/lspkit-spec.md](docs/specs/lspkit-spec.md).
 
 ### Cargo workspace lints (when Cargo.toml is created)
 

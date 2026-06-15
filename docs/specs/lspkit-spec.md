@@ -1,8 +1,8 @@
-# SPEC — `lsp_toolkit`
+# SPEC — `lspkit`
 
 ## Identity
 
-`lsp_toolkit` is a public, fully generic Rust workspace published as `lspkit-*` crates that supplies the cross-cutting infrastructure every LSP+MCP server reimplements. Its headline contribution is the **"one engine, two surfaces"** contract: a single `EngineApi` trait that an LSP backend and an MCP server both consume, so live analysis state computed once is vended two ways.
+`lspkit` is a public, fully generic Rust workspace published as `lspkit-*` crates that supplies the cross-cutting infrastructure every LSP+MCP server reimplements. Its headline contribution is the **"one engine, two surfaces"** contract: a single `EngineApi` trait that an LSP backend and an MCP server both consume, so live analysis state computed once is vended two ways.
 
 ## Hard invariants
 
@@ -125,7 +125,7 @@ pub trait EngineApi: Send + Sync + 'static {
 The toolkit ships eight crates to crates.io as a single coordinated release. Rules are non-negotiable; spec IDs below are referenced by the release workflow and the implementation plan in [docs/plans/publishing-plan.md](../plans/publishing-plan.md).
 
 - **[REL-TRIGGER]** Releases are triggered by an annotated tag matching `v[0-9]+.[0-9]+.[0-9]+` (or `v*.*.*-*` for prereleases) pushed to `main`. No `workflow_dispatch`. No publishing from feature branches.
-- **[REL-OIDC]** Publishing to crates.io uses OIDC trusted publishing via `rust-lang/crates-io-auth-action`. No `CARGO_REGISTRY_TOKEN` secret is stored in the repo. Each of the eight crates registers `Nimblesite/lsp_toolkit` + workflow `.github/workflows/release.yml` + environment `release` as a Trusted Publisher on crates.io.
+- **[REL-OIDC]** Publishing to crates.io uses OIDC trusted publishing via `rust-lang/crates-io-auth-action`. No `CARGO_REGISTRY_TOKEN` secret is stored in the repo. Each of the eight crates registers `Nimblesite/lspkit` + workflow `.github/workflows/release.yml` + environment `release` as a Trusted Publisher on crates.io.
 - **[REL-VERSION]** A single workspace version is the source of truth. `[workspace.package].version` carries the placeholder `0.0.0-dev` in source; the release workflow stamps the tag-derived version into `Cargo.toml` (and the internal `[workspace.dependencies]` pins for `lspkit-*`) before build. All eight crates inherit via `version.workspace = true`. The stamp is never committed back to `main`.
 - **[REL-ORDER]** Publish order respects the dep graph above; one 30-second sleep between batches lets the crates.io index propagate:
   1. **Batch 1 (leaves):** `lspkit`, `lspkit-vfs`, `lspkit-config`, `lspkit-sidecar`, `lspkit-treesitter`

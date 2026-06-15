@@ -1,6 +1,6 @@
 # Plan — Publish `lspkit-*` to crates.io tonight
 
-Implements [REL-TRIGGER], [REL-OIDC], [REL-VERSION], [REL-ORDER], [REL-GATES], [REL-METADATA] from [docs/specs/lsp-toolkit-spec.md](../specs/lsp-toolkit-spec.md). Approach modelled on Shipwright's release pipeline; OIDC mechanism per `rust-lang/crates-io-auth-action` (GA 2025).
+Implements [REL-TRIGGER], [REL-OIDC], [REL-VERSION], [REL-ORDER], [REL-GATES], [REL-METADATA] from [docs/specs/lspkit-spec.md](../specs/lspkit-spec.md). Approach modelled on Shipwright's release pipeline; OIDC mechanism per `rust-lang/crates-io-auth-action` (GA 2025).
 
 ## Dep graph → publish order
 
@@ -65,7 +65,7 @@ Per [REL-OIDC], each of the eight crates needs a Trusted Publisher row on crates
 | Field | Value |
 |---|---|
 | Owner | `Nimblesite` |
-| Repository | `lsp_toolkit` |
+| Repository | `lspkit` |
 | Workflow filename | `release.yml` |
 | Environment | `release` |
 
@@ -247,7 +247,7 @@ Order matters; each line is one PR or one step. Strike through when done.
 
 ### crates.io trusted publisher registration (one-time, all eight crates)
 
-- [ ] `lspkit` — register pending trusted publisher (owner `Nimblesite`, repo `lsp_toolkit`, workflow `release.yml`, env `release`).
+- [ ] `lspkit` — register pending trusted publisher (owner `Nimblesite`, repo `lspkit`, workflow `release.yml`, env `release`).
 - [ ] `lspkit-vfs` — same.
 - [ ] `lspkit-config` — same.
 - [ ] `lspkit-sidecar` — same.

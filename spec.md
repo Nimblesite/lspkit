@@ -1,10 +1,10 @@
-# Plan: `lsp_toolkit` — a generic Rust framework for building LSP+MCP servers
+# Plan: `lspkit` — a generic Rust framework for building LSP+MCP servers
 
 ## Context
 
 You maintain four real LSP servers — each one re-implements the same scaffolding from scratch (tower-lsp setup, document store, file watcher + debouncer, diagnostics pipeline, config loader, tracing setup, capability advertisement, and in two cases an MCP surface that exposes the LSP's live state to AI agents). Every new server repeats the same 1–3k LOC of boilerplate before it can ship its first feature.
 
-This repo, `/Users/christianfindlay/Documents/Code/lsp_toolkit`, will distill those cross-cutting patterns into a public, fully generic Rust workspace published as `lspkit-*` crates. The headline contribution is the **"one engine, two surfaces"** pattern: an LSP server holds live analysis state, an MCP server vends that same state to AI agents — both reading from a single `EngineApi` trait.
+This repo, `/Users/christianfindlay/Documents/Code/lspkit`, will distill those cross-cutting patterns into a public, fully generic Rust workspace published as `lspkit-*` crates. The headline contribution is the **"one engine, two surfaces"** pattern: an LSP server holds live analysis state, an MCP server vends that same state to AI agents — both reading from a single `EngineApi` trait.
 
 Constraints (decided with you upstream):
 
@@ -32,7 +32,7 @@ Constraints (decided with you upstream):
 ## Crate layout — 8 crates
 
 ```
-lsp_toolkit/
+lspkit/
 ├── Cargo.toml                      # workspace
 ├── rustfmt.toml
 ├── README.md                       # generic; no consumer names
@@ -140,7 +140,7 @@ Add a short "Migration to lspkit" section to the **AI-guidance file** of each re
 
 > ## Migration to `lspkit`
 >
-> The cross-cutting LSP/MCP scaffolding in this repo (document store, watcher+scheduler, diagnostics pipeline, capability builder, MCP↔engine bridge, sidecar IPC) is being distilled into the generic `lspkit-*` workspace at `/Users/christianfindlay/Documents/Code/lsp_toolkit`.
+> The cross-cutting LSP/MCP scaffolding in this repo (document store, watcher+scheduler, diagnostics pipeline, capability builder, MCP↔engine bridge, sidecar IPC) is being distilled into the generic `lspkit-*` workspace at `/Users/christianfindlay/Documents/Code/lspkit`.
 >
 > **For new LSP infrastructure work:** prefer `lspkit-*` crates over reinventing it here.
 > **For changes to existing scaffolding in this repo:** flag in the PR description if the patch duplicates `lspkit` functionality, and link the upstream issue/crate.
@@ -174,16 +174,16 @@ The per-repo mapping table is filled with concrete paths from the Phase-1 explor
 
 ## Critical files to create
 
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/Cargo.toml` — workspace manifest (members + workspace.dependencies pinning shared deps).
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/rustfmt.toml`, `.gitignore`, `README.md` (generic).
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit/{Cargo.toml, src/lib.rs, src/engine.rs, src/tracing.rs}` — façade + `EngineApi` trait + feature-gated tracing helper.
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit-server/{Cargo.toml, src/lib.rs, src/dispatch.rs, src/capabilities.rs, src/uri.rs, src/diagnostics.rs, src/workspace.rs}`.
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit-vfs/{Cargo.toml, src/lib.rs, src/document.rs, src/encoding.rs, src/edit.rs}`.
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit-live/{Cargo.toml, src/lib.rs, src/watcher.rs, src/scheduler.rs, src/session.rs}`.
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit-mcp/{Cargo.toml, src/lib.rs, src/adapter.rs, src/tools.rs}`.
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit-config/{Cargo.toml, src/lib.rs, src/layered.rs}`.
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit-treesitter/{Cargo.toml, src/lib.rs, src/parser.rs, src/cache.rs}`.
-- `/Users/christianfindlay/Documents/Code/lsp_toolkit/crates/lspkit-sidecar/{Cargo.toml, src/lib.rs, src/transport.rs, src/lifecycle.rs, src/correlator.rs}`.
+- `/Users/christianfindlay/Documents/Code/lspkit/Cargo.toml` — workspace manifest (members + workspace.dependencies pinning shared deps).
+- `/Users/christianfindlay/Documents/Code/lspkit/rustfmt.toml`, `.gitignore`, `README.md` (generic).
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit/{Cargo.toml, src/lib.rs, src/engine.rs, src/tracing.rs}` — façade + `EngineApi` trait + feature-gated tracing helper.
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit-server/{Cargo.toml, src/lib.rs, src/dispatch.rs, src/capabilities.rs, src/uri.rs, src/diagnostics.rs, src/workspace.rs}`.
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit-vfs/{Cargo.toml, src/lib.rs, src/document.rs, src/encoding.rs, src/edit.rs}`.
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit-live/{Cargo.toml, src/lib.rs, src/watcher.rs, src/scheduler.rs, src/session.rs}`.
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit-mcp/{Cargo.toml, src/lib.rs, src/adapter.rs, src/tools.rs}`.
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit-config/{Cargo.toml, src/lib.rs, src/layered.rs}`.
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit-treesitter/{Cargo.toml, src/lib.rs, src/parser.rs, src/cache.rs}`.
+- `/Users/christianfindlay/Documents/Code/lspkit/crates/lspkit-sidecar/{Cargo.toml, src/lib.rs, src/transport.rs, src/lifecycle.rs, src/correlator.rs}`.
 
 Per-crate files contain trait/type skeletons with `///` doc comments and `todo!()`-free placeholders. v0 is *scaffold*: the crates compile, the public surface is locked in, but feature implementations land in follow-up PRs.
 

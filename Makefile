@@ -1,6 +1,6 @@
 # agent-pmo:74cf183
 # =============================================================================
-# Standard Makefile — lsp_toolkit
+# Standard Makefile — lspkit
 # Cross-platform: Linux, macOS, Windows (via GNU Make)
 # =============================================================================
 

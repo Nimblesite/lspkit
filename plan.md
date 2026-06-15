@@ -1,4 +1,4 @@
-# PLAN — building `lsp_toolkit` v0
+# PLAN — building `lspkit` v0
 
 > Behavior contract lives in [spec.md](spec.md). This file is the **execution** plan.
 > The canonical in-flight task list is the **TODO** section at the bottom.
@@ -22,7 +22,7 @@ v0 is **scaffold**: every crate compiles, the public surface is locked in, but f
 ## Critical files to create
 
 ```
-lsp_toolkit/
+lspkit/
 ├── Cargo.toml
 ├── rustfmt.toml
 ├── .gitignore
@@ -64,7 +64,7 @@ Add the same section to each repo's AI-guidance file, parameterized with concret
 
 > ## Migration to `lspkit`
 >
-> The cross-cutting LSP/MCP scaffolding in this repo (document store, watcher+scheduler, diagnostics pipeline, capability builder, MCP↔engine bridge, sidecar IPC) is being distilled into the generic `lspkit-*` workspace at `/Users/christianfindlay/Documents/Code/lsp_toolkit`.
+> The cross-cutting LSP/MCP scaffolding in this repo (document store, watcher+scheduler, diagnostics pipeline, capability builder, MCP↔engine bridge, sidecar IPC) is being distilled into the generic `lspkit-*` workspace at `/Users/christianfindlay/Documents/Code/lspkit`.
 >
 > **For new LSP infrastructure work:** prefer `lspkit-*` crates over reinventing it here.
 > **For changes to existing scaffolding in this repo:** flag in the PR description if the patch duplicates `lspkit` functionality, and link the upstream issue/crate.

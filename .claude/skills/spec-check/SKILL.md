@@ -13,7 +13,7 @@ Audit spec/plan documents against the codebase. Ensures every spec section has i
 
 ## Arguments
 
-- `$ARGUMENTS` — optional spec name or ID to check (e.g., `PARSE-CSHARP-NORMALIZE` or `lsp-toolkit`). If empty, check ALL specs. Spec IDs are descriptive slugs, NEVER numbered (see Step 1).
+- `$ARGUMENTS` — optional spec name or ID to check (e.g., `PARSE-CSHARP-NORMALIZE` or `lspkit`). If empty, check ALL specs. Spec IDs are descriptive slugs, NEVER numbered (see Step 1).
 
 ## Instructions
 
@@ -38,9 +38,9 @@ If any ID violations are found, report them all and **STOP**:
 ```
 SPEC ID VIOLATIONS:
 
-- docs/specs/lsp-toolkit-spec.md line 12: [SPEC-001] → rename to descriptive ID (e.g., [PARSE-CSHARP-NORMALIZE])
-- docs/specs/lsp-toolkit-spec.md line 30: [PARSE-CSHARP-NORMALIZE] and [PARSE-CSHARP-LEX] are not adjacent (scattered group)
-- docs/specs/lsp-toolkit-spec.md line 5: "## Coverage thresholds" has no spec ID
+- docs/specs/lspkit-spec.md line 12: [SPEC-001] → rename to descriptive ID (e.g., [PARSE-CSHARP-NORMALIZE])
+- docs/specs/lspkit-spec.md line 30: [PARSE-CSHARP-NORMALIZE] and [PARSE-CSHARP-LEX] are not adjacent (scattered group)
+- docs/specs/lspkit-spec.md line 5: "## Coverage thresholds" has no spec ID
 
 Fix spec IDs first, then re-run spec-check.
 ```
@@ -92,7 +92,7 @@ For each file, extract every spec ID and its associated section title (the headi
 
 - If `$ARGUMENTS` is non-empty, filter the discovered specs:
   - If it matches a spec ID exactly (e.g., `PARSE-CSHARP-NORMALIZE`), check only that spec.
-  - If it matches a partial name (e.g., `lsp-toolkit`), check all specs in files whose path contains that string.
+  - If it matches a partial name (e.g., `lspkit`), check all specs in files whose path contains that string.
 - If `$ARGUMENTS` is empty, process ALL discovered specs.
 
 If filtering produces zero specs, report an error:
@@ -204,7 +204,7 @@ SPEC VIOLATION: [PARSE-CSHARP-NORMALIZE] Code does not match spec.
 
 SPEC SAYS:
 > "Normalization must strip leading/trailing whitespace BEFORE removing comment lines"
-> (from docs/specs/lsp-toolkit-spec.md, line 42)
+> (from docs/specs/lspkit-spec.md, line 42)
 
 CODE DOES:
 > `let s = strip_comments(input); let s = s.trim();` (crates/lspkit-treesitter/src/normalize.rs:42)

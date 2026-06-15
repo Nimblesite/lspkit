@@ -1,6 +1,6 @@
 {
   "_agent_pmo": "74cf183",
-  "name": "lsp_toolkit (Rust)",
+  "name": "lspkit (Rust)",
   "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
   "remoteUser": "vscode",
   "mounts": [

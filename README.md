@@ -1,4 +1,4 @@
-# lsp_toolkit
+# lspkit
 
 A generic Rust workspace of cross-cutting building blocks for LSP and MCP servers, published as `lspkit-*` crates.
 
@@ -31,8 +31,8 @@ make lint    # cargo clippy -- -D warnings
 
 ## Spec
 
-Behavior contract: [spec.md](https://github.com/nimblesite/lsp_toolkit/blob/main/spec.md). Execution plan: [plan.md](https://github.com/nimblesite/lsp_toolkit/blob/main/plan.md).
+Behavior contract: [docs/specs/lspkit-spec.md](https://github.com/Nimblesite/lspkit/blob/main/docs/specs/lspkit-spec.md). Execution plans: [docs/plans/](https://github.com/Nimblesite/lspkit/blob/main/docs/plans/).
 
 ## License
 
-MIT — see [LICENSE-MIT](https://github.com/nimblesite/lsp_toolkit/blob/main/LICENSE-MIT). © Nimblesite.
+MIT — see [LICENSE-MIT](https://github.com/Nimblesite/lspkit/blob/main/LICENSE-MIT). © Nimblesite.

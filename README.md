@@ -19,20 +19,20 @@ The headline contribution is the **"one engine, two surfaces"** contract: a sing
 
 ## Status
 
-v0 — scaffold. Public surfaces are locked; feature implementations land in follow-up PRs. Not yet published.
+v0. Public API surfaces are locked; implementations continue to land in follow-up releases.
 
 ## Build
 
 ```
-make ci      # lint + test + doc
-make test    # cargo test --workspace
-make lint    # cargo clippy --workspace -- -D warnings
+make ci      # lint + test + build (full CI simulation)
+make test    # fail-fast tests + coverage + threshold
+make lint    # cargo clippy -- -D warnings
 ```
 
 ## Spec
 
-Behavior contract: [spec.md](spec.md). Execution plan: [plan.md](plan.md).
+Behavior contract: [spec.md](https://github.com/nimblesite/lsp_toolkit/blob/main/spec.md). Execution plan: [plan.md](https://github.com/nimblesite/lsp_toolkit/blob/main/plan.md).
 
 ## License
 
-MIT OR Apache-2.0.
+MIT — see [LICENSE-MIT](https://github.com/nimblesite/lsp_toolkit/blob/main/LICENSE-MIT). © Nimblesite.

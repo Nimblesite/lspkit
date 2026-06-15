@@ -12,11 +12,17 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.0-dev"
 edition = "2021"
 rust-version = "1.80"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/nimblesite/lsp_toolkit"
+# Inherited by every crate. `readme`/`keywords`/`categories` resolve relative to
+# the workspace root and are packaged into each crate's tarball so crates.io
+# renders them. [SWR-REL-CRATES]
+readme = "README.md"
+keywords = ["lsp", "mcp", "language-server", "tree-sitter", "json-rpc"]
+categories = ["development-tools"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -61,12 +67,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Tree-sitter (optional, in lspkit-treesitter only)
 tree-sitter = "0.25"
 
-# Internal workspace dependencies
-lspkit = { version = "0.0.1", path = "crates/lspkit" }
-lspkit-server = { version = "0.0.1", path = "crates/lspkit-server" }
-lspkit-vfs = { version = "0.0.1", path = "crates/lspkit-vfs" }
-lspkit-live = { version = "0.0.1", path = "crates/lspkit-live" }
-lspkit-mcp = { version = "0.0.1", path = "crates/lspkit-mcp" }
-lspkit-config = { version = "0.0.1", path = "crates/lspkit-config" }
-lspkit-treesitter = { version = "0.0.1", path = "crates/lspkit-treesitter" }
-lspkit-sidecar = { version = "0.0.1", path = "crates/lspkit-sidecar" }
+# Internal workspace dependencies.
+# Versions are the `0.0.0-dev` placeholder; the release stamps the tag into
+# both `[workspace.package].version` and these requirements. [SWR-VERSION-BUILD-STAMPING]
+lspkit = { version = "0.0.0-dev", path = "crates/lspkit" }
+lspkit-server = { version = "0.0.0-dev", path = "crates/lspkit-server" }
+lspkit-vfs = { version = "0.0.0-dev", path = "crates/lspkit-vfs" }
+lspkit-live = { version = "0.0.0-dev", path = "crates/lspkit-live" }
+lspkit-mcp = { version = "0.0.0-dev", path = "crates/lspkit-mcp" }
+lspkit-config = { version = "0.0.0-dev", path = "crates/lspkit-config" }
+lspkit-treesitter = { version = "0.0.0-dev", path = "crates/lspkit-treesitter" }
+lspkit-sidecar = { version = "0.0.0-dev", path = "crates/lspkit-sidecar" }

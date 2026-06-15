@@ -62,3 +62,8 @@ Cargo.lock.bak
 # =============================================================================
 .ghissues/
 .deslop-cache
+
+# shipwright-version-stamp release artifact (written in the runner working tree
+# at release time; never committed). [SWR-VERSION-BUILD-STAMPING]
+build-info.json
+crates/*/LICENSE-MIT

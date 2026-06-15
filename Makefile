@@ -33,7 +33,7 @@ COVERAGE_THRESHOLDS_FILE := coverage-thresholds.json
 ## build: Compile/assemble all artifacts
 build:
 	@echo "==> Building..."
-	cargo build --release --workspace
+	cargo build --release --workspace --locked
 
 ## test: Fail-fast tests + coverage + threshold enforcement.
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].
@@ -41,13 +41,13 @@ build:
 test:
 	@echo "==> Testing (fail-fast + coverage + threshold)..."
 	rustup component add llvm-tools-preview 2>/dev/null || true
-	cargo llvm-cov nextest --workspace --all-targets --lcov --output-path lcov.info
+	cargo llvm-cov nextest --workspace --all-targets --locked --lcov --output-path lcov.info
 	$(MAKE) _coverage_check
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
 	@echo "==> Linting..."
-	cargo clippy --release --workspace --all-targets -- -D warnings
+	cargo clippy --release --workspace --all-targets --locked -- -D warnings
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:
@@ -120,4 +120,4 @@ _coverage_check:
 ## doc: Build cargo workspace documentation (no deps)
 doc:
 	@echo "==> Building docs..."
-	cargo doc --workspace --no-deps
+	cargo doc --workspace --no-deps --locked

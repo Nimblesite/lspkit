@@ -1,0 +1,20 @@
+version: 2
+# Keeps SHA-pinned actions and Cargo dependencies fresh. Each ecosystem is
+# grouped so a run opens a single combined PR, not one per package.
+# [SWR-SEC-ACTION-PINNING]
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]

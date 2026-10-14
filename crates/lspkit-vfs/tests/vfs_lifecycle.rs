@@ -121,5 +121,5 @@ fn document_version_orders_numerically() {
 fn vfs_debug_format_is_non_empty() {
     let store = Vfs::new(PositionEncoding::Utf32);
     let rendered = format!("{store:?}");
-    assert!(!rendered.is_empty());
+    assert_ne!(rendered, "");
 }

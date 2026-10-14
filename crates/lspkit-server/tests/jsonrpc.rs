@@ -90,7 +90,7 @@ async fn write_and_read_response_success() {
         writer.write_message(&response).await.expect("write ok");
     }
 
-    assert!(!buffer.is_empty());
+    assert_ne!(buffer, Vec::<u8>::new());
     let on_wire = std::str::from_utf8(&buffer).expect("utf-8");
     assert!(
         on_wire.contains("\"id\":\"req-1\""),
@@ -280,7 +280,7 @@ fn jsonrpc_error_clone_and_debug_work() {
 fn framing_error_io_variant_via_from() {
     let io_err = std::io::Error::other("test");
     let framing: lspkit_server::FramingError = io_err.into();
-    assert!(!format!("{framing}").is_empty());
+    assert_ne!(format!("{framing}"), "");
 }
 
 #[test]

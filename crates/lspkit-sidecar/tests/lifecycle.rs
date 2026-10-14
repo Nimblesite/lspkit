@@ -97,7 +97,7 @@ async fn spawn_nonexistent_program_errors() {
         LifecycleError::Spawn(io) => {
             // Display of the wrapped io::Error should appear in the LifecycleError.
             assert!(err.to_string().starts_with("spawn failed: "));
-            assert!(!io.to_string().is_empty());
+            assert_ne!(io.to_string(), "");
         }
         other => panic!("expected Spawn error, got {other:?}"),
     }

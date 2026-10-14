@@ -86,7 +86,7 @@ fn cause_variants_all_constructible() {
     let causes = [Cause::Initial, Cause::Rescan, Cause::External];
     for cause in &causes {
         let formatted = format!("{cause:?}");
-        assert!(!formatted.is_empty());
+        assert_ne!(formatted, "");
     }
 }
 

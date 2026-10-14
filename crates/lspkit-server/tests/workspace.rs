@@ -13,7 +13,7 @@ fn new_workspace_is_empty() {
     let ws = Workspace::new();
     assert!(ws.is_empty());
     assert_eq!(ws.len(), 0);
-    assert!(ws.folders().is_empty());
+    assert_eq!(ws.folders(), Vec::new());
 }
 
 #[test]

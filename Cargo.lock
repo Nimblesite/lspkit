@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "async-trait",
  "futures-core",
@@ -549,7 +549,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit-config"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "serde",
  "tempfile",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit-live"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -575,7 +575,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit-mcp"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "async-trait",
  "futures-core",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit-server"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -609,7 +609,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit-sidecar"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "rmp-serde",
  "serde",
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit-treesitter"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "dashmap",
  "thiserror",
@@ -631,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "lspkit-vfs"
-version = "0.0.0-dev"
+version = "0.0.1"
 dependencies = [
  "dashmap",
  "ropey",

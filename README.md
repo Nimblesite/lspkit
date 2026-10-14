@@ -17,6 +17,14 @@ The headline contribution is the **"one engine, two surfaces"** contract: a sing
 | `lspkit-treesitter` | `LanguageParser` trait + content-hash-keyed parse cache. Bundles no grammars. |
 | `lspkit-sidecar` | Framed-IPC primitives + lifecycle/health/respawn. Pure transport. |
 
+## Editor packages
+
+Reusable editor-side building blocks that are not Rust crates live under `packages/`:
+
+| Package | Responsibility |
+|---|---|
+| [`@nimblesite/lspkit-debug`](packages/lspkit-debug) | Language-neutral VS Code **Debug Adapter Protocol** glue + integration-test harness (adapter resolution, zero-config launch defaults, save-or-reject, profiling-launch hooks, and a `customRequest`-driven DAP test client/assertions). Written once for every Nimblesite language extension (Osprey · `lldb-dap`, SharpLsp · `netcoredbg`, Basilisk · `debugpy`) instead of per-language. Fully dependency-injected (no static `import "vscode"`), 100% unit-test coverage. |
+
 ## Status
 
 v0. Public API surfaces are locked; implementations continue to land in follow-up releases.

@@ -1,0 +1,8 @@
+# The profiler's .NET engine and fixtures own their code style. `root = true`
+# stops a host repository's .editorconfig from applying when lspkit is checked
+# out as a submodule (SharpLsp mounts it at ./lspkit).
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4

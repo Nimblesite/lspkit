@@ -11,23 +11,49 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default: read-only token; no job needs write here.
+# [SWR-SEC-TOKEN-PRIVILEGE]
+permissions:
+  contents: read
+
 jobs:
   ci:
     name: CI
-    runs-on: ubuntu-22.04-8-cores
+    # Public repositories can use standard runners without larger-runner charges.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
+      # All third-party actions are pinned to a full commit SHA (mutable tags
+      # are FAIL); dependabot keeps the pins fresh. [SWR-SEC-ACTION-PINNING]
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+        with:
+          toolchain: stable
           components: rustfmt, clippy, llvm-tools-preview
+
+      # The profiler's .NET engine and the fixture its e2e tests profile build in
+      # `make test` (net8.0, rolled forward to this SDK's runtime). [PROF-TESTING]
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      # crates/lsp-profiler/build.rs generates the wire model from
+      # docs/models/profiler.td with typeDiagram. [PROF-WIRE-GEN]
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install typeDiagram
+        run: npm install -g typediagram@0.11.0
 
       # Rust-aware cache: registry + git + target/ with built-in restore-keys,
       # rustc-version-aware key, and target/ cleanup before save (avoids bloat).
       # Survives Cargo.toml dev-dep changes via partial restore, unlike the
       # previous hashFiles(**/Cargo.toml) key.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           cache-on-failure: true
           # Cache the workspace across all steps in this job; key already
@@ -37,13 +63,19 @@ jobs:
       # Prebuilt binaries via taiki-e/install-action — seconds vs. minutes
       # compared to `cargo install --locked` building from source.
       - name: Install cargo-llvm-cov + cargo-nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
         with:
           tool: cargo-llvm-cov,cargo-nextest
 
       # fmt, lint, test are three separate, non-overlapping steps.
       - name: Format check
         run: make fmt CHECK=1
+
+      - name: Profiler source path regressions
+        run: |
+          npm ci --prefix packages/lsp-profiler-ui
+          npm run build --prefix packages/lsp-profiler-ui
+          npm run test:paths --prefix packages/lsp-profiler-ui
 
       - name: Lint
         run: make lint
@@ -54,7 +86,7 @@ jobs:
         run: make test
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: coverage-report
@@ -66,7 +98,7 @@ jobs:
         run: make build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: build-artifacts
           path: |

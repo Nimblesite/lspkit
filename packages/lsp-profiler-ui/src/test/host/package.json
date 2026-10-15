@@ -1,0 +1,429 @@
+{
+  "name": "lsp-profiler-ui-test-host",
+  "displayName": "LspUi",
+  "publisher": "lspui",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "main": "../../../out/src/test/host/extension.js",
+  "activationEvents": [
+    "*"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "lspui.profiler.profileStart",
+        "title": "Start Profiling",
+        "category": "LspUi",
+        "icon": "$(flame)"
+      },
+      {
+        "command": "lspui.profiler.profileStop",
+        "title": "Stop Profiling",
+        "category": "LspUi",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "lspui.profiler.profileSnapshot",
+        "title": "Take Profile Snapshot",
+        "category": "LspUi",
+        "icon": "$(device-camera)"
+      },
+      {
+        "command": "lspui.profiler.profileAttachToDebug",
+        "title": "Profile Debug Session",
+        "category": "LspUi",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "lspui.profiler.profileShowResults",
+        "title": "Show Profile Results",
+        "category": "LspUi",
+        "icon": "$(flame)"
+      },
+      {
+        "command": "lspui.profiler.memoryMenu",
+        "title": "Memory…",
+        "category": "LspUi",
+        "icon": "$(database)"
+      },
+      {
+        "command": "lspui.profiler.memoryStart",
+        "title": "Start Memory Tracking",
+        "category": "LspUi",
+        "icon": "$(database)"
+      },
+      {
+        "command": "lspui.profiler.memorySnapshot",
+        "title": "Take Memory Snapshot",
+        "category": "LspUi",
+        "icon": "$(device-camera)"
+      },
+      {
+        "command": "lspui.profiler.memoryStop",
+        "title": "Stop Memory Tracking",
+        "category": "LspUi",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "lspui.profiler.memoryDiff",
+        "title": "Compare Memory Snapshots",
+        "category": "LspUi",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "lspui.profiler.memoryGcCollect",
+        "title": "Force Garbage Collection",
+        "category": "LspUi",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "lspui.profiler.memoryReferences",
+        "title": "Show Reference Graph",
+        "category": "LspUi",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "lspui.profiler.refreshProcesses",
+        "title": "Refresh Processes",
+        "category": "LspUi",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lspui.profiler.sortProcesses",
+        "title": "Sort Processes",
+        "category": "LspUi",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "lspui.profiler.groupProcesses",
+        "title": "Group Processes",
+        "category": "LspUi",
+        "icon": "$(group-by-ref-type)"
+      },
+      {
+        "command": "lspui.profiler.filterProcesses",
+        "title": "Filter Processes",
+        "category": "LspUi",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "lspui.profiler.profileCurrentFileCpu",
+        "title": "Run & Profile CPU (Current File)",
+        "category": "LspUi",
+        "icon": "$(flame)"
+      },
+      {
+        "command": "lspui.profiler.trackMemoryCurrentFile",
+        "title": "Run & Track Memory (Current File)",
+        "category": "LspUi",
+        "icon": "$(database)"
+      },
+      {
+        "command": "lspui.profiler.profileProcess",
+        "title": "Profile CPU",
+        "category": "LspUi",
+        "icon": "$(flame)"
+      },
+      {
+        "command": "lspui.profiler.memoryTrackProcess",
+        "title": "Track Memory",
+        "category": "LspUi",
+        "icon": "$(database)"
+      },
+      {
+        "command": "lspui.profiler.copyProcessPid",
+        "title": "Copy PID",
+        "category": "LspUi"
+      },
+      {
+        "command": "lspui.profiler.revealProcessScript",
+        "title": "Reveal Entry in Editor",
+        "category": "LspUi"
+      },
+      {
+        "command": "lspui.profiler.killProcess",
+        "title": "Kill Process",
+        "category": "LspUi",
+        "icon": "$(close)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "lspui-explorer",
+          "title": "LspUi",
+          "icon": "$(pulse)"
+        }
+      ]
+    },
+    "views": {
+      "lspui-explorer": [
+        {
+          "id": "lspui.profiler.processes",
+          "name": "Processes",
+          "icon": "$(pulse)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "lspui.profiler.processes",
+        "contents": "Connecting to the LspUi language server…",
+        "when": "lspui.profiler.serverState != running && lspui.profiler.serverState != stopped"
+      },
+      {
+        "view": "lspui.profiler.processes",
+        "contents": "The LspUi language server is not running.\n[Restart Server](command:lspui.restartServer)",
+        "when": "lspui.profiler.serverState == stopped"
+      },
+      {
+        "view": "lspui.profiler.processes",
+        "contents": "Loading processes…\n[Run & Profile CPU (Current File)](command:lspui.profiler.profileCurrentFileCpu)\n[Run & Track Memory (Current File)](command:lspui.profiler.trackMemoryCurrentFile)",
+        "when": "lspui.profiler.serverState == running && lspui.profiler.processesState == loading"
+      },
+      {
+        "view": "lspui.profiler.processes",
+        "contents": "Couldn't load the process list.\n[Run & Profile CPU (Current File)](command:lspui.profiler.profileCurrentFileCpu)\n[Run & Track Memory (Current File)](command:lspui.profiler.trackMemoryCurrentFile)",
+        "when": "lspui.profiler.serverState == running && lspui.profiler.processesState == error"
+      },
+      {
+        "view": "lspui.profiler.processes",
+        "contents": "No processes running.\n[Run & Profile CPU (Current File)](command:lspui.profiler.profileCurrentFileCpu)\n[Run & Track Memory (Current File)](command:lspui.profiler.trackMemoryCurrentFile)",
+        "when": "lspui.profiler.serverState == running && lspui.profiler.processesState == loaded"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "lspui.profiler.profileProcess",
+          "when": "false"
+        },
+        {
+          "command": "lspui.profiler.memoryTrackProcess",
+          "when": "false"
+        },
+        {
+          "command": "lspui.profiler.copyProcessPid",
+          "when": "false"
+        },
+        {
+          "command": "lspui.profiler.revealProcessScript",
+          "when": "false"
+        },
+        {
+          "command": "lspui.profiler.killProcess",
+          "when": "false"
+        }
+      ],
+      "debug/toolBar": [
+        {
+          "command": "lspui.profiler.memorySnapshot",
+          "when": "debugType == lspui-debug && lspui.profiler.memoryTracking",
+          "group": "navigation@1"
+        },
+        {
+          "command": "lspui.profiler.memoryDiff",
+          "when": "debugType == lspui-debug && lspui.profiler.memoryTracking",
+          "group": "navigation@2"
+        },
+        {
+          "command": "lspui.profiler.memoryStop",
+          "when": "debugType == lspui-debug && lspui.profiler.memoryTracking",
+          "group": "navigation@3"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "lspui.profiler.profileCurrentFileCpu",
+          "when": "view == lspui.profiler.processes && !lspui.profiler.cpuBusy",
+          "group": "navigation@1"
+        },
+        {
+          "command": "lspui.profiler.trackMemoryCurrentFile",
+          "when": "view == lspui.profiler.processes && !lspui.profiler.memoryBusy",
+          "group": "navigation@2"
+        },
+        {
+          "command": "lspui.profiler.profileStop",
+          "when": "view == lspui.profiler.processes && lspui.profiler.profiling",
+          "group": "navigation@1"
+        },
+        {
+          "command": "lspui.profiler.memorySnapshot",
+          "when": "view == lspui.profiler.processes && lspui.profiler.memoryTracking",
+          "group": "navigation@1"
+        },
+        {
+          "command": "lspui.profiler.memoryDiff",
+          "when": "view == lspui.profiler.processes && lspui.profiler.memoryTracking",
+          "group": "navigation@2"
+        },
+        {
+          "command": "lspui.profiler.memoryStop",
+          "when": "view == lspui.profiler.processes && lspui.profiler.memoryTracking",
+          "group": "navigation@3"
+        },
+        {
+          "command": "lspui.profiler.refreshProcesses",
+          "when": "view == lspui.profiler.processes",
+          "group": "navigation@3"
+        },
+        {
+          "command": "lspui.profiler.sortProcesses",
+          "when": "view == lspui.profiler.processes",
+          "group": "1_order@1"
+        },
+        {
+          "command": "lspui.profiler.groupProcesses",
+          "when": "view == lspui.profiler.processes",
+          "group": "1_order@2"
+        },
+        {
+          "command": "lspui.profiler.filterProcesses",
+          "when": "view == lspui.profiler.processes",
+          "group": "1_order@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "lspui.profiler.profileStop",
+          "when": "view == lspui.profiler.processes && viewItem == processProfiling",
+          "group": "inline@0"
+        },
+        {
+          "command": "lspui.profiler.profileProcess",
+          "when": "view == lspui.profiler.processes && viewItem =~ /^process/ && !lspui.profiler.cpuBusy",
+          "group": "inline@1"
+        },
+        {
+          "command": "lspui.profiler.memoryTrackProcess",
+          "when": "view == lspui.profiler.processes && viewItem == processDebuggee && !lspui.profiler.memoryBusy",
+          "group": "inline@2"
+        },
+        {
+          "command": "lspui.profiler.profileStop",
+          "when": "view == lspui.profiler.processes && viewItem == processProfiling",
+          "group": "1_profile@0"
+        },
+        {
+          "command": "lspui.profiler.profileProcess",
+          "when": "view == lspui.profiler.processes && viewItem =~ /^process/ && !lspui.profiler.cpuBusy",
+          "group": "1_profile@1"
+        },
+        {
+          "command": "lspui.profiler.memoryTrackProcess",
+          "when": "view == lspui.profiler.processes && viewItem == processDebuggee && !lspui.profiler.memoryBusy",
+          "group": "1_profile@2"
+        },
+        {
+          "command": "lspui.profiler.copyProcessPid",
+          "when": "view == lspui.profiler.processes && viewItem =~ /^(process|blockedProcess)/",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "lspui.profiler.revealProcessScript",
+          "when": "view == lspui.profiler.processes && viewItem =~ /^(process|blockedProcess)/",
+          "group": "9_copy@2"
+        },
+        {
+          "command": "lspui.profiler.killProcess",
+          "when": "view == lspui.profiler.processes && viewItem =~ /^(process|blockedProcess)/",
+          "group": "9_danger@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "lspui.profiler.profileStart",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p"
+      },
+      {
+        "command": "lspui.profiler.profileStop",
+        "key": "ctrl+alt+shift+p",
+        "mac": "cmd+alt+shift+p"
+      }
+    ],
+    "configuration": {
+      "title": "LspUi",
+      "properties": {
+        "lspui.profiler.sampleRate": {
+          "type": "number",
+          "default": 100,
+          "description": "Sampling rate in Hz for CPU profiling (1-1000)."
+        },
+        "lspui.profiler.includeNative": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include native frames in profile results."
+        },
+        "lspui.profiler.lineThreshold": {
+          "type": "number",
+          "default": 1,
+          "description": "Minimum percentage of total samples for a line to appear as a hotspot (0.1-100)."
+        },
+        "lspui.profiler.functionThreshold": {
+          "type": "number",
+          "default": 2,
+          "description": "Minimum percentage of total samples for a function to appear as a hotspot (0.1-100)."
+        },
+        "lspui.profiler.maxDiagnosticsPerFile": {
+          "type": "number",
+          "default": 20,
+          "description": "Maximum number of profiling diagnostics per file."
+        },
+        "lspui.profiler.showInlineHeatMap": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline heat map decorations for hot lines after profiling."
+        },
+        "lspui.profiler.profileOnLaunch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start CPU profiling when a debug session launches."
+        },
+        "lspui.profiler.processRefreshMs": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 250,
+          "description": "Poll interval (ms) for refreshing the Processes panel while it is visible."
+        },
+        "lspui.profiler.preset": {
+          "type": "string",
+          "enum": [
+            "default",
+            "quick",
+            "detailed",
+            "longRunning"
+          ],
+          "enumDescriptions": [
+            "Use the sampleRate / includeNative settings",
+            "Short burst: 10 seconds at 100 Hz, for quick hotspot checks",
+            "Thorough: 60 seconds at 200 Hz, higher-fidelity data",
+            "No time limit at 50 Hz, for long-running servers and batch jobs"
+          ],
+          "default": "default",
+          "description": "Profiling preset that configures sample rate and duration."
+        },
+        "lspui.profiler.autoSnapshotOnPause": {
+          "type": "boolean",
+          "default": true,
+          "description": "Memory autopilot: while memory tracking is active, automatically take and compare a snapshot every time the debugger pauses."
+        },
+        "lspui.profiler.autoSnapshot": {
+          "type": "boolean",
+          "default": false,
+          "description": "Memory autopilot: while memory tracking is active, automatically take a memory snapshot every few seconds even when the program never pauses."
+        },
+        "lspui.profiler.autoSnapshotInterval": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Seconds between automatic memory snapshots when autoSnapshot is enabled."
+        }
+      }
+    }
+  }
+}

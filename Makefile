@@ -1,10 +1,10 @@
 # agent-pmo:74cf183
 # =============================================================================
-# Standard Makefile — lsp_toolkit
+# Standard Makefile — lspkit
 # Cross-platform: Linux, macOS, Windows (via GNU Make)
 # =============================================================================
 
-.PHONY: build test lint fmt clean ci setup help doc
+.PHONY: build test lint fmt clean ci setup help doc profiler-ui profiler-ui-test
 
 # ---------------------------------------------------------------------------
 # OS Detection
@@ -33,7 +33,7 @@ COVERAGE_THRESHOLDS_FILE := coverage-thresholds.json
 ## build: Compile/assemble all artifacts
 build:
 	@echo "==> Building..."
-	cargo build --release --workspace
+	cargo build --release --workspace --locked
 
 ## test: Fail-fast tests + coverage + threshold enforcement.
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].
@@ -41,17 +41,20 @@ build:
 test:
 	@echo "==> Testing (fail-fast + coverage + threshold)..."
 	rustup component add llvm-tools-preview 2>/dev/null || true
-	cargo llvm-cov nextest --workspace --all-targets --lcov --output-path lcov.info
+	$(MAKE) _profiler_dotnet
+	cargo llvm-cov nextest --workspace --all-targets --locked --lcov --output-path lcov.info
 	$(MAKE) _coverage_check
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
 	@echo "==> Linting..."
-	cargo clippy --release --workspace --all-targets -- -D warnings
+	cargo clippy --release --workspace --all-targets --locked -- -D warnings
+	$(MAKE) _profiler_spec_check
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:
 	@echo "==> Formatting$(if $(CHECK), (check mode),)..."
+	$(MAKE) _profiler_codegen
 	cargo fmt --all$(if $(CHECK), -- --check,)
 
 ## clean: Remove all build artifacts
@@ -83,10 +86,27 @@ help:
 	@echo ""
 	@echo "Repo-specific targets:"
 	@echo "  doc    - Build cargo workspace documentation (no deps)"
+	@echo "  profiler-ui      - Build the profiler's VS Code UI package"
+	@echo "  profiler-ui-test - Test the profiler UI package against a mock server"
 
 # ---------------------------------------------------------------------------
 # Private sub-recipes (NOT in .PHONY public list; underscore-prefixed)
 # ---------------------------------------------------------------------------
+
+## The profiler's .NET engine and the fixture its e2e tests profile (Release).
+## lsp-profiler-dotnet's tests run both. [PROF-TESTING]
+_profiler_dotnet:
+	dotnet build -c Release dotnet/LspProfiler.DotNet.Engine
+	dotnet build -c Release dotnet/fixtures/HotLeakApp
+
+## The profiler's gitignored wire model ([PROF-WIRE-GEN]). build.rs regenerates
+## it on every build; rustfmt needs it before anything has been built.
+_profiler_codegen:
+	node scripts/typediagram/generate.mjs
+
+## Every [PROF-*] citation in the profiler resolves to one spec heading.
+_profiler_spec_check:
+	node scripts/profiler-spec-citations.mjs
 
 _coverage_check:
 	@if [ ! -f "$(COVERAGE_THRESHOLDS_FILE)" ]; then echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) not found"; exit 1; fi; \
@@ -120,4 +140,14 @@ _coverage_check:
 ## doc: Build cargo workspace documentation (no deps)
 doc:
 	@echo "==> Building docs..."
-	cargo doc --workspace --no-deps
+	cargo doc --workspace --no-deps --locked
+
+## profiler-ui: Build the profiler's VS Code UI library (needs the wire model
+## that `cargo build` generates).
+profiler-ui:
+	cargo build -p lsp-profiler --locked
+	cd packages/lsp-profiler-ui && npm ci && npm run build
+
+## profiler-ui-test: Test the UI library against a mock language server.
+profiler-ui-test: profiler-ui
+	cd packages/lsp-profiler-ui && npm test

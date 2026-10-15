@@ -1,0 +1,127 @@
+name: release
+
+# Tag-triggered crates.io publish. A library workspace has no binaries, so the
+# "release" is the set of crates published to crates.io — no GitHub Release
+# archives, Homebrew, Scoop, or VSIX apply here. [SWR-REL-WORKFLOW]
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+# Least-privilege default; the publish job elevates only what it needs.
+# [SWR-SEC-TOKEN-PRIVILEGE]
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Protected environment gates the OIDC publish (reviewer + tag restriction).
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # OIDC -> crates.io Trusted Publishing. [SWR-SEC-OIDC-PUBLISH]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy, llvm-tools-preview
+
+      # The profiler's .NET engine and the fixture its e2e tests profile build in
+      # `make test` (net8.0, rolled forward to this SDK's runtime). [PROF-TESTING]
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      # crates/lsp-profiler/build.rs generates the wire model from
+      # docs/models/profiler.td with typeDiagram. [PROF-WIRE-GEN]
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install typeDiagram
+        run: npm install -g typediagram@0.11.0
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Install release tooling (coverage, test runner, version stamper, vuln gate)
+        uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
+        with:
+          tool: cargo-llvm-cov,cargo-nextest,shipwright-version-stamp,cargo-deny
+
+      # Fail fast with a precise error if the single license source-of-truth is
+      # absent on the runner. It MUST be committed (git-tracked) at the repo root;
+      # only the per-crate staged copies (crates/*/LICENSE-MIT) are gitignored.
+      # Without this guard the staging step below would abort with a cryptic
+      # `cp: No such file or directory`. [SWR-REL-LICENSE]
+      - name: Verify license source-of-truth is present
+        run: |
+          test -f LICENSE-MIT || {
+            echo "::error::LICENSE-MIT missing from checkout. Commit it (git-tracked) at the repo root — it is staged into every crate at publish time. [SWR-REL-LICENSE]"
+            exit 1
+          }
+
+      # Stamp the tag into every Cargo.toml version carrier in the runner working
+      # tree only. The tagged commit keeps `0.0.0-dev`; nothing is committed back.
+      # [SWR-VERSION-BUILD-STAMPING]
+      - name: Stamp version from tag
+        run: shipwright-version-stamp --tag "${GITHUB_REF_NAME}" --root .
+
+      # Re-lock workspace members to the stamped version so `--locked` stays valid
+      # (the stamper rewrites Cargo.toml, not Cargo.lock). [SWR-SEC-FROZEN-INSTALL]
+      - name: Refresh lockfile for stamped versions
+        run: cargo update --workspace
+
+      # Single root LICENSE-MIT is the source of truth; stage a copy into each
+      # crate so the published tarball ships the license text. [SWR-REL-LICENSE]
+      - name: Stage license into every crate
+        run: |
+          set -euo pipefail
+          for crate in crates/*/; do
+            cp LICENSE-MIT "${crate}LICENSE-MIT"
+          done
+
+      # Full gate (lint + test + coverage + build) MUST pass before any publish.
+      - name: CI gate
+        run: make ci
+
+      # Re-run the supply-chain gate on the release path itself, against the
+      # stamped + freshly-locked dependency graph. supply-chain.yml only covers
+      # PR/push/weekly-cron, so an advisory disclosed after the last main merge
+      # would otherwise publish unblocked. Same deny.toml, so the policy is DRY.
+      # [SWR-SEC-VULN-GATE]
+      - name: Supply-chain gate (advisories + bans + licenses + sources)
+        run: cargo deny check advisories bans licenses sources
+
+      - name: Authenticate to crates.io via OIDC
+        id: auth
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+
+      # Publish leaf crates (no internal deps) first, then dependents. `cargo
+      # publish` waits for index propagation before returning, so each dependent
+      # sees its just-published dependencies — no manual sleep. The per-crate
+      # wrapper is idempotent (skips already-published crates) so a re-run after a
+      # mid-batch failure is safe. [SWR-REL-CRATES]
+      - name: Publish crates in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          set -euo pipefail
+          for crate in \
+            lspkit \
+            lspkit-vfs \
+            lspkit-treesitter \
+            lspkit-sidecar \
+            lspkit-config \
+            lspkit-live \
+            lspkit-mcp \
+            lspkit-server; do
+            bash scripts/cargo-publish-or-skip.sh "${crate}"
+          done

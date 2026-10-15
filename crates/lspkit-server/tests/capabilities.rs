@@ -8,7 +8,7 @@ fn new_has_default_encoding_and_incremental_sync() {
     let caps = Capabilities::new();
     assert_eq!(caps.encoding(), PositionEncoding::default());
     assert_eq!(caps.text_sync_kind(), TextSync::Incremental);
-    assert!(caps.features().is_empty());
+    assert_eq!(caps.features(), Vec::new());
 }
 
 #[test]

@@ -41,7 +41,7 @@ async fn round_trip_empty_payload() {
         .await
         .expect("empty read should succeed");
 
-    assert!(received.is_empty());
+    assert_eq!(received, Vec::<u8>::new());
 }
 
 /// Multiple sequential frames decode in order.

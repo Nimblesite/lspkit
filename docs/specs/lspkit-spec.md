@@ -1,8 +1,8 @@
-# SPEC — `lsp_toolkit`
+# SPEC — `lspkit`
 
 ## Identity
 
-`lsp_toolkit` is a public, fully generic Rust workspace published as `lspkit-*` crates that supplies the cross-cutting infrastructure every LSP+MCP server reimplements. Its headline contribution is the **"one engine, two surfaces"** contract: a single `EngineApi` trait that an LSP backend and an MCP server both consume, so live analysis state computed once is vended two ways.
+`lspkit` is a public, fully generic Rust workspace published as `lspkit-*` crates that supplies the cross-cutting infrastructure every LSP+MCP server reimplements. Its headline contribution is the **"one engine, two surfaces"** contract: a single `EngineApi` trait that an LSP backend and an MCP server both consume, so live analysis state computed once is vended two ways.
 
 ## Hard invariants
 
@@ -30,18 +30,28 @@ Eight crates. The split is locked.
 | **lspkit-treesitter** | `LanguageParser` trait, content-hash-keyed parse cache, incremental parse helper. Bundles no grammars. Optional dependency cone. |
 | **lspkit-sidecar** | Framed IPC primitives only: length-prefixed envelope over Unix-socket / Windows-named-pipe, pluggable wire format, lifecycle manager (spawn, health-ping with timeout, exponential-backoff respawn, request correlation via `AtomicU64` ID). No backend-specific code of any kind. |
 
+The profiler crates, `lsp-profiler` (core) and `lsp-profiler-dotnet` (the .NET runtime), sit beside these eight with their own spec: [LSP-PROFILER-SPEC.md](LSP-PROFILER-SPEC.md).
+
 ## Dependency direction (acyclic)
 
-```
-                lspkit  ── (hosts EngineApi)
-                /  |  \      \         \
-   lspkit-server lspkit-mcp lspkit-live lspkit-config
-        |              |          |
-   lspkit-vfs   (rmcp adapter) (notify + sched)
-        |
-   lspkit-treesitter (optional, separate cone)
+```mermaid
+flowchart TD
+    lspkit["lspkit<br/><i>hosts EngineApi</i>"]
+    lspkit-server["lspkit-server"]
+    lspkit-mcp["lspkit-mcp<br/><i>rmcp adapter</i>"]
+    lspkit-live["lspkit-live<br/><i>notify + sched</i>"]
+    lspkit-config["lspkit-config"]
+    lspkit-vfs["lspkit-vfs"]
+    lspkit-treesitter["lspkit-treesitter<br/><i>optional cone</i>"]
+    lspkit-sidecar["lspkit-sidecar<br/><i>standalone</i>"]
 
-   lspkit-sidecar  (standalone; tokio + serde only)
+    lspkit-server --> lspkit
+    lspkit-server --> lspkit-vfs
+    lspkit-mcp --> lspkit
+    lspkit-live --> lspkit
+    lspkit-config
+    lspkit-treesitter
+    lspkit-sidecar
 ```
 
 ## `EngineApi` contract
@@ -112,6 +122,28 @@ pub trait EngineApi: Send + Sync + 'static {
 - Workspace lint `missing_docs = "deny"`; every public item carries a `///` doc comment.
 - Workspace lint `unsafe_code = "deny"`.
 
+## Release & publishing
+
+The toolkit ships eight crates to crates.io as a single coordinated release. Rules are non-negotiable; spec IDs below are referenced by the release workflow and the implementation plan in [docs/plans/publishing-plan.md](../plans/publishing-plan.md).
+
+- **[REL-TRIGGER]** Releases are triggered by an annotated tag matching `v[0-9]+.[0-9]+.[0-9]+` (or `v*.*.*-*` for prereleases) pushed to `main`. No `workflow_dispatch`. No publishing from feature branches.
+- **[REL-OIDC]** Publishing to crates.io uses OIDC trusted publishing via `rust-lang/crates-io-auth-action`. No `CARGO_REGISTRY_TOKEN` secret is stored in the repo. Each of the eight crates registers `Nimblesite/lspkit` + workflow `.github/workflows/release.yml` + environment `release` as a Trusted Publisher on crates.io.
+- **[REL-VERSION]** A single workspace version is the source of truth. `[workspace.package].version` carries the placeholder `0.0.0-dev` in source; the release workflow stamps the tag-derived version into `Cargo.toml` (and the internal `[workspace.dependencies]` pins for `lspkit-*`) before build. All eight crates inherit via `version.workspace = true`. The stamp is never committed back to `main`.
+- **[REL-ORDER]** Publish order respects the dep graph above; one 30-second sleep between batches lets the crates.io index propagate:
+  1. **Batch 1 (leaves):** `lspkit`, `lspkit-vfs`, `lspkit-config`, `lspkit-sidecar`, `lspkit-treesitter`
+  2. **Batch 2 (dependents):** `lspkit-server`, `lspkit-mcp`, `lspkit-live`
+
+  `cargo publish -p <crate>` per crate; the publish step is idempotent (skip if the version is already on the index).
+- **[REL-GATES]** Pre-publish gates — all must pass, in order:
+  1. `make ci` (lint + test + coverage thresholds + build) green on the tagged commit.
+  2. `cargo publish --dry-run -p <crate>` succeeds for each crate.
+  3. `cargo deny check` clean against committed `deny.toml`.
+  4. Every `uses:` in the release workflow pinned to a 40-char commit SHA (Dependabot tracks).
+  5. Top-level workflow `permissions: contents: read`; `id-token: write` job-scoped to the publish job only.
+  6. `--locked` on every cargo invocation in the release workflow; `Cargo.lock` committed.
+- **[REL-METADATA]** Every published crate carries `license = "MIT"`, `repository`, `description`, `readme`, and `documentation` fields. A single `LICENSE-MIT` file ships in each crate, staged from the workspace-root `LICENSE-MIT` at publish time. The declared SPDX license matches the one license file that actually ships. `[SWR-REL-LICENSE]`
+- **[REL-PROVENANCE]** GitHub Release artifacts (if any) carry `actions/attest-build-provenance` attestations. Provenance for crates.io packages is roadmap; not blocking for `0.0.x`.
+
 ## Acceptance — externally verifiable
 
 A patch is acceptable iff:
@@ -124,3 +156,6 @@ A patch is acceptable iff:
 6. `grep -R 'tower_lsp\|rmcp::' crates/*/src/lib.rs` returns **zero hits** in `pub` signatures (manual review against the rule).
 7. The `EngineApi` trait skeleton compiles and is exercised by a smoke test that constructs a no-op implementation and calls each method.
 8. Each of the four source repos has a "Migration to `lspkit`" section in its AI-guidance file.
+9. **[REL-OIDC]** `.github/workflows/release.yml` exists, uses `rust-lang/crates-io-auth-action` under `environment: release`, declares no `CARGO_REGISTRY_TOKEN` secret, and pins every `uses:` to a 40-char SHA.
+10. **[REL-VERSION]** `[workspace.package].version = "0.0.0-dev"` in source; release workflow stamps from `${{ github.ref_name }}`; every crate uses `version.workspace = true`.
+11. **[REL-ORDER]** Release workflow publishes the eight crates in the two batches above with a sleep between, and uses an idempotent skip-if-already-published wrapper.

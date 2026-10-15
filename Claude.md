@@ -1,7 +1,9 @@
 <!-- agent-pmo:74cf183 -->
 # LSP Toolkit
 
-Reusable Rust components for building LSPs and related tooling. Consumed by:
+**Repo:** https://github.com/Nimblesite/lspkit
+
+Reusable Rust components for building LSPs and related tooling, including the shared CPU and memory profiler that every Nimblesite language server mounts. Consumed by:
 
 - [lql-lsp-rust](/Users/christianfindlay/Documents/Code/DataProvider/Lql/lql-lsp-rust)
 - [Basilisk](/Users/christianfindlay/Documents/Code/Basilisk)
@@ -72,6 +74,27 @@ Hierarchical, non-numeric: `[GROUP-TOPIC]` / `[GROUP-TOPIC-DETAIL]` (e.g. `[PARS
 - **Meaningful assertions only.** `assert!(true)` is illegal. No try/catch that swallows errors and asserts success.
 - **Deterministic.** No `sleep`, no timing dependencies, no random state.
 
+## Profiler
+
+`lsp-profiler` is one CPU and memory profiler for every language server built on lspkit. A language plugs in a runtime crate; the service, the wire, the LSP surface and the VS Code UI library are shared and never change per language.
+
+**Spec:** [docs/specs/LSP-PROFILER-SPEC.md](docs/specs/LSP-PROFILER-SPEC.md). **Plan:** [docs/plans/LSP-PROFILER-PLAN.md](docs/plans/LSP-PROFILER-PLAN.md). Every `[PROF-…]` citation must resolve to exactly one spec heading (`make lint` runs `scripts/profiler-spec-citations.mjs`).
+
+- The `[PROF-INVARIANTS]` are hard: nothing above `CpuBackend` / `MemoryBackend` names a tool, a language or a runtime; the Rust layer computes everything the UI shows; standard LSP first; no scraping of console output.
+- The profiler crates carry their own stricter `[lints]` (no `unwrap`, `expect`, `panic`, indexing, `as` casts or `print!` on any path).
+- Errors are `thiserror` types mapped to `[PROF-ERRORS]` codes; a failing tool is a classified error, never a crash.
+- The wire model is `docs/models/profiler.td`; `crates/lsp-profiler/build.rs` generates `wire_generated.rs` and the UI's `wire-generated.ts` with typeDiagram (gitignored).
+- `make test` builds the .NET engine and its fixture first (`dotnet` SDK required).
+
+| Path | What |
+|---|---|
+| `crates/lsp-profiler` | The core: sessions, aggregation, exports, memory scoring, `ProfilerService`, `commands` |
+| `crates/lsp-profiler-dotnet` | The .NET runtime: process classification, engine driver, CPU and memory backends |
+| `dotnet/LspProfiler.DotNet.Engine` | The C# engine: EventPipe CPU sampling and heap snapshots, NDJSON out |
+| `dotnet/fixtures/HotLeakApp` | The .NET test target: a hot loop and a static-rooted leak |
+| `packages/lsp-profiler-ui` | The VS Code UI library (`make profiler-ui`, `make profiler-ui-test`) |
+| `crates/lsp-profiler-python`, `crates/lsp-profiler-helper` | Parked runtimes: excluded from the workspace |
+
 ## Multi-Agent Coordination (Too Many Cooks)
 
 If the TMC server is available: register on start (name, intent, files), lock files before editing, broadcast your plan, check messages periodically, release locks when done. Never edit a locked file — wait or take another approach.
@@ -97,7 +120,7 @@ Repo-specific helpers live in the `Repo-Specific Targets` section of the Makefil
 ## Repo Structure
 
 ```
-lsp_toolkit/
+lspkit/
 ├── CLAUDE.md                       # canonical agent instructions (this file)
 ├── AGENTS.md                       # pointer → CLAUDE.md
 ├── Makefile                        # 7 standard targets + Repo-Specific section
@@ -117,13 +140,16 @@ lsp_toolkit/
 ├── docs/
 │   ├── specs/                      # behaviour & requirements (spec IDs live here)
 │   └── plans/                      # how-to-achieve-goals + TODO checklists
-└── crates/                         # workspace crates (lspkit, lspkit-server,
-                                    # lspkit-vfs, lspkit-live, lspkit-mcp,
-                                    # lspkit-config, lspkit-treesitter,
-                                    # lspkit-sidecar — see docs/specs/)
+├── crates/                         # workspace crates (lspkit, lspkit-server,
+│                                   # lspkit-vfs, lspkit-live, lspkit-mcp,
+│                                   # lspkit-config, lspkit-treesitter,
+│                                   # lspkit-sidecar, lsp-profiler,
+│                                   # lsp-profiler-dotnet — see docs/specs/)
+├── dotnet/                         # the profiler's .NET engine + test fixture
+└── packages/                       # editor packages (lspkit-debug, lsp-profiler-ui)
 ```
 
-The canonical spec for the eight crates and the "one engine, two surfaces" pattern lives in [docs/specs/lsp-toolkit-spec.md](docs/specs/lsp-toolkit-spec.md).
+The canonical spec for the eight crates and the "one engine, two surfaces" pattern lives in [docs/specs/lspkit-spec.md](docs/specs/lspkit-spec.md).
 
 ### Cargo workspace lints (when Cargo.toml is created)
 

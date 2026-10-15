@@ -1,0 +1,33 @@
+{
+  "_doc": "Implements [PROF-WIRE-METHODS]. Single source of truth for the JSON-RPC method names and error codes of the lsp-profiler protocol. scripts/typediagram/generate.mjs emits these as Rust constants (crates/lsp-profiler/src/wire_generated.rs) and TypeScript constants (packages/lsp-profiler-ui/src/wire-generated.ts).",
+  "methods": {
+    "CAPABILITIES": "lspProfiler/capabilities",
+    "PROCESSES": "lspProfiler/processes",
+    "KILL": "lspProfiler/kill",
+    "CPU_START": "lspProfiler/cpu/start",
+    "CPU_STOP": "lspProfiler/cpu/stop",
+    "CPU_SNAPSHOT": "lspProfiler/cpu/snapshot",
+    "CPU_LIST": "lspProfiler/cpu/list",
+    "CPU_COOPERATIVE_SCRIPT": "lspProfiler/cpu/cooperativeScript",
+    "CPU_COOPERATIVE_ATTACH": "lspProfiler/cpu/cooperativeAttach",
+    "CPU_PROGRESS": "lspProfiler/cpu/progress",
+    "MEMORY_START": "lspProfiler/memory/start",
+    "MEMORY_SNAPSHOT": "lspProfiler/memory/snapshot",
+    "MEMORY_DIFF": "lspProfiler/memory/diff",
+    "MEMORY_REFERENCES": "lspProfiler/memory/references",
+    "MEMORY_OBJECTS_BY_TYPE": "lspProfiler/memory/objectsByType",
+    "MEMORY_GC_COLLECT": "lspProfiler/memory/gcCollect",
+    "MEMORY_STOP": "lspProfiler/memory/stop",
+    "MEMORY_INGEST": "lspProfiler/memory/ingest"
+  },
+  "errors": {
+    "OTHER": -32000,
+    "PROCESS_NOT_FOUND": -32001,
+    "UNSUPPORTED_RUNTIME": -32002,
+    "PERMISSION_DENIED": -32003,
+    "ALREADY_PROFILING": -32004,
+    "ATTACH_FAILED": -32005,
+    "TOOL_MISSING": -32006,
+    "INVALID_PARAMS": -32602
+  }
+}

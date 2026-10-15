@@ -6,6 +6,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+documentation = "https://docs.rs/lspkit-sidecar"
+# Lean tarball + force the release-staged (gitignored) LICENSE-MIT in. [SWR-REL-LICENSE]
+include = ["src/**/*", "LICENSE-MIT"]
 
 [lints]
 workspace = true

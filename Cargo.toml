@@ -9,14 +9,24 @@ members = [
     "crates/lspkit-config",
     "crates/lspkit-treesitter",
     "crates/lspkit-sidecar",
+    "crates/lsp-profiler",
+    "crates/lsp-profiler-dotnet",
 ]
+# Parked profiler runtimes: kept with the profiler, not built yet.
+exclude = ["crates/lsp-profiler-helper", "crates/lsp-profiler-python"]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2021"
-rust-version = "1.80"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/nimblesite/lsp_toolkit"
+rust-version = "1.89"
+license = "MIT"
+repository = "https://github.com/Nimblesite/lspkit"
+# Inherited by every crate. `readme`/`keywords`/`categories` resolve relative to
+# the workspace root and are packaged into each crate's tarball so crates.io
+# renders them. [SWR-REL-CRATES]
+readme = "README.md"
+keywords = ["lsp", "mcp", "language-server", "tree-sitter", "json-rpc"]
+categories = ["development-tools"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -44,24 +54,33 @@ rmp-serde = "1"
 lsp-types = "0.97"
 
 # MCP SDK
-rmcp = "0.2"
+rmcp = "3.5"
 
 # Document / state
 dashmap = "6"
 ropey = "1"
 
 # Filesystem
-notify = "7"
+notify = "8"
 
 # Errors / tracing
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
+# Profiler ([PROF-INVARIANTS]: only the core and runtime crates use these)
+humantime = "2"
+inferno = { version = "0.12", default-features = false }
+sysinfo = { version = "0.39.3", default-features = false, features = ["system", "user"] }
+tempfile = "3"
+url = "2"
+
 # Tree-sitter (optional, in lspkit-treesitter only)
 tree-sitter = "0.25"
 
-# Internal workspace dependencies
+# Internal workspace dependencies.
+# Versions are the `0.0.0-dev` placeholder; the release stamps the tag into
+# both `[workspace.package].version` and these requirements. [SWR-VERSION-BUILD-STAMPING]
 lspkit = { version = "0.0.1", path = "crates/lspkit" }
 lspkit-server = { version = "0.0.1", path = "crates/lspkit-server" }
 lspkit-vfs = { version = "0.0.1", path = "crates/lspkit-vfs" }
@@ -70,3 +89,5 @@ lspkit-mcp = { version = "0.0.1", path = "crates/lspkit-mcp" }
 lspkit-config = { version = "0.0.1", path = "crates/lspkit-config" }
 lspkit-treesitter = { version = "0.0.1", path = "crates/lspkit-treesitter" }
 lspkit-sidecar = { version = "0.0.1", path = "crates/lspkit-sidecar" }
+lsp-profiler = { version = "0.0.1", path = "crates/lsp-profiler" }
+lsp-profiler-dotnet = { version = "0.0.1", path = "crates/lsp-profiler-dotnet" }

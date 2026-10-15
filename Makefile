@@ -54,6 +54,7 @@ lint:
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:
 	@echo "==> Formatting$(if $(CHECK), (check mode),)..."
+	$(MAKE) _profiler_codegen
 	cargo fmt --all$(if $(CHECK), -- --check,)
 
 ## clean: Remove all build artifacts
@@ -97,6 +98,11 @@ help:
 _profiler_dotnet:
 	dotnet build -c Release dotnet/LspProfiler.DotNet.Engine
 	dotnet build -c Release dotnet/fixtures/HotLeakApp
+
+## The profiler's gitignored wire model ([PROF-WIRE-GEN]). build.rs regenerates
+## it on every build; rustfmt needs it before anything has been built.
+_profiler_codegen:
+	node scripts/typediagram/generate.mjs
 
 ## Every [PROF-*] citation in the profiler resolves to one spec heading.
 _profiler_spec_check:

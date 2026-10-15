@@ -76,7 +76,7 @@ tempfile = "3"
 url = "2"
 
 # Tree-sitter (optional, in lspkit-treesitter only)
-tree-sitter = "0.25"
+tree-sitter = "0.26"
 
 # Internal workspace dependencies.
 # Versions are the `0.0.0-dev` placeholder; the release stamps the tag into

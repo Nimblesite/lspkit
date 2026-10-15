@@ -198,10 +198,13 @@ async function startProfilerOnLaunch(store: Store, debugSessionId: string): Prom
   store.profilerStarting();
   try {
     await withUserProgress(cpuStartTitle(), async (report) => {
-      if (process.platform === "darwin") {
-        // macOS gates task ports behind entitled debuggers — even root
-        // py-spy gets EPERM — so use the cooperative in-process sampler
-        // injected at the entry pause ([PROF-CPU-COOPERATIVE], OOTB).
+      if (process.platform === "darwin" && cpuIsCooperativeEverywhere(store)) {
+        // macOS gates task ports behind entitled debuggers, so a runtime that
+        // can only be sampled from outside through them (py-spy gets EPERM
+        // even as root) is sampled by its cooperative in-process sampler,
+        // injected at the entry pause ([PROF-CPU-COOPERATIVE], OOTB). A
+        // runtime that samples itself, such as .NET over EventPipe, attaches
+        // as on every other platform.
         await startCooperativeProfileOnLaunch(store, report);
         return;
       }
@@ -219,6 +222,12 @@ async function startProfilerOnLaunch(store: Store, debugSessionId: string): Prom
     // spinner: only an adopted session reaches "active".
     if (store.profiler.value.cpu !== "active") { store.profilerStopped(); }
   }
+}
+
+/** Whether every runtime the server advertises CPU for injects a cooperative sampler. */
+function cpuIsCooperativeEverywhere(store: Store): boolean {
+  const runtimes = (store.capabilities.value?.runtimes ?? []).filter((runtime) => runtime.cpu !== undefined);
+  return runtimes.length > 0 && runtimes.every((runtime) => runtime.cpu?.cooperative === true);
 }
 
 /**

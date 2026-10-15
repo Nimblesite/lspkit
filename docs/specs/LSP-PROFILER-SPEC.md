@@ -280,7 +280,7 @@ Diagnostics are not part of the report. They reach the editor only through LSP (
 
 ### [PROF-CPU-COOPERATIVE] Cooperative sampling
 
-When the target cannot be attached from outside, the editor injects the runtime's `cooperative_script` at a debug pause. Today that case is macOS without the elevated helper.
+When the target cannot be attached from outside, the editor injects the runtime's `cooperative_script` at a debug pause. Today that case is macOS without the elevated helper, for a runtime that advertises `cooperative`. A runtime that samples itself, such as .NET over EventPipe, attaches to a debug-launched program on every platform, once the debuggee reports its process.
 
 The script appends ticks to a minted file, framed one JSON array per line:
 

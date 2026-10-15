@@ -30,6 +30,8 @@ Eight crates. The split is locked.
 | **lspkit-treesitter** | `LanguageParser` trait, content-hash-keyed parse cache, incremental parse helper. Bundles no grammars. Optional dependency cone. |
 | **lspkit-sidecar** | Framed IPC primitives only: length-prefixed envelope over Unix-socket / Windows-named-pipe, pluggable wire format, lifecycle manager (spawn, health-ping with timeout, exponential-backoff respawn, request correlation via `AtomicU64` ID). No backend-specific code of any kind. |
 
+The profiler crates, `lsp-profiler` (core) and `lsp-profiler-dotnet` (the .NET runtime), sit beside these eight with their own spec: [LSP-PROFILER-SPEC.md](LSP-PROFILER-SPEC.md).
+
 ## Dependency direction (acyclic)
 
 ```mermaid

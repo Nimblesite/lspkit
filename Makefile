@@ -4,7 +4,7 @@
 # Cross-platform: Linux, macOS, Windows (via GNU Make)
 # =============================================================================
 
-.PHONY: build test lint fmt clean ci setup help doc
+.PHONY: build test lint fmt clean ci setup help doc profiler-ui profiler-ui-test
 
 # ---------------------------------------------------------------------------
 # OS Detection
@@ -41,6 +41,7 @@ build:
 test:
 	@echo "==> Testing (fail-fast + coverage + threshold)..."
 	rustup component add llvm-tools-preview 2>/dev/null || true
+	$(MAKE) _profiler_dotnet
 	cargo llvm-cov nextest --workspace --all-targets --locked --lcov --output-path lcov.info
 	$(MAKE) _coverage_check
 
@@ -48,6 +49,7 @@ test:
 lint:
 	@echo "==> Linting..."
 	cargo clippy --release --workspace --all-targets --locked -- -D warnings
+	$(MAKE) _profiler_spec_check
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:
@@ -83,10 +85,22 @@ help:
 	@echo ""
 	@echo "Repo-specific targets:"
 	@echo "  doc    - Build cargo workspace documentation (no deps)"
+	@echo "  profiler-ui      - Build the profiler's VS Code UI package"
+	@echo "  profiler-ui-test - Test the profiler UI package against a mock server"
 
 # ---------------------------------------------------------------------------
 # Private sub-recipes (NOT in .PHONY public list; underscore-prefixed)
 # ---------------------------------------------------------------------------
+
+## The profiler's .NET engine and the fixture its e2e tests profile (Release).
+## lsp-profiler-dotnet's tests run both. [PROF-TESTING]
+_profiler_dotnet:
+	dotnet build -c Release dotnet/LspProfiler.DotNet.Engine
+	dotnet build -c Release dotnet/fixtures/HotLeakApp
+
+## Every [PROF-*] citation in the profiler resolves to one spec heading.
+_profiler_spec_check:
+	node scripts/profiler-spec-citations.mjs
 
 _coverage_check:
 	@if [ ! -f "$(COVERAGE_THRESHOLDS_FILE)" ]; then echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) not found"; exit 1; fi; \
@@ -121,3 +135,13 @@ _coverage_check:
 doc:
 	@echo "==> Building docs..."
 	cargo doc --workspace --no-deps --locked
+
+## profiler-ui: Build the profiler's VS Code UI library (needs the wire model
+## that `cargo build` generates).
+profiler-ui:
+	cargo build -p lsp-profiler --locked
+	cd packages/lsp-profiler-ui && npm ci && npm run build
+
+## profiler-ui-test: Test the UI library against a mock language server.
+profiler-ui-test: profiler-ui
+	cd packages/lsp-profiler-ui && npm test

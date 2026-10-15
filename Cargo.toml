@@ -9,7 +9,11 @@ members = [
     "crates/lspkit-config",
     "crates/lspkit-treesitter",
     "crates/lspkit-sidecar",
+    "crates/lsp-profiler",
+    "crates/lsp-profiler-dotnet",
 ]
+# Parked profiler runtimes: kept with the profiler, not built yet.
+exclude = ["crates/lsp-profiler-helper", "crates/lsp-profiler-python"]
 
 [workspace.package]
 version = "0.0.1"
@@ -64,6 +68,13 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
+# Profiler ([PROF-INVARIANTS]: only the core and runtime crates use these)
+humantime = "2"
+inferno = { version = "0.12", default-features = false }
+sysinfo = { version = "0.39.3", default-features = false, features = ["system", "user"] }
+tempfile = "3"
+url = "2"
+
 # Tree-sitter (optional, in lspkit-treesitter only)
 tree-sitter = "0.25"
 
@@ -78,3 +89,5 @@ lspkit-mcp = { version = "0.0.1", path = "crates/lspkit-mcp" }
 lspkit-config = { version = "0.0.1", path = "crates/lspkit-config" }
 lspkit-treesitter = { version = "0.0.1", path = "crates/lspkit-treesitter" }
 lspkit-sidecar = { version = "0.0.1", path = "crates/lspkit-sidecar" }
+lsp-profiler = { version = "0.0.1", path = "crates/lsp-profiler" }
+lsp-profiler-dotnet = { version = "0.0.1", path = "crates/lsp-profiler-dotnet" }

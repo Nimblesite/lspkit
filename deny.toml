@@ -26,6 +26,12 @@ allow = [
     "CC0-1.0",
 ]
 confidence-threshold = 0.9
+# `inferno` (the profiler's flame-graph SVG renderer, [PROF-EXPORT-FLAMEGRAPH])
+# is CDDL-1.0: file-level copyleft like the MPL-2.0 already allowed above. It is
+# used unmodified, so the exception is scoped to that one crate.
+exceptions = [
+    { allow = ["CDDL-1.0"], crate = "inferno" },
+]
 
 [bans]
 # Warn on duplicate versions; deny wildcard internal version requirements.

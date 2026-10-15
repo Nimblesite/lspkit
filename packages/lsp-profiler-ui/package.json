@@ -19,7 +19,8 @@
     "watch": "tsc -watch -p ./",
     "build": "npm run compile",
     "lint": "eslint src/",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test:paths": "mocha --ui tdd out/src/test/suite/editor-path-key.test.js"
   },
   "dependencies": {
     "@preact/signals-core": "^1.14.4"

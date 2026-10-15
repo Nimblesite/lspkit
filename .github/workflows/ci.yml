@@ -19,7 +19,8 @@ permissions:
 jobs:
   ci:
     name: CI
-    runs-on: ubuntu-22.04-8-cores
+    # Public repositories can use standard runners without larger-runner charges.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       # All third-party actions are pinned to a full commit SHA (mutable tags
@@ -69,6 +70,12 @@ jobs:
       # fmt, lint, test are three separate, non-overlapping steps.
       - name: Format check
         run: make fmt CHECK=1
+
+      - name: Profiler source path regressions
+        run: |
+          npm ci --prefix packages/lsp-profiler-ui
+          npm run build --prefix packages/lsp-profiler-ui
+          npm run test:paths --prefix packages/lsp-profiler-ui
 
       - name: Lint
         run: make lint

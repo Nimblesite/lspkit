@@ -566,6 +566,8 @@ When samples exist but none landed in user code, the panel says the program ran 
 
 ### [PROF-UI-HEATMAP] Heat tint
 
+Source matching resolves filesystem symlinks on every platform, including macOS `/var` aliases and Windows junctions/short names. Windows keys fold case; other platforms preserve it. Missing source files fall back to a resolved path. Canonical keys are cached only for one decoration pass so later filesystem changes cannot leave stale matches.
+
 The numbers come from LSP inlay hints and code lenses ([PROF-LSP-HINTS], [PROF-LSP-LENSES]). The library adds only what LSP cannot express:
 
 - a background tint graded by share;

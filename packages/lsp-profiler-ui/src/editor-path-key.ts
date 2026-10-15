@@ -28,11 +28,12 @@ import * as fs from "fs";
  * paths are case-SENSITIVE, so it must not fold there.
  */
 export function editorPathKey(file: string): string {
-  return process.platform === "win32" ? expandedWindowsPath(file).toLowerCase() : path.resolve(file);
+  const canonical = canonicalPath(file);
+  return process.platform === "win32" ? canonical.toLowerCase() : canonical;
 }
 
 /**
- * A Windows path with any 8.3 short component expanded to its real name.
+ * Resolve symlinks on every platform, and expand Windows 8.3 components.
  *
  * Case-folding alone is not enough. The two producers reach the same file by
  * different routes: `os.tmpdir()` yields the short form Windows keeps for
@@ -48,7 +49,7 @@ export function editorPathKey(file: string): string {
  * whole decoration pass down with it. Callers memoise (see `pathKeyer`) so this
  * costs one lookup per distinct file, not one per hot line.
  */
-function expandedWindowsPath(file: string): string {
+function canonicalPath(file: string): string {
   try {
     return fs.realpathSync.native(file);
   } catch {

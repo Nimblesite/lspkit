@@ -6,17 +6,7 @@
 # Suppressions go in `ignore` and MUST carry a reason + tracking issue.
 version = 2
 yanked = "deny"
-ignore = [
-    # `instant` — UNMAINTAINED (not a vulnerability). Pulled transitively via
-    # `notify` v7 → `notify-types`; no upstream release drops it yet and there is
-    # no safe upgrade. Time helper, no runtime attack surface. Revisit when
-    # `notify` migrates off `instant` (upstream tracking: notify-rs/notify).
-    { id = "RUSTSEC-2024-0384", reason = "unmaintained instant, transitive via notify; no upgrade available; not a vulnerability" },
-    # `paste` — UNMAINTAINED (not a vulnerability). Pulled transitively via
-    # `rmcp` (the MCP SDK); build-time proc-macro helper only, no runtime/attack
-    # surface, no safe upgrade. Revisit when `rmcp` migrates to `pastey`.
-    { id = "RUSTSEC-2024-0436", reason = "unmaintained paste, transitive via rmcp; build-time proc-macro only; no upgrade available; not a vulnerability" },
-]
+ignore = []
 
 [licenses]
 # Only permissive licenses compatible with this workspace's MIT license.

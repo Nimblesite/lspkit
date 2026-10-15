@@ -21,7 +21,8 @@ import { acquireStoppedFrame, evaluateInDebugSession, waitForStoppedFrame } from
 import { withUserProgress } from "./progress-ops";
 import { toMemoryIngestResult } from "./wire-adapters";
 import type { MemoryResult, MemoryStartResult } from "./wire-generated";
-import { disposeMemoryDashboard } from "./memory-dashboard";
+import { disposeMemoryDashboard, openMemoryDashboard } from "./memory-dashboard";
+import { waitForDebuggeePid } from "./profiler-launch";
 import { disposeRefGraph } from "./memory-ref-graph";
 import type { MemoryIngestResult } from "./memory-dashboard-mapping";
 import { formatBytes } from "./profiler-styles";
@@ -33,7 +34,11 @@ import {
   LSP_MEM_CMD,
   memStartTitle,
   TRACEBACK_DEPTH,
+  captureSnapshotAndDiff,
   hasCapturedSnapshot,
+  isDirectMemorySession,
+  lastMemorySnapshot,
+  setDirectMemorySession,
   presentDiff,
   presentSnapshot,
   readFinalSnapshot,
@@ -93,7 +98,7 @@ function memoryCommandDisposables(store: Store): vscode.Disposable[] {
       // "Run & Track Memory (Current File)" (#82): the launch stopped on
       // entry; inject tracemalloc there, then resume the program.
       if (session.type === debugType() && session.configuration.memoryTrackOnLaunch === true) {
-        void startMemoryTrackingOnLaunch(store);
+        void startMemoryTrackingOnLaunch(store, session);
       }
     }),
     // Only the *tracked* session's termination finalises the run into a visible
@@ -238,7 +243,11 @@ export function disposeMemoryProfiler(): void {
  * ([PROF-UI-AUTOPILOT]); with none, a final snapshot opens at exit
  * ([PROF-PY-MEMORY-FINAL]). Implements [PROF-UI-PROCESSES] (memory leg).
  */
-async function startMemoryTrackingOnLaunch(store: Store): Promise<void> {
+async function startMemoryTrackingOnLaunch(store: Store, session: vscode.DebugSession): Promise<void> {
+  if (memoryIsDirectEverywhere(store)) {
+    await startDirectTrackingOnLaunch(store, session);
+    return;
+  }
   // One notification spans the whole auto-start ([PROF-UI-STATE]).
   await withUserProgress(memStartTitle(), async (report) => {
     report("Waiting for the program to pause at entry…");
@@ -263,6 +272,37 @@ async function startMemoryTrackingOnLaunch(store: Store): Promise<void> {
       report("Resuming the program…");
       await vscode.commands.executeCommand("workbench.action.debug.continue");
     }
+  });
+}
+
+/** Whether every runtime the server advertises memory for reads its heap directly. */
+function memoryIsDirectEverywhere(store: Store): boolean {
+  const runtimes = (store.capabilities.value?.runtimes ?? []).filter((runtime) => runtime.memory !== undefined);
+  return runtimes.length > 0 && runtimes.every((runtime) => runtime.memory?.mode.kind === "Direct");
+}
+
+/**
+ * "Run & Track Memory" for a direct runtime ([PROF-MEMORY-MODE]): nothing has
+ * to pause, so tracking starts as soon as the debuggee reports its process, and
+ * a baseline snapshot is taken so the run always has a result to show (#146).
+ * Each pass after that is captured when the program continues
+ * ([PROF-UI-AUTOPILOT]).
+ */
+async function startDirectTrackingOnLaunch(store: Store, session: vscode.DebugSession): Promise<void> {
+  await withUserProgress(memStartTitle(), async (report) => {
+    report("Waiting for the program to start…");
+    const pid = (await waitForDebuggeePid(store, session.id)) ? store.getDebuggeeProcessId(session.id) : undefined;
+    if (pid === undefined) {
+      void vscode.window.showWarningMessage(
+        `${brand()}: The program never reported its process — track its memory from its row in the Processes panel.`,
+      );
+      return;
+    }
+    if (!(await handleMemoryStart(store, report, pid))) { return; }
+    await captureSnapshotAndDiff(store, report);
+    void vscode.window.showInformationMessage(
+      `${brand()}: Tracking memory — press Continue at a breakpoint and each pass is captured automatically.`,
+    );
   });
 }
 
@@ -320,6 +360,7 @@ async function handleMemoryStart(
     // finalises the run ([PROF-PY-MEMORY-FINAL]).
     const tracked = store.getDebuggeeProcessId(debugSession?.id ?? "") === target ? debugSession?.id : undefined;
     store.memoryTrackingActive(result.memory_session_id, undefined, tracked);
+    setDirectMemorySession(result.mode.kind === "Direct");
     Logger.info(`Memory tracking started: session ${result.memory_session_id} (${result.mode.kind})`);
     return true;
   } catch (err) {
@@ -376,6 +417,10 @@ async function handleMemorySnapshot(store: Store): Promise<void> {
  * explicitly — the session end never silently produces nothing.
  */
 async function finalizeMemorySessionOnEnd(store: Store): Promise<void> {
+  if (isDirectMemorySession()) {
+    finishDirectRunOnEnd(store);
+    return;
+  }
   const memorySessionId = store.profiler.value.memorySessionId;
   const finalSnapshotFile = store.profiler.value.memoryFinalSnapshotFile;
   handleMemoryStop(store);
@@ -451,6 +496,26 @@ export function gcSummary(result: MemoryIngestResult): string {
   const uncollectable = Number(result.uncollectable ?? 0);
   const stuck = uncollectable > 0 ? `; ${uncollectable} object(s) could not be collected` : "";
   return `${brand()}: Garbage collection ran — freed ${freed}${stuck}`;
+}
+
+/**
+ * A direct runtime's heap is gone once its program has ended, so the run's
+ * result is the last snapshot taken while it ran: open it, never nothing
+ * ([PROF-PY-MEMORY-FINAL], #146).
+ */
+function finishDirectRunOnEnd(store: Store): void {
+  const last = lastMemorySnapshot();
+  handleMemoryStop(store);
+  if (last === undefined) {
+    showActionableToast(
+      `${brand()}: The tracked program ended before a memory snapshot was taken.`,
+      "Memory Actions…",
+      cmd("memoryMenu"),
+    );
+    return;
+  }
+  openMemoryDashboard(last);
+  void vscode.window.showInformationMessage(`${brand()}: The tracked program ended — opened its last memory snapshot.`);
 }
 
 function handleMemoryStop(store: Store): void {

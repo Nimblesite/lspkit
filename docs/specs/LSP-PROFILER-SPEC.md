@@ -402,7 +402,7 @@ Runtimes use one of two modes:
   3. the UI posts the output to `memory.ingest`.
 
   The server never owns a DAP connection.
-- **Direct.** The runtime captures the data itself from the PID. Steps return `MemoryStep::Completed` immediately.
+- **Direct.** The runtime captures the data itself from the PID. Steps return `MemoryStep::Completed` immediately. A direct runtime reads the live heap, which it cannot do while a debugger holds the program paused, so the UI refuses a direct step on a paused debuggee and says to continue. "Run & Track Memory" starts tracking once the debuggee reports its process, with no pause, and takes a baseline snapshot so the run always has a result. When the tracked program ends, its last snapshot opens.
 
 ### [PROF-MEMORY-SESSION] Sessions
 
@@ -598,7 +598,7 @@ The type picker offers the server's ranked type names (the latest snapshot's top
 
 ### [PROF-UI-AUTOPILOT] Autopilot
 
-Autopilot runs interval capture (default 30 s) in either mode. In courier mode it can also capture on a genuine debug pause. It reuses snapshot-then-compare and updates the open views in place. The first high-confidence leak in a session offers the retention graph once.
+Autopilot runs interval capture (default 30 s) in either mode. With `autoSnapshotOnPause` it also captures each pause-driven pass: in courier mode at the pause, and in direct mode when the paused program continues ([PROF-MEMORY-MODE]). The UI reads pauses and resumptions off the host debug adapter's own messages. It reuses snapshot-then-compare and updates the open views in place. The first high-confidence leak in a session offers the retention graph once.
 
 ### [PROF-UI-WEBVIEW] Webview host
 
@@ -618,7 +618,7 @@ Runtime ID `dotnet`, display name ".NET". The `lsp-profiler-dotnet` crate drives
 
 | Capability | Value |
 |---|---|
-| CPU `live_progress` | false: samples arrive after stop, when the trace is symbolized |
+| CPU `live_progress` | true: the count follows each finished segment, a segment behind ([PROF-DOTNET-CPU]) |
 | CPU `line_level` | true: frames carry file and line from portable PDBs |
 | CPU `native_frames` | true, on request |
 | CPU `cooperative` | false |
@@ -695,7 +695,7 @@ Recording runs in segments, each its own session recorded to a temporary `.nettr
 - `cpu.snapshot` sees every finished segment;
 - a target that exits keeps every segment it finished. Its last segment never got a rundown, so its frames cannot be named and it is dropped.
 
-The backend still reports no `live_progress`. A line or EOF on stdin ends the recording. The crate's finish timeout covers symbolizing the last segment.
+The backend reports `live_progress`: each finished segment's ticks advance the session's count, so the count runs a segment behind. A line or EOF on stdin ends the recording. The crate's finish timeout covers symbolizing the last segment.
 
 ### [PROF-DOTNET-CPU-SYMBOLS] Symbolization
 

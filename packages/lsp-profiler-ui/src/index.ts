@@ -8,6 +8,7 @@ import type * as vscode from "vscode";
 import type { ProfilerHost } from "./host";
 import { disposeMemoryProfiler, registerMemoryProfiler } from "./memory-profiler";
 import { registerMemoryAutopilot } from "./memory-autopilot";
+import { registerDebuggeePauseTracking } from "./debuggee-pause";
 import { registerProcessesView, type ProcessesProvider } from "./process-explorer";
 import { disposeProfiler, registerProfiler } from "./profiler";
 import { createProfilerStore, type ProfilerStore } from "./store";
@@ -35,6 +36,7 @@ export function registerProfilerUi(context: vscode.ExtensionContext, host: Profi
   const store = createProfilerStore(host);
   const view = registerProcessesView(context, store);
   const disposables: vscode.Disposable[] = [
+    ...registerDebuggeePauseTracking(),
     ...registerProfiler(store),
     ...registerMemoryProfiler(store),
     ...registerMemoryAutopilot(store),
@@ -70,5 +72,6 @@ export { refGraphState, buildRefGraphHtml } from "./memory-ref-graph";
 export { lastProfileResult } from "./profiler";
 export { contextKeyValues } from "./context-keys";
 export { lastMemorySnapshot } from "./memory-capture";
+export { isDebuggeePaused } from "./debuggee-pause";
 export { panelMessage as processesPanelMessage } from "./process-reactivity";
 export type * as Wire from "./wire-generated";

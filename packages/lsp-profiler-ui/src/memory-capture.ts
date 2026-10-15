@@ -24,6 +24,7 @@ import * as fs from "fs";
 import { Logger } from "./logger";
 import type { ProfilerStore as Store } from "./store";
 import { acquireStoppedFrame, evaluateInDebugSession } from "./dap-evaluate";
+import { isDebuggeePaused } from "./debuggee-pause";
 import { withUserProgress } from "./progress-ops";
 import { toMemoryIngestResult } from "./wire-adapters";
 import type { MemoryResult, MemoryStep } from "./wire-generated";
@@ -127,6 +128,9 @@ export function lastMemorySnapshot(): MemoryDashboardSnapshot | undefined {
  */
 let captureTimeline: MemoryTimelinePoint[] = [];
 
+/** Whether the active memory session's runtime reads its heap directly ([PROF-MEMORY-MODE]). */
+let directSession = false;
+
 /** Whether a snapshot has been captured (so "stop" can report honestly). */
 export function hasCapturedSnapshot(): boolean {
   return lastDashboardSnapshot !== undefined;
@@ -136,6 +140,17 @@ export function hasCapturedSnapshot(): boolean {
 export function resetCaptureState(): void {
   lastDashboardSnapshot = undefined;
   captureTimeline = [];
+  directSession = false;
+}
+
+/** Record the mode of the memory session that just started. */
+export function setDirectMemorySession(direct: boolean): void {
+  directSession = direct;
+}
+
+/** Whether the active memory session reads its heap directly, with no debugger pause. */
+export function isDirectMemorySession(): boolean {
+  return directSession;
 }
 
 // ── Single operation round-trip ─────────────────────────────────────────────
@@ -182,6 +197,17 @@ function resolveActiveSession(op: MemoryOperation): { client: LspClient; memoryS
 async function runMemoryOperation(op: MemoryOperation): Promise<MemoryIngestResult | null> {
   const active = resolveActiveSession(op);
   if (active === null) { return null; }
+  // A direct runtime reads the live heap, which it cannot do while the debugger
+  // holds the program paused: the step would wait for a resume that may never
+  // come ([PROF-MEMORY-MODE]). Refuse it and say why.
+  if (directSession && isDebuggeePaused(op.store.profiler.value.memoryDebugSessionId)) {
+    if (!op.quiet) {
+      void vscode.window.showWarningMessage(
+        `${brand()}: Continue the program to read its memory — its heap cannot be read while the debugger holds it paused.`,
+      );
+    }
+    return null;
+  }
 
   beginMemoryOp();
   try {

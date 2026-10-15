@@ -52,8 +52,8 @@ Status was last verified on **2026-10-15**.
 - [x] `gc`: `GCHeapCollect` does induce a full collection on .NET 10; the generation sizes after it are reported. Stopping a session from inside an event callback deadlocks the stream, so every session is stopped from the command thread (`GcWatch` + `SessionRun`).
 - [x] `refs`, `objects`, `analyze` over the kept graph file; `failure` kinds for a dead PID (`ProcessNotFound`) and a non-.NET PID (`UnsupportedRuntime`).
 - [x] `cpu`: a target that exits mid-session no longer fails the engine's stop (`StopRecording`).
-- [ ] **Defect — samples lost when the target exits.** With no live target there is no rundown, so every managed frame stays unresolved (`!?`) and the session reports 0 samples; 748 ticks were recorded in the manual run. Fix: capture the method map at attach. Pinned by `a_target_that_exits_mid_session_keeps_its_samples` (fails) and SharpLsp's `profiler-cpu-sessions` suite.
-- [ ] **Defect — no data before stop.** The engine symbolizes the trace only after `stop`, so `cpu.snapshot` mid-session reports nothing ([PROF-CPU-SNAPSHOT]) and `live_progress` is false. Fix: stream symbolized ticks while recording. Pinned by `a_mid_session_snapshot_reports_the_samples_so_far` (fails).
+- [x] **Defect — samples lost when the target exits.** Fixed by segmented capture ([PROF-DOTNET-CPU]): every finished segment keeps its samples; only the unfinished last one is dropped. With no live target there is no rundown, so every managed frame stays unresolved (`!?`) and the session reports 0 samples; 748 ticks were recorded in the manual run. Fix: capture the method map at attach. Pinned by `a_target_that_exits_mid_session_keeps_its_samples` (fails) and SharpLsp's `profiler-cpu-sessions` suite.
+- [x] **Defect — no data before stop.** Fixed by segmented capture: ticks stream a segment behind, and `live_progress` is true. The engine symbolizes the trace only after `stop`, so `cpu.snapshot` mid-session reports nothing ([PROF-CPU-SNAPSHOT]) and `live_progress` is false. Fix: stream symbolized ticks while recording. Pinned by `a_mid_session_snapshot_reports_the_samples_so_far` (fails).
 - [ ] Engine test project. The engine is covered through the Rust e2e suites, not a C# test project.
 - [ ] Packaging: framework-dependent publish output, a size budget, and licence notices for the bundled packages. Today SharpLsp copies the `bin/Release/net8.0` directory beside its server binary.
 - [ ] Windows and Linux validation of the heap snapshot and symbolization (only macOS was run).
@@ -64,7 +64,7 @@ Status was last verified on **2026-10-15**.
 - [x] Service fixes pinned by the e2e suite: a PID naming no process is `PROCESS_NOT_FOUND` on `kill`, `cpu.start` and `memory.start` (it was `UNSUPPORTED_RUNTIME` on `kill`); `memory.start` recognises the PID before opening a session (a dead PID used to get a session); `cpu.start` reports the runtime version the classifier resolved when the backend reads none (it was empty); a `duration` caps the recorded time (the report used to time until `stop`).
 - [x] [PROF-DOTNET-PROCESSES]: classification and the diagnostics-endpoint check moved here from SharpLsp (`process.rs`, 5 tests). SharpLsp's originals are deleted.
 - [x] [PROF-DOTNET-ENGINE-LOCATE]: configured path, `LSP_PROFILER_DOTNET_ENGINE`, beside the host executable; `TOOL_MISSING` names every place looked.
-- [x] `CpuBackend` (`cpu.rs`): spawns `cpu`, forwards frames and ticks with `weight_secs`, stops by writing a line to stdin, 120 s finish timeout, `live_progress: false`.
+- [x] `CpuBackend` (`cpu.rs`): spawns `cpu`, forwards frames and ticks with `weight_secs`, stops by writing a line to stdin, 120 s finish timeout, `live_progress: true` (segmented capture).
 - [x] `MemoryBackend` direct mode (`memory.rs`): graphs under `<output_dir>/heap-<session>/`, deleted on stop; `diff` is a fresh snapshot the core compares.
 - [x] e2e through `ProfilerService` against HotLeakApp (`tests/dotnet_e2e.rs`): the process is recognised and attachable; CPU finds `Hot.Spin` and its lines and writes all three artifacts; memory sees the leak's declaration line, growth, the static `Items` root, objects, an observed collection and a clean stop.
 
@@ -116,7 +116,7 @@ Tracked in SharpLsp's plan: `SharpLsp/docs/plans/PROFILER-PLAN.md`, section "Mig
 |---|---|---|
 | TraceEvent source lines on Linux and Windows | Validated on macOS only | Run `make dotnet && cargo test -p lsp-profiler-dotnet` on both |
 | Heap graph size | ~16 MB JSON per 500 k objects, kept per snapshot | Keep only the latest graph, or compress; measure a 1 GB heap |
-| No live CPU sample count for .NET | EventPipe delivers samples after stop | Accepted (`live_progress: false`); the panel shows "Profiling PID" without a counter. Streaming `EventPipeEventSource` is a later improvement |
+| A .NET CPU count a segment behind | Each segment is symbolized after its rundown | Accepted: the count lags by at most one segment (10 s) |
 | Command-ID collision in VS Code | LSP clients auto-register server commands | Server commands use `<prefix>.lspProfiler.*`, UI commands `<prefix>.profiler.*` (done) |
 | Diagnostics replacement | `publishDiagnostics` replaces a URI's whole set | Host-side merge [PROF-HOST-DIAGNOSTICS] when Phase 1 diagnostics land |
 | Session cap | SharpLsp's setting is unenforced | Phase 1 item |

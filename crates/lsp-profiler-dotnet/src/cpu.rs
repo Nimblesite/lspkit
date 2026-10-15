@@ -2,8 +2,8 @@
 //!
 //! The engine records in segments and streams each segment's ticks once it is
 //! symbolized, until it reads a line on stdin. Ticks therefore arrive a segment
-//! behind, not live: the backend reports no live progress, a snapshot sees
-//! every finished segment, and a target that exits keeps them.
+//! behind: the session's live count follows every finished segment, a snapshot
+//! sees them all, and a target that exits keeps them.
 
 use std::time::Duration;
 
@@ -41,7 +41,7 @@ impl DotNetCpu {
 impl CpuBackend for DotNetCpu {
     fn capabilities(&self) -> CpuCapabilities {
         CpuCapabilities {
-            live_progress: false,
+            live_progress: true,
             line_level: true,
             native_frames: true,
             cooperative: false,

@@ -80,6 +80,7 @@ mod tests {
             peak_bytes: current,
             object_count: 1,
             gc_generations: vec![],
+            generation_sizes: None,
             sites: vec![],
         }
     }

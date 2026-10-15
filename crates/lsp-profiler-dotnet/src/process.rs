@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use lsp_profiler::paths::resolve_against;
 use lsp_profiler::runtime::{Classification, ProcessCandidate};
 
 const MUXER_STEM: &str = "dotnet";
@@ -46,14 +47,15 @@ fn classify(
     let exe = candidate
         .exe
         .clone()
-        .or_else(|| candidate.cmd.first().map(PathBuf::from))?;
+        .or_else(|| candidate.cmd.first().map(PathBuf::from))
+        .map(|path| resolve_against(path, candidate.cwd.as_deref()))?;
     let (version, entry) = if is_muxer(&exe) {
         let assembly = candidate
             .cmd
             .iter()
             .skip(1)
             .find(|arg| has_extension(Path::new(arg), "dll"))
-            .map(PathBuf::from);
+            .map(|path| resolve_against(path, candidate.cwd.as_deref()));
         let version = assembly
             .as_deref()
             .and_then(Path::parent)

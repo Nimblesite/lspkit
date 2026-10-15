@@ -20,6 +20,7 @@ use sysinfo::{
 };
 use tracing::info;
 
+use crate::paths::{normalize_path, path_in_roots, resolve_against};
 use crate::runtime::{Classification, ProcessCandidate, Runtime};
 use crate::wire::ProcessInfo;
 
@@ -273,28 +274,6 @@ fn workspace_candidate_paths(
         .flatten()
         .map(|raw| resolve_against(raw, cwd));
     cwd_candidate.into_iter().chain(arg_candidates).collect()
-}
-
-/// Resolve `raw` to an absolute path: absolute paths pass through, relative ones
-/// join onto `base` (the process working directory) when it is known.
-fn resolve_against(raw: &str, base: Option<&Path>) -> PathBuf {
-    let path = Path::new(raw);
-    match base {
-        Some(base) if path.is_relative() => base.join(path),
-        _ => path.to_path_buf(),
-    }
-}
-
-/// Whether `candidate` is equal to, or nested under, any of `roots`.
-fn path_in_roots(candidate: &Path, roots: &[PathBuf]) -> bool {
-    roots.iter().any(|root| candidate.starts_with(root))
-}
-
-/// Best-effort canonicalization so symlinked roots and `.`/`..` segments compare
-/// correctly. Falls back to the input when the path cannot be resolved (e.g. a
-/// script that has since been deleted).
-fn normalize_path(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// One batched argv snapshot for the whole process table (macOS only).

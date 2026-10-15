@@ -442,6 +442,14 @@ type AllocationSite {
   traceback: List<TraceFrame>
 }
 
+# Heap bytes for one runtime-named generation or heap region.
+type GenerationSize {
+  # Runtime label, such as Gen 0 or LOH.
+  name: String
+  # Bytes retained in the region after collection.
+  size_bytes: Int
+}
+
 # A point-in-time heap summary.
 type HeapSnapshot {
   # Snapshot identifier.
@@ -454,6 +462,8 @@ type HeapSnapshot {
   object_count: Int
   # Collection counts per generation.
   gc_generations: List<Int>
+  # Generation sizes, distinct from collection counts; absent when unsupported.
+  generation_sizes: Option<List<GenerationSize>>
   # Largest allocation sites.
   sites: List<AllocationSite>
 }

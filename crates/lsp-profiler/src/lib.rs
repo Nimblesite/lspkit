@@ -18,6 +18,7 @@ pub mod error;
 pub mod export;
 pub mod memory;
 pub mod ndjson;
+pub mod paths;
 pub mod presets;
 pub mod process;
 pub mod report;

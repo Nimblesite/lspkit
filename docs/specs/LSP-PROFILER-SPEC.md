@@ -586,6 +586,8 @@ The dashboard shows:
 
 An induced GC reports the bytes it freed and any uncollectable objects. `collected` is runtime-defined ([PROF-MEMORY-OUTCOME]), so it is never shown as an object count.
 
+Collection counts (`gc_generations`) and named generation sizes (`generation_sizes`, in bytes) are distinct metrics. Unsupported counts stay empty; the dashboard never presents generation bytes as counts. Generation sizes use the runtime's labels and human-readable byte units. Long type names wrap within the allocation table so Size and Objects remain visible in narrow editor panels.
+
 Snapshot, compare, GC and stop are reachable from the dashboard, the processes view and, in courier mode, the debug toolbar.
 
 ### [PROF-UI-REFGRAPH] Retention graph
@@ -634,6 +636,8 @@ A process is .NET when either holds:
 
 - its executable is the `dotnet` muxer; the entry is the first `.dll` argument;
 - it is an apphost with a sibling `<name>.runtimeconfig.json`.
+
+Relative executable and assembly paths resolve against the target process's working directory before probing for runtime files. The profiler's own working directory never determines another process's classification.
 
 The runtime version is read from that runtimeconfig by deserializing it: `runtimeOptions.framework(s)[].version`, otherwise `tfm`. A process with no diagnostics endpoint is listed as unattachable, with the reason that diagnostics are disabled or the runtime has not started. On Unix the endpoint is `dotnet-diagnostic-<pid>-*` in the temp directory; on Windows it is the `dotnet-diagnostic-<pid>` named pipe.
 

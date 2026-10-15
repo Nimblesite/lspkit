@@ -205,6 +205,7 @@ mod tests {
             peak_bytes: 0,
             object_count: 0,
             gc_generations: vec![],
+            generation_sizes: None,
             sites,
         }
     }

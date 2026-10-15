@@ -111,6 +111,7 @@ export function toDashboardSnapshot(result: MemoryIngestResult): MemoryDashboard
     peakMemory: asNumber(result.peakMemory),
     gcObjects: asNumber(result.gcObjects),
     gcCounts: numberArrayField(result, "gcCounts"),
+    generationSizes: recordArrayField(result, "generationSizes").map((region) => ({ name: asString(region.name), size: asNumber(region.size) })),
     topAllocations: recordArrayField(result, "topAllocations").map(toAllocation),
     timeline: [],
     heapProfilePath: asString(result.heapProfilePath),

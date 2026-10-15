@@ -57,7 +57,8 @@ impl Fixture {
             "dotnet/fixtures/HotLeakApp/bin/Release/net8.0/HotLeakApp",
             "make dotnet",
         );
-        let mut child = Command::new(exe)
+        let mut child = Command::new("./HotLeakApp")
+            .current_dir(exe.parent().expect("fixture directory"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -238,7 +239,28 @@ async fn memory_profiling_sees_the_leak_its_root_and_the_collection() {
         "{site}"
     );
     assert_eq!(site["line"], 7, "{site}");
-    assert_eq!(snapshot["gc_generations"].as_array().map(Vec::len), Some(5));
+    assert_eq!(
+        snapshot["gc_generations"],
+        json!([]),
+        "unreported collection counts must stay absent"
+    );
+    assert_eq!(
+        snapshot["generation_sizes"].as_array().map(Vec::len),
+        Some(5),
+        "generation bytes must have an explicit unit, not be presented as collection counts"
+    );
+    assert_eq!(snapshot["generation_sizes"][0]["name"], "Gen 0");
+    assert_eq!(snapshot["generation_sizes"][3]["name"], "LOH");
+    assert_eq!(snapshot["generation_sizes"][4]["name"], "POH");
+    assert!(
+        snapshot["generation_sizes"]
+            .as_array()
+            .expect("generation sizes")
+            .iter()
+            .map(|row| row["size_bytes"].as_i64().expect("bytes"))
+            .sum::<i64>()
+            > 0
+    );
 
     tokio::time::sleep(Duration::from_secs(2)).await;
     let diff = call(&service, methods::MEMORY_DIFF, session.clone()).await;

@@ -204,6 +204,7 @@ impl SnapshotJson {
             peak_bytes: self.peak,
             object_count: self.gc_objects,
             gc_generations: self.gc_counts,
+            generation_sizes: None,
             sites,
         }
     }

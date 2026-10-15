@@ -43,9 +43,9 @@ export function toProfileResult(report: ProfileReport): ProfileResult {
     duration: report.duration_secs,
     totalSamples: report.total_samples,
     outputFile: artifacts.speedscope_path ?? "",
-    ...(artifacts.cpuprofile_path !== null ? { cpuProfilePath: artifacts.cpuprofile_path } : {}),
-    ...(artifacts.flamegraph_path !== null ? { flamegraphPath: artifacts.flamegraph_path } : {}),
-    ...(artifacts.export_error !== null ? { exportError: artifacts.export_error } : {}),
+    ...(artifacts.cpuprofile_path !== undefined ? { cpuProfilePath: artifacts.cpuprofile_path } : {}),
+    ...(artifacts.flamegraph_path !== undefined ? { flamegraphPath: artifacts.flamegraph_path } : {}),
+    ...(artifacts.export_error !== undefined ? { exportError: artifacts.export_error } : {}),
     hotFunctions: report.hot_functions.map((fn) => ({
       name: fn.name,
       file: fn.file ?? "",
@@ -95,6 +95,7 @@ function snapshotFields(snapshot: HeapSnapshot, timeline: TimelinePoint[], heapP
     peakMemory: snapshot.peak_bytes,
     gcObjects: snapshot.object_count,
     gcCounts: snapshot.gc_generations,
+    generationSizes: snapshot.generation_sizes?.map((region) => ({ name: region.name, size: region.size_bytes })) ?? [],
     topAllocations: snapshot.sites.map(allocation),
     timeline: timeline.map((point) => ({
       timestamp: point.elapsed_secs,

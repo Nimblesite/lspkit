@@ -12,8 +12,8 @@ use async_trait::async_trait;
 use lsp_profiler::memory::{MemoryAction, MemoryError, MemoryPayload};
 use lsp_profiler::runtime::{MemoryBackend, MemoryContext, TypeQuery};
 use lsp_profiler::wire::{
-    AllocationSite, GcResult, HeapSnapshot, MemoryCapabilities, MemoryMode, ObjectList,
-    ObjectSample, RefEdge, RefGraph, RefNode, TypeStat,
+    AllocationSite, GcResult, GenerationSize, HeapSnapshot, MemoryCapabilities, MemoryMode,
+    ObjectList, ObjectSample, RefEdge, RefGraph, RefNode, TypeStat,
 };
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
@@ -99,7 +99,8 @@ impl DotNetMemory {
             current_bytes: live_bytes,
             peak_bytes: heap_bytes,
             object_count: live_objects,
-            gc_generations: generation_bytes,
+            gc_generations: vec![],
+            generation_sizes: Some(generation_sizes(generation_bytes)),
             sites: types.into_iter().map(site).collect(),
         })
     }
@@ -282,6 +283,17 @@ fn graph_args(command: &str, graph: &Path, type_name: &str, limits: &[(&str, u32
 }
 
 /// A type row as the neutral allocation site: the type's declaration stands in for an allocation line.
+fn generation_sizes(bytes: Vec<i64>) -> Vec<GenerationSize> {
+    ["Gen 0", "Gen 1", "Gen 2", "LOH", "POH"]
+        .into_iter()
+        .zip(bytes)
+        .map(|(name, size_bytes)| GenerationSize {
+            name: name.to_owned(),
+            size_bytes,
+        })
+        .collect()
+}
+
 fn site(row: TypeRow) -> AllocationSite {
     AllocationSite {
         file: row.file,

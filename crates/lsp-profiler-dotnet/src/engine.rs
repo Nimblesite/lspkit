@@ -165,13 +165,12 @@ impl RunningEngine {
         }
     }
 
-    /// Write one line to the engine's stdin (the CPU command's stop signal).
-    pub async fn send_line(&mut self, line: &str) {
-        if let Some(stdin) = self.stdin.as_mut() {
-            if let Err(error) = stdin.write_all(format!("{line}\n").as_bytes()).await {
-                warn!(%error, "cannot signal the .NET profiling engine");
-            }
-            let _ = stdin.flush().await;
+    /// Hand over the engine's stdin: the CPU command ends its recording on a
+    /// line there, so whoever decides when to stop owns it while this side
+    /// keeps reading what the engine streams.
+    pub fn stop_signal(&mut self) -> StopSignal {
+        StopSignal {
+            stdin: self.stdin.take(),
         }
     }
 
@@ -181,6 +180,25 @@ impl RunningEngine {
         if let Err(error) = self.child.wait().await {
             warn!(%error, "waiting for the .NET profiling engine failed");
         }
+    }
+}
+
+/// The CPU command's stop line, sent at most once.
+#[derive(Debug)]
+pub struct StopSignal {
+    stdin: Option<ChildStdin>,
+}
+
+impl StopSignal {
+    /// Tell the engine to end its recording; dropping the signal closes stdin.
+    pub async fn send(mut self) {
+        let Some(stdin) = self.stdin.as_mut() else {
+            return;
+        };
+        if let Err(error) = stdin.write_all(b"stop\n").await {
+            warn!(%error, "cannot signal the .NET profiling engine");
+        }
+        let _ = stdin.flush().await;
     }
 }
 

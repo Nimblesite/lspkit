@@ -690,7 +690,12 @@ The engine opens an EventPipe session with rundown and a 256 MB buffer. It enabl
 - `Microsoft-DotNETCore-SampleProfiler`, which samples every managed thread each millisecond;
 - `Microsoft-Windows-DotNETRuntime` at Informational with keywords `0x14C14FCCBD`: loader, JIT, IL-to-native maps and stacks.
 
-The trace is recorded to a temporary `.nettrace` that is deleted with its `.etlx` on every exit path. The crate's finish timeout covers symbolization.
+Recording runs in segments, each its own session recorded to a temporary `.nettrace` that is deleted with its `.etlx` on every exit path. The first segment lasts 500 ms and each next one doubles, up to 10 s. A segment ends with its rundown, so its frames can be named. The next segment starts before the last one is symbolized, so the gap between them is only the rundown. Ticks therefore stream a segment behind:
+
+- `cpu.snapshot` sees every finished segment;
+- a target that exits keeps every segment it finished. Its last segment never got a rundown, so its frames cannot be named and it is dropped.
+
+The backend still reports no `live_progress`. A line or EOF on stdin ends the recording. The crate's finish timeout covers symbolizing the last segment.
 
 ### [PROF-DOTNET-CPU-SYMBOLS] Symbolization
 

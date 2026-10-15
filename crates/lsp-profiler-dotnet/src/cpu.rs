@@ -1,9 +1,9 @@
 //! `EventPipe` CPU sampling through the engine. Implements [PROF-DOTNET-CPU].
 //!
-//! The engine records until it reads a line on stdin, then symbolizes the
-//! trace and streams ticks. Samples therefore arrive on stop, not live, so
-//! the backend reports no live progress; the session drains every tick once
-//! the handle's completion fires.
+//! The engine records in segments and streams each segment's ticks once it is
+//! symbolized, until it reads a line on stdin. Ticks therefore arrive a segment
+//! behind, not live: the backend reports no live progress, a snapshot sees
+//! every finished segment, and a target that exits keeps them.
 
 use std::time::Duration;
 
@@ -14,7 +14,7 @@ use lsp_profiler::wire::{AttachErrorKind, CpuCapabilities, StackFrame, ThreadSam
 use tokio::sync::oneshot;
 use tracing::{debug, error, info};
 
-use crate::engine::{Engine, EngineError, RunningEngine};
+use crate::engine::{Engine, EngineError, RunningEngine, StopSignal};
 use crate::protocol::{EngineMessage, ErrorKind, FrameRecord, TickRecord};
 use crate::RUNTIME_DISPLAY_NAME;
 
@@ -98,21 +98,35 @@ async fn await_attached(running: &mut RunningEngine, pid: u32) -> Result<String,
     }
 }
 
-/// Wait for the stop request (or duration), tell the engine, then forward every tick.
+/// Forward every tick the engine streams while it records; stop it when the
+/// session asks or the duration ends.
 async fn forward(
     mut running: RunningEngine,
     sink: SamplerSink,
     limit: Option<Duration>,
     done: oneshot::Sender<()>,
 ) {
+    let stopper = tokio::spawn(stop_when_asked(running.stop_signal(), sink.clone(), limit));
+    relay(&mut running, &sink).await;
+    stopper.abort();
+    running.finish().await;
+    let _ = done.send(());
+}
+
+/// Send the engine its stop line once the session asks or the duration ends.
+async fn stop_when_asked(signal: StopSignal, sink: SamplerSink, limit: Option<Duration>) {
     wait_for_stop(&sink, limit).await;
-    running.send_line("stop").await;
+    signal.send().await;
+}
+
+/// Hand every tick to the session until the engine has delivered the last one.
+async fn relay(running: &mut RunningEngine, sink: &SamplerSink) {
     let mut frames = FrameTable::default();
     loop {
         match running.next().await {
             Ok(Some(EngineMessage::Frames { items })) => frames.extend(items),
             Ok(Some(EngineMessage::Ticks { items })) => {
-                if !deliver(&sink, &frames, items).await {
+                if !deliver(sink, &frames, items).await {
                     break;
                 }
             }
@@ -132,8 +146,6 @@ async fn forward(
             }
         }
     }
-    running.finish().await;
-    let _ = done.send(());
 }
 
 async fn wait_for_stop(sink: &SamplerSink, limit: Option<Duration>) {

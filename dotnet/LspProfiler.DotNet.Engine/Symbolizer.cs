@@ -1,5 +1,6 @@
-// Turns a recorded .nettrace into symbolized sampling ticks.
-// Implements [PROF-DOTNET-CPU-SYMBOLS].
+// Turns each recorded segment's .nettrace into symbolized sampling ticks.
+// Implements [PROF-DOTNET-CPU-SYMBOLS]. Frame IDs and the tick count carry
+// across segments, so the language server sees one stream.
 //
 // Method names come from the JIT rundown; source lines come from the IL-to-
 // native maps and the portable PDBs that sit beside the application's
@@ -11,7 +12,7 @@ using Microsoft.Diagnostics.Tracing.Etlx;
 
 namespace LspProfiler.DotNet.Engine;
 
-internal static class Symbolizer
+internal sealed class Symbolizer(bool includeNative)
 {
     private const string SampleProvider = "Microsoft-DotNETCore-SampleProfiler";
     private const int TicksPerMessage = 256;
@@ -19,18 +20,24 @@ internal static class Symbolizer
     /// <summary>The sample-type payload value for a thread executing managed code.</summary>
     private const int ManagedSample = 2;
 
-    /// <summary>Symbolize <paramref name="trace"/> and emit its ticks; returns the tick count.</summary>
-    public static long Stream(string trace, bool includeNative)
+    private readonly FrameTable _frames = new(includeNative);
+
+    /// <summary>Ticks emitted over every segment so far.</summary>
+    public long TickCount { get; private set; }
+
+    /// <summary>Symbolize one segment's <paramref name="trace"/> and emit its ticks.</summary>
+    public void Stream(string trace)
     {
         var etlx = TraceLog.CreateFromEventPipeDataFile(trace, null, new TraceLogOptions { ContinueOnError = true });
         using var log = new TraceLog(etlx);
         using var reader = new SymbolReader(TextWriter.Null, SymbolPath(log)) { SecurityCheck = _ => true };
-        var output = new TickWriter(new FrameTable(reader, includeNative));
+        _frames.Begin(reader);
+        var output = new TickWriter(_frames);
         foreach (var sample in log.Events.Where(e => e.ProviderName == SampleProvider))
         {
             output.Add(sample);
         }
-        return output.Finish();
+        TickCount += output.Finish();
     }
 
     private static string SymbolPath(TraceLog log) =>
@@ -108,12 +115,23 @@ internal static class Symbolizer
     }
 }
 
-/// <summary>Deduplicates symbolized frames and remembers which are not yet sent.</summary>
-internal sealed class FrameTable(SymbolReader reader, bool includeNative)
+/// <summary>
+/// Deduplicates symbolized frames and remembers which are not yet sent. IDs are
+/// stable for the whole recording; code addresses only within one segment's log.
+/// </summary>
+internal sealed class FrameTable(bool includeNative)
 {
     private readonly Dictionary<CodeAddressIndex, int?> _byAddress = [];
     private readonly Dictionary<FrameRecord, int> _ids = [];
     private readonly List<FrameRecord> _fresh = [];
+    private SymbolReader? _reader;
+
+    /// <summary>Start resolving a new segment's addresses with <paramref name="reader"/>.</summary>
+    public void Begin(SymbolReader reader)
+    {
+        _reader = reader;
+        _byAddress.Clear();
+    }
 
     /// <summary>Frame IDs of <paramref name="stack"/>, leaf first.</summary>
     public List<int> Resolve(TraceCallStack? stack)
@@ -176,7 +194,7 @@ internal sealed class FrameTable(SymbolReader reader, bool includeNative)
     {
         try
         {
-            return address.GetSourceLine(reader);
+            return _reader is null ? null : address.GetSourceLine(_reader);
         }
         catch (Exception error) when (error is IOException or InvalidOperationException or BadImageFormatException)
         {

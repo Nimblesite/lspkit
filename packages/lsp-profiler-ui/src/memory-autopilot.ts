@@ -28,7 +28,7 @@ import type { ProfilerStore as Store } from "./store";
 import type { ProfilerActivity } from "./profiler-state";
 import { withUserProgress } from "./progress-ops";
 import { captureSnapshotAndDiff, isDirectMemorySession, isMemoryOperationInFlight } from "./memory-capture";
-import { onDebuggeePaused, onDebuggeeResumed } from "./debuggee-pause";
+import { isDebuggeePaused, onDebuggeePaused } from "./debuggee-pause";
 import {
   confidenceRank,
   type LeakConfidence,
@@ -111,7 +111,6 @@ export function registerMemoryAutopilot(store: Store): vscode.Disposable[] {
   const disposeEffect = effect(() => { autopilotLifecycle(store); });
   return [
     onDebuggeePaused((sessionId) => { notifyDebuggeePause(sessionId); }),
-    onDebuggeeResumed((sessionId) => { notifyDebuggeeResume(sessionId); }),
     { dispose: () => { disposeEffect(); disposeMemoryAutopilot(); } },
   ];
 }
@@ -136,24 +135,11 @@ export function disposeMemoryAutopilot(): void {
  * enabled. Fire-and-forget — never blocks the DAP tracker.
  */
 export function notifyDebuggeePause(sessionId: string): void {
-  // A direct runtime cannot read a heap the debugger holds paused; its pass is
-  // captured when the program continues instead (notifyDebuggeeResume).
+  // A direct runtime cannot read a heap the debugger holds paused, and a read
+  // started just after a Continue blocks at the next pause, so pause-driven
+  // capture is courier-only; a direct runtime is captured on the interval
+  // ([PROF-MEMORY-MODE]).
   if (isDirectMemorySession()) { return; }
-  capturePass(sessionId, "pause");
-}
-
-/**
- * Called when a paused debuggee runs again ([PROF-UI-AUTOPILOT]). For a direct
- * runtime this is where a pause-driven pass is captured: each Continue is one
- * snapshot and diff, taken while the program runs.
- */
-export function notifyDebuggeeResume(sessionId: string): void {
-  if (!isDirectMemorySession()) { return; }
-  capturePass(sessionId, "continue");
-}
-
-/** Capture one pass for `sessionId` when it is the tracked session and pause capture is on. */
-function capturePass(sessionId: string, moment: "pause" | "continue"): void {
   const store = boundStore;
   if (store === undefined) { return; }
   if (autopilotBusy || isMemoryOperationInFlight()) { return; }
@@ -163,7 +149,7 @@ function capturePass(sessionId: string, moment: "pause" | "continue"): void {
   // Set the synchronous guard NOW so a second `stopped` event in the same tick
   // (per-thread + allThreadsStopped) cannot start a duplicate capture.
   autopilotBusy = true;
-  Logger.info(`[Memory] autopilot: capturing on ${moment} (session ${sessionId})`);
+  Logger.info(`[Memory] autopilot: capturing on pause (session ${sessionId})`);
   void runAutoCapture(store, "pause");
 }
 
@@ -204,6 +190,8 @@ function stopInterval(): void {
 async function onIntervalTick(store: Store): Promise<void> {
   if (autopilotBusy || isMemoryOperationInFlight()) { return; }
   if (store.profiler.value.memory !== "active") { return; }
+  // A direct runtime's heap cannot be read while the debugger holds it paused.
+  if (isDirectMemorySession() && isDebuggeePaused(store.profiler.value.memoryDebugSessionId)) { return; }
   autopilotBusy = true;
   Logger.info("[Memory] autopilot: capturing on interval");
   await runAutoCapture(store, "interval");

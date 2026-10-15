@@ -212,9 +212,11 @@ async function startProfilerOnLaunch(store: Store, debugSessionId: string): Prom
       // so wait for it before attaching (avoids a "not ready yet" race).
       report("Waiting for the program to start…");
       const ready = await waitForDebuggeePid(store, debugSessionId);
-      if (ready && store.profiler.value.cpu === "starting") {
+      const pid = store.getDebuggeeProcessId(debugSessionId);
+      const client = store.client.value;
+      if (ready && pid !== undefined && client?.isRunning() === true && store.profiler.value.cpu === "starting") {
         report("Attaching the sampler…");
-        await handleProfileAttachToDebug(store);
+        await attachToDebuggee(store, client, pid);
       }
     });
   } finally {
@@ -491,6 +493,15 @@ async function handleProfileAttachToDebug(store: Store): Promise<void> {
     return;
   }
 
+  await attachToDebuggee(store, client, pid);
+}
+
+/**
+ * Start a CPU session on the debuggee `pid` and adopt it. The caller has
+ * checked the client and owns the CPU leg: the command path checked that it is
+ * free, and profile-on-launch already marked it starting.
+ */
+async function attachToDebuggee(store: Store, client: NonNullable<Store["client"]["value"]>, pid: number): Promise<void> {
   const cfg = vscode.workspace.getConfiguration(configSection());
   const sampleRate = cfg.get<number>("profiler.sampleRate", DEFAULT_SAMPLE_RATE);
   const includeNative = cfg.get<boolean>("profiler.includeNative", false);

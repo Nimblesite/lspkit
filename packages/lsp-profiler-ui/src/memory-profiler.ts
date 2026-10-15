@@ -365,9 +365,9 @@ async function handleMemoryStart(
     return true;
   } catch (err) {
     store.memoryTrackingStopped();
-    void vscode.window.showErrorMessage(
-      `Memory tracking failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    Logger.warn(`Memory tracking failed for PID ${target}: ${message}`);
+    void vscode.window.showErrorMessage(`Memory tracking failed: ${message}`);
     return false;
   }
 }

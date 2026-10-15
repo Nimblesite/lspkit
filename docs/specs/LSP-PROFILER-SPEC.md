@@ -598,7 +598,7 @@ The type picker offers the server's ranked type names (the latest snapshot's top
 
 ### [PROF-UI-AUTOPILOT] Autopilot
 
-Autopilot runs interval capture (default 30 s) in either mode. With `autoSnapshotOnPause` it also captures each pause-driven pass: in courier mode at the pause, and in direct mode when the paused program continues ([PROF-MEMORY-MODE]). The UI reads pauses and resumptions off the host debug adapter's own messages. It reuses snapshot-then-compare and updates the open views in place. The first high-confidence leak in a session offers the retention graph once.
+Autopilot runs interval capture (default 30 s) in either mode. With `autoSnapshotOnPause`, a courier runtime is also captured at each genuine debug pause. A direct runtime is never captured around a pause: its heap cannot be read while paused, and a read begun just after a Continue blocks at the next pause, so it is captured on the interval only, and a tick is skipped while the debugger holds the program paused ([PROF-MEMORY-MODE]). The UI reads pauses and resumptions off the host debug adapter's own messages. It reuses snapshot-then-compare and updates the open views in place. The first high-confidence leak in a session offers the retention graph once.
 
 ### [PROF-UI-WEBVIEW] Webview host
 

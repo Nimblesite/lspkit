@@ -4,6 +4,7 @@ import { signal, type ReadonlySignal, type Signal } from "@preact/signals-core";
 import type { LaunchMetric, ProfilerHost } from "../../host";
 import { nullSink } from "../../logger";
 import type { ProcessInfo } from "../../process-explorer-rows";
+import type { ProfilerStore } from "../../store";
 import type { ProcessInfo as WireProcess } from "../../wire-generated";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -73,6 +74,16 @@ export function toWireProcess(process: ProcessInfo): WireProcess {
     attachable: process.debuggable,
     ...(process.undebuggableReason === null ? {} : { unattachable_reason: process.undebuggableReason }),
   };
+}
+
+/**
+ * Turn the Processes panel's grouping off. It opens grouped by runtime version
+ * ([PROF-UI-PROCESSES]); tests of row order, filtering and row shape read a flat list.
+ */
+export function ungroup(store: ProfilerStore): void {
+  while (store.processes.value.groupMode !== "none") {
+    store.cycleProcessGroup();
+  }
 }
 
 /** Steer the mock server. */

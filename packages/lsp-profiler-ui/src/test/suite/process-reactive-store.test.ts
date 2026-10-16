@@ -17,7 +17,7 @@ import { ProcessesProvider, type ProcessInfo } from "../../process-explorer";
 import { bindProcessPolling, fetchProcessesIntoStore } from "../../process-poll";
 import { subscribeRevision } from "../../reactive-refresh";
 import { createProfilerStore, type ProfilerStore as Store } from "../../store";
-import { seedSignal, fakeHost, toWireProcess } from "./test-helpers";
+import { seedSignal, fakeHost, toWireProcess, ungroup } from "./test-helpers";
 import { numberField, rawField } from "../../unknown-shape";
 
 const MB = 1024 * 1024;
@@ -49,8 +49,9 @@ function storeServing(processes: readonly ProcessInfo[]): Store {
   return store;
 }
 
-/** A provider wired to the store exactly as registerPythonProcesses wires it. */
+/** A flat provider wired to the store exactly as registerPythonProcesses wires it. */
 function subscribedProvider(store: Store): ProcessesProvider {
+  ungroup(store);
   const provider = new ProcessesProvider(store);
   subscribeRevision(store.processesRevision, provider);
   return provider;

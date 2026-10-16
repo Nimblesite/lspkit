@@ -551,6 +551,8 @@ The processes view shows:
 - for an unattachable process, its reason;
 - the active session's marker.
 
+Rows open grouped by runtime version. The group action cycles runtime version → executable → user → parent process → none, then back to runtime version.
+
 Polling is visibility-scoped. Actions resolve an explicit item, then the current selection, and never guess a PID. Kill shows a modal naming the process and PID first.
 
 ### [PROF-UI-CPU] CPU results

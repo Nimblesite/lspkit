@@ -10,7 +10,8 @@ const OPENERS = ["type ", "union "];
 
 /** Strip a trailing `{` and surrounding whitespace from a declaration head. */
 function headName(text) {
-  return text.replace("{", "").trim();
+  const head = text.trim();
+  return (head.endsWith("{") ? head.slice(0, -1) : head).trim();
 }
 
 /** Classify one trimmed .td line. */

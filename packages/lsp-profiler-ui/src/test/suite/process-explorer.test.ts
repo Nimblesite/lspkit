@@ -12,7 +12,7 @@ import { type LanguageClient } from "vscode-languageclient/node";
 import { ProcessDecorationProvider, ProcessesProvider, type ProcessInfo } from "../../process-explorer";
 import { createProcessRowActions, memoryTrackRoute } from "../../process-launch";
 import { createProfilerStore, type ProfilerStore as Store } from "../../store";
-import { seedSignal, fakeHost, toWireProcess } from "./test-helpers";
+import { seedSignal, fakeHost, toWireProcess, ungroup } from "./test-helpers";
 import { numberField, rawField, recordArrayField } from "../../unknown-shape";
 
 const MB = 1024 * 1024;
@@ -74,11 +74,12 @@ function storeWith(processes: readonly ProcessInfo[], requests?: RecordedRequest
 
 
 /**
- * Build a provider over `store` and pull the process table into the store
+ * Build a flat provider over `store` and pull the process table into the store
  * through the real store-side fetch path — getChildren() is a pure projection
  * of centralised state and never fetches on its own (#148).
  */
 async function loadedProvider(store: Store): Promise<ProcessesProvider> {
+  ungroup(store);
   const provider = new ProcessesProvider(store);
   await provider.refreshNow();
   return provider;
@@ -162,6 +163,30 @@ suite("Processes Panel", () => {
     provider = await loadedProvider(storeWith(STUB_PROCESSES));
     const rows = processRows(await provider.getChildren());
     assert.deepStrictEqual(rows.map(pidOf), [200, 100, 300], "CPU 42 > 5 > 1");
+  });
+
+  test("opens grouped by runtime version; the group action cycles through flat and back", async () => {
+    const store = storeWith(STUB_PROCESSES);
+    provider = new ProcessesProvider(store);
+    await provider.refreshNow();
+    assert.strictEqual(store.processes.value.groupMode, "version", "the default grouping is the runtime version");
+    const groups = processRows(await provider.getChildren());
+    assert.deepStrictEqual(groups.map(labelText), ["3.11.7", "3.12.1"], "one header per version, sorted");
+    assert.deepStrictEqual(groups.map((group) => String(group.description)), ["1", "2"], "each header counts its members");
+    const twelve = groups.find((group) => labelText(group) === "3.12.1");
+    assert.ok(twelve, "3.12.1 group must exist");
+    assert.deepStrictEqual((await provider.getChildren(twelve)).map(pidOf), [100, 300], "members stay CPU-ordered");
+
+    const modes = [1, 2, 3, 4].map(() => {
+      provider.cycleGroupMode();
+      return store.processes.value.groupMode;
+    });
+    assert.deepStrictEqual(modes, ["interpreter", "user", "parent", "none"], "every grouping, then flat");
+    assert.deepStrictEqual(processRows(await provider.getChildren()).map(pidOf), [200, 100, 300], "flat rows, CPU-ordered");
+
+    provider.cycleGroupMode();
+    assert.strictEqual(store.processes.value.groupMode, "version", "one more press returns to the default");
+    assert.deepStrictEqual(processRows(await provider.getChildren()).map(labelText), ["3.11.7", "3.12.1"], "regrouped");
   });
 
   test("each row carries its PID so inline Profile starts with no input box", async () => {

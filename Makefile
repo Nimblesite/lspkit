@@ -44,6 +44,7 @@ test:
 	$(MAKE) _profiler_dotnet
 	cargo llvm-cov nextest --workspace --all-targets --locked --lcov --output-path lcov.info
 	$(MAKE) _coverage_check
+	$(MAKE) _typediagram_test
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
@@ -103,6 +104,10 @@ _profiler_dotnet:
 ## it on every build; rustfmt needs it before anything has been built.
 _profiler_codegen:
 	node scripts/typediagram/generate.mjs
+
+## The wire-model generator end to end, and the CLI capture it relies on ([PROF-WIRE-GEN]).
+_typediagram_test:
+	node --test scripts/typediagram/generate.test.mjs scripts/typediagram/run-cli.test.mjs
 
 ## Every [PROF-*] citation in the profiler resolves to one spec heading.
 _profiler_spec_check:

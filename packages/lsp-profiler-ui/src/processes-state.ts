@@ -56,12 +56,15 @@ export interface ProcessPanelState {
   readonly revision: number;
 }
 
-/** The initial state: nothing fetched yet, so the welcome honestly says "loading". */
+/**
+ * The initial state: nothing fetched yet, so the welcome honestly says "loading".
+ * Rows open grouped by runtime version ([PROF-UI-PROCESSES]).
+ */
 export const IDLE_PROCESS_PANEL: ProcessPanelState = {
   list: [],
   fetch: "loading",
   sortMode: "cpu",
-  groupMode: "none",
+  groupMode: "version",
   filterText: "",
   activeDebuggeePid: undefined,
   revision: 0,

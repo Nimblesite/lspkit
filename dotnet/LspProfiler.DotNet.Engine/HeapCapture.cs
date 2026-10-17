@@ -74,7 +74,11 @@ internal sealed class HeapEvents
         new ClrRundownTraceEventParser(source).LoaderModuleDCStop += OnModule;
     }
 
-    public HeapGraphFile Assemble(IReadOnlyList<long> generations) => new GraphAssembler(this).Build(generations);
+    public HeapGraphFile Assemble(IReadOnlyList<long> generations)
+    {
+        using var names = new NestedTypeNames();
+        return new GraphAssembler(this, names).Build(generations);
+    }
 
     private void OnTypes(GCBulkTypeTraceData data)
     {
@@ -82,7 +86,7 @@ internal sealed class HeapEvents
         {
             var value = data.Values(i);
             var parameters = Enumerable.Range(0, value.TypeParameterCount).Select(value.TypeParameterID).ToList();
-            _types[value.TypeID] = new TypeRecord(value.TypeName, value.ModuleID, value.CorElementType, parameters);
+            _types[value.TypeID] = new TypeRecord(value.TypeName, value.ModuleID, value.CorElementType, parameters, value.TypeNameID);
         }
     }
 
@@ -130,14 +134,15 @@ internal sealed class HeapEvents
         }
     }
 
-    private sealed record TypeRecord(string Name, ulong ModuleId, byte ElementType, IReadOnlyList<ulong> Parameters);
+    /// <summary>A runtime type; `Token` is its metadata token in its module.</summary>
+    private sealed record TypeRecord(string Name, ulong ModuleId, byte ElementType, IReadOnlyList<ulong> Parameters, int Token);
 
     private readonly record struct NodeRecord(ulong Address, ulong Size, ulong TypeId, long EdgeCount);
 
     private readonly record struct RootRecord(ulong Object, ulong RootId, string Kind);
 
     /// <summary>Turns the accumulated records into the indexed graph.</summary>
-    private sealed class GraphAssembler(HeapEvents events)
+    private sealed class GraphAssembler(HeapEvents events, NestedTypeNames names)
     {
         private const byte ArrayElementType = 0x1D;
         private readonly Dictionary<ulong, int> _typeIds = [];
@@ -202,7 +207,15 @@ internal sealed class HeapEvents
 
         /// <summary>The runtime reports a static root's field name and the value's type, not its declaring type.</summary>
         private string RootLabel(RootRecord root) =>
-            events._statics.TryGetValue(root.RootId, out var field) ? $"static {field.Field}" : root.Kind;
+            events._statics.TryGetValue(root.RootId, out var field) ? $"static {SourceName(field.Field)}" : root.Kind;
+
+        /// <summary>The field's name in source: F# keeps a module value `name` in a `name@line` field.</summary>
+        private static string SourceName(string field)
+        {
+            var at = field.LastIndexOf('@');
+            var line = at > 0 ? field.AsSpan(at + 1) : [];
+            return !line.IsEmpty && !line.ContainsAnyExceptInRange('0', '9') ? field[..at] : field;
+        }
 
         private int TypeId(ulong runtimeId)
         {
@@ -230,8 +243,9 @@ internal sealed class HeapEvents
             {
                 return $"{parameters[0]}[]";
             }
-            var alreadyClosed = type.Name.Contains('[', StringComparison.Ordinal);
-            return parameters.Count == 0 || alreadyClosed ? type.Name : $"{type.Name}[{string.Join(",", parameters)}]";
+            var name = names.Qualify(type.Name, ModuleOf(runtimeId), type.Token);
+            var alreadyClosed = name.Contains('[', StringComparison.Ordinal);
+            return parameters.Count == 0 || alreadyClosed ? name : $"{name}[{string.Join(",", parameters)}]";
         }
     }
 }

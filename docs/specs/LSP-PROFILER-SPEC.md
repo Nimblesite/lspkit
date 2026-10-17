@@ -629,7 +629,7 @@ Runtime ID `dotnet`, display name ".NET". The `lsp-profiler-dotnet` crate drives
 | CPU `native_frames` | true, on request |
 | CPU `cooperative` | false |
 | Memory `mode` | Direct |
-| Memory `allocation_sites` | false: memory is attributed to types, anchored at the type's declaration ([PROF-DOTNET-SOURCE]) |
+| Memory `allocation_sites` | false: memory is attributed to types, anchored at the type's declaration, or where the code constructs it ([PROF-DOTNET-SOURCE]) |
 | Memory `references`, `objects_by_type`, `gc_collect` | true |
 
 ### [PROF-DOTNET-PROCESSES] Classification
@@ -721,7 +721,7 @@ A snapshot is an EventPipe session on `Microsoft-Windows-DotNETRuntime` at Verbo
 
 ### [PROF-DOTNET-HEAP-GRAPH] Heap graph
 
-The captured graph is one JSON file of parallel arrays: types (`name`, `module`), node addresses, sizes and type indices, edge starts/counts and targets, roots (`node`, `kind`, `label`) and generation bytes. Generic names are closed over their arguments (`List`1[App.Payload]`), arrays as `Element[]`. A static root is labelled `static <field>`: the runtime reports a static root's field name and the value's type, not its declaring type. The file is the snapshot artifact a memory session keeps between steps, so `refs` and `objects` re-open it instead of touching the target again.
+The captured graph is one JSON file of parallel arrays: types (`name`, `module`), node addresses, sizes and type indices, edge starts/counts and targets, roots (`node`, `kind`, `label`) and generation bytes. Generic names are closed over their arguments (`List`1[App.Payload]`), arrays as `Element[]`. A nested type is named with its declaring chain (`App.Shape+Circle`). The runtime reports only its simple name (`Circle`), so the engine reads the chain from the module's metadata through the type's token. Every F# union case with fields is a nested type, so without this a union case would appear as a bare word with no location. A static root is labelled `static <field>`: the runtime reports a static root's field name and the value's type, not its declaring type. An F# module value `name` lives in a field named `name@<line>`; the label drops the `@<line>` suffix, so it reads `static name`, as in source. The file is the snapshot artifact a memory session keeps between steps, so `refs` and `objects` re-open it instead of touching the target again.
 
 ### [PROF-DOTNET-HEAP-MARK] Live heap
 
@@ -729,7 +729,14 @@ The runtime only reports objects that survived the snapshot's collection, but th
 
 ### [PROF-DOTNET-SOURCE] Type locations
 
-A type's location is the lowest non-hidden sequence point among its methods, read from the assembly's portable PDB. Memory findings about a type anchor there. Types without a PDB, such as the framework's, have no location and appear by name only.
+A type's location is the lowest non-hidden sequence point among its methods, read from the assembly's portable PDB. Memory findings about a type anchor there.
+
+Every member F# generates for a record, a union or a union case has only hidden sequence points, so those types have no such point. They anchor instead at the lowest point, in the assembly's own code, where they are constructed:
+
+- a `newobj` of one of the type's constructors (records, closures, anonymous records), including a generic type's constructor reached through a member reference;
+- a call to the static `New<Case>` factory F# emits on a union. It constructs the nested `Case` class, or the union itself for a single-case union.
+
+Only methods with visible sequence points are searched, so the generated factories themselves never count. Types without a PDB, such as the framework's, have no location and appear by name only.
 
 ### [PROF-DOTNET-MEMORY] Memory steps
 
@@ -806,9 +813,9 @@ The server binds the socket before spawning the helper and accepts one stream. I
 
 ## [PROF-TESTING] Testing
 
-- Every backend is tested against a real target process the library owns. Consumer fixtures are never copied in. For .NET the target is `dotnet/fixtures/HotLeakApp`: a hot loop in `Hot.Spin`, and a leak of `LeakedPayload` held by the static `LeakCache.Items`. The tests assert:
-  - CPU: a hot line inside `Hot.Spin` at its `Program.cs` line;
-  - memory: `LeakedPayload` grows across snapshots, reaches Medium then High confidence, and has a retention path ending at root `LeakCache.Items`.
+- Every backend is tested against a real target process the library owns. Consumer fixtures are never copied in. For .NET the targets are `dotnet/fixtures/HotLeakApp` (C#) and its F# twin `dotnet/fixtures/HotLeakAppFs`: a hot loop in `Hot.Spin` (`Hot.spin`), and a leak of `LeakedPayload` held by the static `LeakCache.Items` (the module value `LeakCache.items`). The F# payload is a record holding a union case and a generic record, which are IL shapes C# never emits. The tests assert:
+  - CPU: a hot line inside `Hot.Spin` at its `Program.cs` line, and inside `Hot.spin` at its `Program.fs` line;
+  - memory: `LeakedPayload` grows across snapshots, reaches Medium then High confidence, and has a retention path ending at root `LeakCache.Items`. In F#, the record, the union case `PayloadKind+Small` and the generic record `Tagged`1[System.Int32]` each anchor at the exact `Program.fs` line that constructs them, and the leak's root is `static items`, with no `@<line>` suffix.
 - Every test asserts a specific outcome. A call that only proves something returned is not a test.
 - The UI library is tested inside VS Code against a mock language server that speaks the wire (`packages/lsp-profiler-ui/src/test/host`): command registration and advertisement, manifest contributions, settings, reactive state and gating, the processes panel, webview CSP and theming, decorations. Server-backed flows (CPU attach to a live process, heap snapshot and diff, retention graph, induced collection, autopilot) are tested in each host's extension suite against that host's real targets; SharpLsp's are `profiler-cpu-e2e.test.ts` and `memory-e2e.test.ts` against `ProfileTarget` and `ProfileLeakTarget`.
 - [PROF-LSP] conformance is tested at the host boundary:

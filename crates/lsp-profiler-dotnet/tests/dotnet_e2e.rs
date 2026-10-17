@@ -16,119 +16,23 @@
     missing_docs
 )]
 
-use std::io::{BufRead, BufReader, Write};
+mod support;
+
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
 use lsp_profiler::wire::methods;
-use lsp_profiler::{ProfilerConfig, ProfilerEvents, ProfilerService};
-use lsp_profiler_dotnet::{DotNetConfig, DotNetRuntime};
+use lsp_profiler::ProfilerService;
 use serde_json::{json, Value};
+use support::{call, completed, service, Fixture};
 
+const FIXTURE: &str = "HotLeakApp";
 const FIXTURE_TYPE: &str = "HotLeakApp.LeakedPayload";
 const HOT_FUNCTION: &str = "HotLeakApp.Hot.Spin";
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn built(relative: &str, hint: &str) -> PathBuf {
-    let path = repo_root().join(relative);
-    assert!(
-        path.is_file(),
-        "{} is missing: run `{hint}` first",
-        path.display()
-    );
-    path
-}
-
-/// The fixture app, killed on drop.
-struct Fixture {
-    child: Child,
-    pid: u32,
-}
-
-impl Fixture {
-    fn start() -> Self {
-        let exe = built(
-            "dotnet/fixtures/HotLeakApp/bin/Release/net8.0/HotLeakApp",
-            "make dotnet",
-        );
-        let mut child = Command::new("./HotLeakApp")
-            .current_dir(exe.parent().expect("fixture directory"))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn HotLeakApp");
-        let stdout = child.stdout.take().expect("fixture stdout");
-        let mut line = String::new();
-        let _ = BufReader::new(stdout)
-            .read_line(&mut line)
-            .expect("READY line");
-        let pid: u32 = line
-            .trim()
-            .strip_prefix("READY ")
-            .expect("READY <pid>")
-            .parse()
-            .expect("pid");
-        Self { child, pid }
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        if let Some(mut stdin) = self.child.stdin.take() {
-            let _ = stdin.write_all(b"\n");
-        }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-#[derive(Debug, Default)]
-struct Silent;
-
-#[async_trait]
-impl ProfilerEvents for Silent {
-    async fn notify(&self, _method: &'static str, _params: Value) {}
-}
-
-fn service(output_dir: PathBuf) -> ProfilerService {
-    let engine = built(
-        "dotnet/LspProfiler.DotNet.Engine/bin/Release/net8.0/lsp-profiler-dotnet-engine",
-        "make dotnet",
-    );
-    let runtime = DotNetRuntime::new(DotNetConfig {
-        engine: Some(engine),
-        output_dir: output_dir.clone(),
-    });
-    let config = ProfilerConfig {
-        output_dir,
-        ..ProfilerConfig::default()
-    };
-    ProfilerService::new(vec![Arc::new(runtime)], config, Arc::new(Silent))
-}
-
-async fn call(service: &ProfilerService, method: &str, params: Value) -> Value {
-    service
-        .handle(method, params)
-        .await
-        .unwrap_or_else(|error| panic!("{method} failed: {error}"))
-}
-
-fn completed(step: &Value) -> &Value {
-    step.get("result")
-        .or_else(|| step.pointer("/step/result"))
-        .unwrap_or_else(|| panic!("direct backend must complete every step: {step}"))
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn the_fixture_is_recognised_as_an_attachable_dotnet_process() {
-    let fixture = Fixture::start();
+    let fixture = Fixture::start(FIXTURE);
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let list = call(
@@ -157,7 +61,7 @@ async fn the_fixture_is_recognised_as_an_attachable_dotnet_process() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn cpu_profiling_finds_the_hot_function_and_its_lines() {
-    let fixture = Fixture::start();
+    let fixture = Fixture::start(FIXTURE);
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
@@ -211,7 +115,7 @@ async fn cpu_profiling_finds_the_hot_function_and_its_lines() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn memory_profiling_sees_the_leak_its_root_and_the_collection() {
-    let fixture = Fixture::start();
+    let fixture = Fixture::start(FIXTURE);
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let started = call(
@@ -358,7 +262,7 @@ async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() 
 /// recorded trace is still symbolized and reported on stop ([PROF-CPU-STOP]).
 #[tokio::test(flavor = "multi_thread")]
 async fn a_target_that_exits_mid_session_keeps_its_samples() {
-    let mut fixture = Fixture::start();
+    let mut fixture = Fixture::start(FIXTURE);
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
@@ -383,7 +287,7 @@ async fn a_target_that_exits_mid_session_keeps_its_samples() {
 /// never an empty string ([PROF-CPU-START]).
 #[tokio::test(flavor = "multi_thread")]
 async fn cpu_start_reports_the_runtime_version_the_listing_knows() {
-    let fixture = Fixture::start();
+    let fixture = Fixture::start(FIXTURE);
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let list = call(
@@ -413,7 +317,7 @@ async fn cpu_start_reports_the_runtime_version_the_listing_knows() {
 /// requested time, not the wait until `stop` ([PROF-CPU-SESSIONS]).
 #[tokio::test(flavor = "multi_thread")]
 async fn a_duration_caps_the_recorded_time() {
-    let fixture = Fixture::start();
+    let fixture = Fixture::start(FIXTURE);
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let started = call(
@@ -446,7 +350,7 @@ async fn a_duration_caps_the_recorded_time() {
 /// mid-session snapshot has nothing to report: this test pins that defect.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_mid_session_snapshot_reports_the_samples_so_far() {
-    let fixture = Fixture::start();
+    let fixture = Fixture::start(FIXTURE);
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;

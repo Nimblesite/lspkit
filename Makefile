@@ -99,6 +99,7 @@ help:
 _profiler_dotnet:
 	dotnet build -c Release dotnet/LspProfiler.DotNet.Engine
 	dotnet build -c Release dotnet/fixtures/HotLeakApp
+	dotnet build -c Release dotnet/fixtures/HotLeakAppFs
 
 ## The profiler's gitignored wire model ([PROF-WIRE-GEN]). build.rs regenerates
 ## it on every build; rustfmt needs it before anything has been built.

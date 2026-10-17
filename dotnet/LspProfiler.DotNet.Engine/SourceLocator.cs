@@ -2,8 +2,10 @@
 //
 // A heap knows types, not lines. The first sequence point among a type's
 // methods sits at its first member, which is where an editor should anchor a
-// memory finding about the type. Types from assemblies without a PDB (the
-// framework) have no location and are reported by name alone.
+// memory finding about the type. A type with no visible point of its own, such
+// as an F# record or union, anchors where the assembly's code constructs it
+// (ConstructionSites). Types from assemblies without a PDB (the framework) have
+// no location and are reported by name alone.
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -49,6 +51,7 @@ internal sealed class SourceLocator : IDisposable
     {
         private readonly MetadataReader _metadata = pe.GetMetadataReader();
         private readonly MetadataReader _pdb = pdbProvider.GetMetadataReader();
+        private Dictionary<TypeDefinitionHandle, (string File, int Line)>? _constructed;
 
         public static ModuleSymbols? Open(string assembly)
         {
@@ -68,26 +71,30 @@ internal sealed class SourceLocator : IDisposable
             return null;
         }
 
-        public (string File, int Line)? Locate(IReadOnlyList<string> nesting)
-        {
-            var definition = Find(nesting);
-            if (definition is null)
-            {
-                return null;
-            }
-            var points = _metadata.GetTypeDefinition(definition.Value).GetMethods()
-                .SelectMany(SequencePoints)
-                .Where(point => !point.IsHidden)
-                .OrderBy(point => point.StartLine)
-                .Take(1)
-                .ToList();
-            return points.Count == 0 ? null : (_pdb.GetString(_pdb.GetDocument(points[0].Document).Name), points[0].StartLine);
-        }
+        public (string File, int Line)? Locate(IReadOnlyList<string> nesting) =>
+            Find(nesting) is { } definition ? Declared(definition) ?? Constructed(definition) : null;
 
         public void Dispose()
         {
             pdbProvider.Dispose();
             pe.Dispose();
+        }
+
+        private (string File, int Line)? Declared(TypeDefinitionHandle definition)
+        {
+            var points = _metadata.GetTypeDefinition(definition).GetMethods()
+                .SelectMany(SequencePoints)
+                .Where(point => !point.IsHidden)
+                .OrderBy(point => point.StartLine)
+                .Take(1)
+                .ToList();
+            return points.Count == 0 ? null : ConstructionSites.Location(_pdb, points[0]);
+        }
+
+        private (string File, int Line)? Constructed(TypeDefinitionHandle definition)
+        {
+            _constructed ??= ConstructionSites.Index(pe, _metadata, _pdb);
+            return _constructed.TryGetValue(definition, out var site) ? site : null;
         }
 
         private TypeDefinitionHandle? Find(IReadOnlyList<string> nesting)

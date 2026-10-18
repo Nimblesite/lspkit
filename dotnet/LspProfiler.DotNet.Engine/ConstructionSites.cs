@@ -21,23 +21,20 @@ internal static class ConstructionSites
         .DistinctBy(code => code.Value)
         .ToDictionary(code => (ILOpCode)(ushort)code.Value, code => code.OperandType);
 
-    /// <summary>Each constructed type's lowest construction site, over every method body.</summary>
-    public static Dictionary<TypeDefinitionHandle, (string File, int Line)> Index(PEReader pe, MetadataReader metadata, MetadataReader pdb)
+    /// <summary>Each constructed type's lowest construction site that `locate` places, over every method body.</summary>
+    public static Dictionary<TypeDefinitionHandle, (string File, int Line)> Index(
+        PEReader pe, MetadataReader metadata, MetadataReader pdb, Func<SequencePoint, (string File, int Line)?> locate)
     {
         var sites = new Dictionary<TypeDefinitionHandle, (string File, int Line)>();
         foreach (var (type, point) in metadata.MethodDefinitions.SelectMany(method => InMethod(pe, metadata, pdb, method)))
         {
-            if (!sites.TryGetValue(type, out var known) || point.StartLine < known.Line)
+            if (locate(point) is { } site && (!sites.TryGetValue(type, out var known) || site.Line < known.Line))
             {
-                sites[type] = Location(pdb, point);
+                sites[type] = site;
             }
         }
         return sites;
     }
-
-    /// <summary>A sequence point's document and line.</summary>
-    public static (string File, int Line) Location(MetadataReader pdb, SequencePoint point) =>
-        (pdb.GetString(pdb.GetDocument(point.Document).Name), point.StartLine);
 
     private static List<(TypeDefinitionHandle Type, SequencePoint Point)> InMethod(PEReader pe, MetadataReader metadata, MetadataReader pdb, MethodDefinitionHandle method)
     {

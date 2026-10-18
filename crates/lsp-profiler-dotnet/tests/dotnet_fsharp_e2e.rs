@@ -38,6 +38,8 @@ const RECORD_CONSTRUCTED_AT: i64 = 23;
 const UNION_CASE_CONSTRUCTED_AT: i64 = 21;
 /// `let order = { Value = items.Count; Tag = "order" }` in `LeakCache.grow`.
 const GENERIC_RECORD_CONSTRUCTED_AT: i64 = 22;
+/// Types FSharp.Core defines, such as the printf machinery `$"..."` builds.
+const FSHARP_CORE_NAMESPACE: &str = "Microsoft.FSharp.";
 
 fn in_program_fs(value: &Value) -> bool {
     value["file"]
@@ -143,6 +145,57 @@ async fn fsharp_records_and_union_cases_anchor_where_the_program_constructs_them
         grown["line"], RECORD_CONSTRUCTED_AT,
         "growth anchors in source: {grown}"
     );
+    let _ = call(&service, methods::MEMORY_STOP, session).await;
+    service.shutdown().await;
+}
+
+/// [PROF-DOTNET-SOURCE]: FSharp.Core embeds a PDB whose documents name the
+/// build server's checkout. A location no editor on this machine can open is
+/// no location: the type is reported by name alone, and the program's own
+/// types keep their anchors.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pdb_naming_a_build_servers_paths_locates_nothing() {
+    let mut fixture = Fixture::start(FIXTURE);
+    // Orders hold an F# list, quotes a Set: FSharp.Core objects the program retains.
+    let grown = fixture.send("grow 40");
+    assert!(grown.starts_with("OK 40 orders=40"), "{grown}");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let service = service(dir.path().to_path_buf());
+    let started = call(
+        &service,
+        methods::MEMORY_START,
+        json!({ "pid": fixture.pid }),
+    )
+    .await;
+    let session = json!({ "memory_session_id": started["memory_session_id"] });
+    let step = call(&service, methods::MEMORY_SNAPSHOT, session.clone()).await;
+    let snapshot = &completed(&step)["outcome"]["snapshot"];
+    let sites = snapshot["sites"].as_array().expect("sites");
+
+    let library: Vec<&Value> = sites
+        .iter()
+        .filter(|s| {
+            s["type_name"]
+                .as_str()
+                .is_some_and(|n| n.starts_with(FSHARP_CORE_NAMESPACE))
+        })
+        .collect();
+    assert!(
+        !library.is_empty(),
+        "the program holds FSharp.Core objects: {snapshot}"
+    );
+    for site in &library {
+        assert!(site["file"].is_null(), "no build-server anchor: {site}");
+        assert!(site["line"].is_null(), "no line without a file: {site}");
+    }
+    for site in sites.iter().filter(|s| !s["file"].is_null()) {
+        let file = site["file"].as_str().expect("file is a string");
+        assert!(
+            std::path::Path::new(file).exists(),
+            "every anchor exists here: {site}"
+        );
+    }
+    assert_eq!(site(snapshot, RECORD_TYPE)["line"], RECORD_CONSTRUCTED_AT);
     let _ = call(&service, methods::MEMORY_STOP, session).await;
     service.shutdown().await;
 }

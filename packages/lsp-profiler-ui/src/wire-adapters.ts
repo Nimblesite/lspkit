@@ -85,7 +85,9 @@ export function toUiProcess(process: WireProcess): ProcessInfo {
 }
 
 function allocation(site: { file?: string | null; line?: number | null; size_bytes: number; count: number; type_name?: string | null }): Record<string, unknown> {
-  return { file: site.file ?? "", line: site.line ?? 0, size: site.size_bytes, count: site.count, typeName: site.type_name ?? "" };
+  // [PROF-WIRE]: a site with no location carries neither field, never `""` and line 0.
+  const located = site.file != null && site.line != null ? { file: site.file, line: site.line } : {};
+  return { ...located, size: site.size_bytes, count: site.count, typeName: site.type_name ?? "" };
 }
 
 function snapshotFields(snapshot: HeapSnapshot, timeline: TimelinePoint[], heapProfilePath: string | null | undefined): Record<string, unknown> {

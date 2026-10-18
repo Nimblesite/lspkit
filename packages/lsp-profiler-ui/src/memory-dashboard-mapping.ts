@@ -48,15 +48,21 @@ function toLeakConfidence(value: string): LeakConfidence {
   return LEAK_CONFIDENCES.find((grade) => grade === upper) ?? "LOW";
 }
 
-/** Read one allocation entry, defaulting every absent field. */
+/** Read one allocation entry, defaulting its counts; an absent location stays absent. */
 function toAllocation(raw: Record<string, unknown>): MemoryAllocation {
   return {
-    file: asString(raw.file),
-    line: asNumber(raw.line),
+    ...locationFields(raw),
     size: asNumber(raw.size),
     count: asNumber(raw.count),
     ...typeNameField(raw),
   };
+}
+
+/** The site's file and 1-based line, or neither when the runtime located none. */
+function locationFields(raw: Record<string, unknown>): { file?: string; line?: number } {
+  const file = asString(raw.file);
+  const line = asNumber(raw.line);
+  return file === "" || line < 1 ? {} : { file, line };
 }
 
 /** The runtime-reported type name, present only when the runtime named one. */

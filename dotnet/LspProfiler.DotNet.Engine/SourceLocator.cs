@@ -5,7 +5,9 @@
 // memory finding about the type. A type with no visible point of its own, such
 // as an F# record or union, anchors where the assembly's code constructs it
 // (ConstructionSites). Types from assemblies without a PDB (the framework) have
-// no location and are reported by name alone. Neither has an array: `Order[]`
+// no location and are reported by name alone, as are those whose PDB names
+// documents this machine doesn't have: FSharp.Core embeds a PDB pointing at its
+// build server's checkout, an anchor no editor here can open. Neither has an array: `Order[]`
 // is the runtime's type, grown wherever a collection resizes, so anchoring it at
 // Order's line would paint that line long after the last Order died.
 using System.Reflection.Metadata;
@@ -55,7 +57,9 @@ internal sealed class SourceLocator : IDisposable
     {
         private readonly MetadataReader _metadata = pe.GetMetadataReader();
         private readonly MetadataReader _pdb = pdbProvider.GetMetadataReader();
+        private readonly Dictionary<DocumentHandle, string?> _documents = [];
         private Dictionary<TypeDefinitionHandle, (string File, int Line)>? _constructed;
+        private bool? _onThisMachine;
 
         public static ModuleSymbols? Open(string assembly)
         {
@@ -76,7 +80,10 @@ internal sealed class SourceLocator : IDisposable
         }
 
         public (string File, int Line)? Locate(IReadOnlyList<string> nesting) =>
-            Find(nesting) is { } definition ? Declared(definition) ?? Constructed(definition) : null;
+            OnThisMachine && Find(nesting) is { } definition ? Declared(definition) ?? Constructed(definition) : null;
+
+        /// <summary>Whether any document the PDB names is here; when none is, no IL is scanned for sites.</summary>
+        private bool OnThisMachine => _onThisMachine ??= _pdb.Documents.Any(document => Document(document) is not null);
 
         public void Dispose()
         {
@@ -84,21 +91,33 @@ internal sealed class SourceLocator : IDisposable
             pe.Dispose();
         }
 
-        private (string File, int Line)? Declared(TypeDefinitionHandle definition)
-        {
-            var points = _metadata.GetTypeDefinition(definition).GetMethods()
+        private (string File, int Line)? Declared(TypeDefinitionHandle definition) =>
+            _metadata.GetTypeDefinition(definition).GetMethods()
                 .SelectMany(SequencePoints)
                 .Where(point => !point.IsHidden)
-                .OrderBy(point => point.StartLine)
-                .Take(1)
-                .ToList();
-            return points.Count == 0 ? null : ConstructionSites.Location(_pdb, points[0]);
-        }
+                .Select(Location)
+                .Where(site => site is not null)
+                .MinBy(site => site!.Value.Line);
 
         private (string File, int Line)? Constructed(TypeDefinitionHandle definition)
         {
-            _constructed ??= ConstructionSites.Index(pe, _metadata, _pdb);
+            _constructed ??= ConstructionSites.Index(pe, _metadata, _pdb, Location);
             return _constructed.TryGetValue(definition, out var site) ? site : null;
+        }
+
+        /// <summary>A sequence point's document and line, when the document is on this machine.</summary>
+        private (string File, int Line)? Location(SequencePoint point) =>
+            Document(point.Document) is { } file ? (file, point.StartLine) : null;
+
+        private string? Document(DocumentHandle handle)
+        {
+            if (!_documents.TryGetValue(handle, out var file))
+            {
+                var named = _pdb.GetString(_pdb.GetDocument(handle).Name);
+                file = File.Exists(named) ? named : null;
+                _documents[handle] = file;
+            }
+            return file;
         }
 
         private TypeDefinitionHandle? Find(IReadOnlyList<string> nesting)

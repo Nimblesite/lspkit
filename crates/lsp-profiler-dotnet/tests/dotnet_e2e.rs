@@ -31,6 +31,8 @@ const FIXTURE_TYPE: &str = "HotLeakApp.LeakedPayload";
 const HOT_FUNCTION: &str = "HotLeakApp.Hot.Spin";
 /// `Program.Main`, which only ever waits on stdin.
 const ENTRY_POINT: &str = "HotLeakApp.Program.Main(";
+/// `LeakCache.Items`: one small object, outside any top-twenty summary.
+const LEAK_LIST: &str = "System.Collections.Generic.List`1[HotLeakApp.LeakedPayload]";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_fixture_is_recognised_as_an_attachable_dotnet_process() {
@@ -450,4 +452,53 @@ async fn a_snapshot_that_loses_events_fails_instead_of_misreporting_the_heap() {
         "the failure says why: {message}"
     );
     assert!(!graph.exists(), "no partial graph is kept");
+}
+
+/// Objects of a type too small to rank among the largest types still get their
+/// own summary row, agreeing with the totals ([PROF-DOTNET-MEMORY] objects):
+/// the one `List<LeakedPayload>` that holds the leak is 32 bytes, far below the
+/// twenty largest types.
+#[tokio::test(flavor = "multi_thread")]
+async fn objects_of_a_small_type_keep_its_own_summary_row() {
+    let fixture = Fixture::start(FIXTURE);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let service = service(dir.path().to_path_buf());
+    let started = call(
+        &service,
+        methods::MEMORY_START,
+        json!({ "pid": fixture.pid }),
+    )
+    .await;
+    let session = json!({ "memory_session_id": started["memory_session_id"] });
+    let snapshot = call(&service, methods::MEMORY_SNAPSHOT, session.clone()).await;
+    assert_eq!(
+        completed(&snapshot)["outcome"]["kind"],
+        "Snapshot",
+        "{snapshot}"
+    );
+    let params = json!({ "memory_session_id": started["memory_session_id"], "type_name": LEAK_LIST, "limit": 1 });
+    let objects = call(&service, methods::MEMORY_OBJECTS_BY_TYPE, params).await;
+    let list = &completed(&objects)["outcome"]["objects"];
+    let rows = list["type_summary"].as_array().expect("type summary");
+    let own: Vec<&Value> = rows
+        .iter()
+        .filter(|row| row["type_name"] == LEAK_LIST)
+        .collect();
+    assert_eq!(own.len(), 1, "one row for the requested type: {list}");
+    assert_eq!(
+        list["total_count"], 1,
+        "LeakCache.Items is the only list of payloads: {list}"
+    );
+    assert_eq!(own[0]["count"], list["total_count"], "{list}");
+    assert_eq!(own[0]["size_bytes"], list["total_bytes"], "{list}");
+    let sizes: Vec<i64> = rows
+        .iter()
+        .map(|row| row["size_bytes"].as_i64().expect("bytes"))
+        .collect();
+    assert!(
+        sizes.windows(2).all(|pair| pair[0] >= pair[1]),
+        "still largest first: {sizes:?}"
+    );
+    let _ = call(&service, methods::MEMORY_STOP, session).await;
+    service.shutdown().await;
 }

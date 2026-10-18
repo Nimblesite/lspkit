@@ -21,8 +21,10 @@ import { pathKeyer } from "./editor-path-key";
 
 /** Per-line allocation data from the LSP server. */
 export interface MemoryAllocation {
-  file: string;
-  line: number;
+  /** Source path; absent for a type with no location, such as an array ([PROF-DOTNET-SOURCE]). */
+  file?: string;
+  /** 1-based line; present exactly when `file` is. */
+  line?: number;
   size: number;
   count: number;
   /** The runtime's own name for the allocated type; absent when it attributes allocations to lines only. */
@@ -235,12 +237,14 @@ function confidenceBadge(confidence: LeakConfidence): string {
 /** Apply memory allocation decorations to visible editors; a new snapshot drops the last diff's badges. */
 export function applyMemoryDecorations(result: MemorySnapshotResult): void {
   leakLayer.clear();
-  allocationLayer.paint(result.topAllocations.map((alloc) => ({
-    file: alloc.file,
-    line: alloc.line,
-    color: memColor(alloc.size),
-    text: ` \u2588\u2588\u2588\u2588 ${formatBytes(alloc.size)} allocated (${alloc.count} objects)`,
-  })));
+  // A site with no location still lists in the dashboard but paints no line.
+  allocationLayer.paint(result.topAllocations.flatMap(({ file, line, size, count }) =>
+    file === undefined || line === undefined ? [] : [{
+      file,
+      line,
+      color: memColor(size),
+      text: ` \u2588\u2588\u2588\u2588 ${formatBytes(size)} allocated (${count} objects)`,
+    }]));
   Logger.info(`Memory decorations applied: ${result.topAllocations.length} allocations`);
 }
 

@@ -12,8 +12,12 @@
 import * as vscode from "vscode";
 import { Logger } from "./logger";
 
-/** Cap so a long session cannot grow the log unbounded. */
-const OPERATION_LOG_CAP = 500;
+/**
+ * Cap so a long session cannot grow the log unbounded. A host runs all its
+ * suites in one extension host, so the cap sits far above what a whole run
+ * records: within a run the log is never trimmed and its length stays a cursor.
+ */
+const OPERATION_LOG_CAP = 10_000;
 
 /** Chronological `begin:`/`step:`/`end:`-prefixed operation entries. */
 const operationLog: string[] = [];
@@ -21,8 +25,23 @@ const operationLog: string[] = [];
 function record(entry: string): void {
   operationLog.push(entry);
   if (operationLog.length > OPERATION_LOG_CAP) {
-    operationLog.splice(0, operationLog.length - OPERATION_LOG_CAP);
+    operationLog.splice(0, settledPrefix(operationLog.length - OPERATION_LOG_CAP / 2));
   }
+}
+
+/**
+ * The longest prefix of at most `limit` entries that holds only whole
+ * operations. Trimming inside one would orphan its `end:` and make the log
+ * claim a notification closed that never opened.
+ */
+function settledPrefix(limit: number): number {
+  let open = 0;
+  let settled = 0;
+  for (const [index, entry] of operationLog.slice(0, limit).entries()) {
+    open += entry.startsWith("begin:") ? 1 : entry.startsWith("end:") ? -1 : 0;
+    settled = open === 0 ? index + 1 : settled;
+  }
+  return settled;
 }
 
 /** The operation log (e2e seam): `begin:<title>`, `step:<title>:<msg>`, `end:<title>`. */

@@ -4,6 +4,11 @@
 // collection and report every surviving object, every reference and every
 // root as bulk events. No dump is written and no debugger permission is
 // needed, which is what keeps this identical on macOS, Linux and Windows.
+//
+// The runtime emits the whole heap in one burst during that collection, faster
+// than any reader drains it, so the session buffer must hold the burst. When it
+// cannot, EventPipe drops events. Lost edges cut objects off from their roots,
+// so a partial graph would report a leaking heap as nearly empty. It is refused.
 using System.Diagnostics.Tracing;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
@@ -17,6 +22,9 @@ internal static class HeapCapture
     private const string RuntimeProvider = "Microsoft-Windows-DotNETRuntime";
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(90);
 
+    /// <summary>The session buffer. 256 MB lost events past about six million objects; this holds about fourteen million.</summary>
+    public const int DefaultBufferMB = 1024;
+
     private const ClrTraceEventParser.Keywords Keywords =
         ClrTraceEventParser.Keywords.GC
         | ClrTraceEventParser.Keywords.Loader
@@ -25,10 +33,10 @@ internal static class HeapCapture
         | ClrTraceEventParser.Keywords.GCHeapCollect
         | ClrTraceEventParser.Keywords.GCHeapAndTypeNames;
 
-    public static HeapGraph Capture(DiagnosticsClient client)
+    public static HeapGraph Capture(DiagnosticsClient client, int bufferMB)
     {
         EventPipeProvider[] providers = [new(RuntimeProvider, EventLevel.Verbose, (long)Keywords)];
-        using var session = client.StartEventPipeSession(providers, requestRundown: true);
+        using var session = client.StartEventPipeSession(providers, requestRundown: true, circularBufferMB: bufferMB);
         using var source = new EventPipeEventSource(session.EventStream);
         using var watch = new GcWatch();
         var events = new HeapEvents();
@@ -36,10 +44,15 @@ internal static class HeapCapture
         events.Attach(source);
         Emit.Trace("session started; processing events");
         SessionRun.Until(session, source, watch, Deadline);
-        Emit.Trace($"event stream ended; collected={watch.Collected} nodes={events.NodeCount} edges={events.EdgeCount} roots={events.RootCount} types={events.TypeCount}");
+        Emit.Trace($"event stream ended; lost={source.EventsLost} collected={watch.Collected} nodes={events.NodeCount} edges={events.EdgeCount} roots={events.RootCount} types={events.TypeCount}");
         if (!watch.Collected)
         {
             throw new TimeoutException("the runtime did not complete the heap snapshot collection");
+        }
+        if (source.EventsLost > 0)
+        {
+            throw new InvalidOperationException(
+                $"The heap is too large to capture completely: the runtime dropped {source.EventsLost} heap events because the {bufferMB} MB capture buffer filled. A partial snapshot would misreport what is live, so none was kept.");
         }
         return new HeapGraph(events.Assemble(watch.Generations()));
     }

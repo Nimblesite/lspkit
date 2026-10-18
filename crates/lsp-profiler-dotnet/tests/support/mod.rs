@@ -79,14 +79,18 @@ impl ProfilerEvents for Silent {
     async fn notify(&self, _method: &'static str, _params: Value) {}
 }
 
-/// The shared service with only the .NET runtime, writing under `output_dir`.
-pub fn service(output_dir: PathBuf) -> ProfilerService {
-    let engine = built(
+/// The built engine executable.
+pub fn engine() -> PathBuf {
+    built(
         "dotnet/LspProfiler.DotNet.Engine/bin/Release/net8.0/lsp-profiler-dotnet-engine",
         "make dotnet",
-    );
+    )
+}
+
+/// The shared service with only the .NET runtime, writing under `output_dir`.
+pub fn service(output_dir: PathBuf) -> ProfilerService {
     let runtime = DotNetRuntime::new(DotNetConfig {
-        engine: Some(engine),
+        engine: Some(engine()),
         output_dir: output_dir.clone(),
     });
     let config = ProfilerConfig {

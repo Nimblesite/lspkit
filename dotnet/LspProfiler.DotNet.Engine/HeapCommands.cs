@@ -9,7 +9,7 @@ internal static class HeapCommands
 {
     private const int SummaryTypes = 20;
 
-    public static int Snapshot(int pid, string graphPath, int maxTypes)
+    public static int Snapshot(int pid, string graphPath, int maxTypes, int bufferMB)
     {
         var (client, failure) = Errors.Connect(pid);
         if (client is null)
@@ -17,7 +17,7 @@ internal static class HeapCommands
             Emit.Message(failure!);
             return 1;
         }
-        var graph = HeapCapture.Capture(client);
+        var graph = HeapCapture.Capture(client, bufferMB);
         graph.Save(graphPath);
         return Summarize(graphPath, graph, maxTypes);
     }

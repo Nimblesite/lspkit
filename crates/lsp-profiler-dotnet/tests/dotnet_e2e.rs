@@ -24,7 +24,7 @@ use std::time::Duration;
 use lsp_profiler::wire::methods;
 use lsp_profiler::ProfilerService;
 use serde_json::{json, Value};
-use support::{call, completed, service, Fixture};
+use support::{call, completed, engine, service, Fixture};
 
 const FIXTURE: &str = "HotLeakApp";
 const FIXTURE_TYPE: &str = "HotLeakApp.LeakedPayload";
@@ -363,4 +363,36 @@ async fn a_mid_session_snapshot_reports_the_samples_so_far() {
         "two seconds in, the snapshot has samples: {snapshot}"
     );
     service.shutdown().await;
+}
+
+/// A heap the capture buffer cannot hold is refused, naming the dropped events,
+/// and never summarised as a smaller heap: lost edges cut live objects off from
+/// their roots ([PROF-DOTNET-HEAP-CAPTURE]). A 1 MB buffer cannot hold the
+/// burst of a heap that has grown for two seconds.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_snapshot_that_loses_events_fails_instead_of_misreporting_the_heap() {
+    let fixture = Fixture::start(FIXTURE);
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let graph = dir.path().join("snapshot.heapgraph.json");
+    let output = std::process::Command::new(engine())
+        .arg("snapshot")
+        .args(["--pid", &fixture.pid.to_string()])
+        .arg("--graph")
+        .arg(&graph)
+        .args(["--buffer-mb", "1"])
+        .output()
+        .expect("run the engine");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let last: Value = serde_json::from_str(stdout.lines().last().unwrap_or_default())
+        .unwrap_or_else(|error| panic!("one protocol line expected ({error}): {stdout}"));
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    assert_eq!(last["kind"], "failure", "{last}");
+    assert_eq!(last["error_kind"], "Failed", "{last}");
+    let message = last["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("dropped") && message.contains("1 MB capture buffer"),
+        "the failure says why: {message}"
+    );
+    assert!(!graph.exists(), "no partial graph is kept");
 }

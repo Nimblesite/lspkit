@@ -653,7 +653,7 @@ The engine is a framework-dependent C# executable:
 | Command | Does |
 |---|---|
 | `cpu --pid N [--native]` | Sample until a line or EOF arrives on stdin, then symbolize and stream ticks |
-| `snapshot --pid N --graph PATH [--max-types K]` | Capture the live heap graph over EventPipe, keep it at `PATH`, summarise it |
+| `snapshot --pid N --graph PATH [--max-types K] [--buffer-mb M]` | Capture the live heap graph over EventPipe, keep it at `PATH`, summarise it. `M` is the session buffer (default 1024) |
 | `analyze --graph PATH [--max-types K]` | Summarise a kept heap graph |
 | `refs --graph PATH --type T [--max-depth D] [--max-nodes N]` | Retention graph for live objects of `T` |
 | `objects --graph PATH --type T [--limit L]` | Largest live objects of `T`, plus the top types |
@@ -718,6 +718,8 @@ Thread samples are grouped into ticks:
 ### [PROF-DOTNET-HEAP-CAPTURE] Heap capture
 
 A snapshot is an EventPipe session on `Microsoft-Windows-DotNETRuntime` at Verbose with the keywords `GC`, `Loader`, `Type`, `GCHeapDump`, `GCHeapCollect` and `GCHeapAndTypeNames`, plus rundown. Enabling them makes the runtime perform a full collection and report every surviving object (`GCBulkNode`), reference (`GCBulkEdge`, in node order), root (`GCBulkRootEdge`, `GCBulkRootStaticVar`) and type (`TypeBulkType`); module load and rundown events give each type's assembly path. The engine waits for the induced collection's `GCStop` and the `GCHeapStats` after it (generation sizes), then stops the session. No pause, no dump and no debugger permission are involved, which keeps the capture identical on macOS, Linux and Windows.
+
+The runtime emits the whole heap in one burst during that collection, faster than any reader drains it, so the session buffer must hold the burst. It is 1024 MB, which holds about fourteen million objects. The 256 MB default lost events from about six million. If EventPipe still reports lost events, the snapshot fails (`Failed`) with a message naming how many events were dropped and the buffer size, and no graph is kept. Lost edges cut live objects off from their roots, so a partial graph would report a leaking heap as nearly empty.
 
 ### [PROF-DOTNET-HEAP-GRAPH] Heap graph
 

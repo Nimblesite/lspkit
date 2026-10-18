@@ -35,6 +35,7 @@ import {
   memStartTitle,
   TRACEBACK_DEPTH,
   captureSnapshotAndDiff,
+  endServerSession,
   hasCapturedSnapshot,
   isDirectMemorySession,
   lastMemorySnapshot,
@@ -91,7 +92,7 @@ function memoryCommandDisposables(store: Store): vscode.Disposable[] {
     vscode.commands.registerCommand(cmd("memorySnapshot"), async () => handleMemorySnapshot(store)),
     vscode.commands.registerCommand(cmd("memoryDiff"), async () => handleMemoryDiff(store)),
     vscode.commands.registerCommand(cmd("memoryGcCollect"), async () => handleMemoryGcCollect(store)),
-    vscode.commands.registerCommand(cmd("memoryStop"), () => { runMemoryStopCommand(store); }),
+    vscode.commands.registerCommand(cmd("memoryStop"), async () => runMemoryStopCommand(store)),
     vscode.commands.registerCommand(cmd("memoryReferences"), async () => handleMemoryReferences(store)),
     // The status-bar show/hide on session changes is bound in memory-status.ts.
     vscode.debug.onDidStartDebugSession((session) => {
@@ -161,7 +162,7 @@ async function runMemoryStartCommand(store: Store, report: (message: string) => 
 }
 
 /** The `<prefix>.profiler.memoryStop` body: stop tracking and never report nothing. */
-function runMemoryStopCommand(store: Store): void {
+async function runMemoryStopCommand(store: Store): Promise<void> {
   // Stopping must never silently produce nothing: surface whether a snapshot was
   // captured, or say plainly that none was ([PROF-PY-MEMORY-FINAL], #146).
   const hadSnapshot = hasCapturedSnapshot();
@@ -173,6 +174,7 @@ function runMemoryStopCommand(store: Store): void {
   if (debugSessionId !== undefined && finalSnapshotFile !== undefined) {
     pendingSnapshotCleanup.set(debugSessionId, finalSnapshotFile);
   }
+  await endServerSession(store);
   handleMemoryStop(store);
   if (hadSnapshot) {
     void vscode.window.showInformationMessage(`${brand()}: Memory tracking stopped.`);
@@ -505,6 +507,7 @@ export function gcSummary(result: MemoryIngestResult): string {
  */
 function finishDirectRunOnEnd(store: Store): void {
   const last = lastMemorySnapshot();
+  void endServerSession(store);
   handleMemoryStop(store);
   if (last === undefined) {
     showActionableToast(

@@ -2,7 +2,7 @@
 
 use crate::memory::MemoryError;
 use crate::sampler::SamplerError;
-use crate::wire::error_codes;
+use crate::wire::{error_codes, AttachErrorKind};
 
 /// Any failure of a profiler request.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -49,9 +49,20 @@ impl ProfilerError {
             Self::Sampler(SamplerError::AttachFailed(_)) => error_codes::ATTACH_FAILED,
             Self::Sampler(SamplerError::ToolMissing(_))
             | Self::Memory(MemoryError::ToolMissing(_)) => error_codes::TOOL_MISSING,
+            Self::Memory(MemoryError::Attach { kind, .. }) => attach_code(kind),
             Self::InvalidParams(_) => error_codes::INVALID_PARAMS,
             Self::Memory(_) | Self::SessionNotFound(_) | Self::Other(_) => error_codes::OTHER,
         }
+    }
+}
+
+/// The code of a backend's classified attach failure.
+fn attach_code(kind: &AttachErrorKind) -> i64 {
+    match kind {
+        AttachErrorKind::ProcessNotFound => error_codes::PROCESS_NOT_FOUND,
+        AttachErrorKind::UnsupportedRuntime => error_codes::UNSUPPORTED_RUNTIME,
+        AttachErrorKind::PermissionDenied => error_codes::PERMISSION_DENIED,
+        AttachErrorKind::AttachFailed => error_codes::ATTACH_FAILED,
     }
 }
 
@@ -95,6 +106,22 @@ mod tests {
             (ProfilerError::InvalidParams("bad".to_owned()), -32602),
             (ProfilerError::SessionNotFound("s".to_owned()), -32000),
             (MemoryError::UnknownSession("m".to_owned()).into(), -32000),
+            (
+                MemoryError::Attach {
+                    kind: AttachErrorKind::ProcessNotFound,
+                    message: "gone".to_owned(),
+                }
+                .into(),
+                -32001,
+            ),
+            (
+                MemoryError::Attach {
+                    kind: AttachErrorKind::PermissionDenied,
+                    message: "grant".to_owned(),
+                }
+                .into(),
+                -32003,
+            ),
         ];
         for (error, code) in cases {
             assert_eq!(error.code(), code, "{error}");

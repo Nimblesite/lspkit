@@ -15,7 +15,7 @@ pub mod leaks;
 pub mod session;
 pub mod timeline;
 
-use crate::wire::{GcResult, HeapDiff, HeapSnapshot, ObjectList, RefGraph};
+use crate::wire::{AttachErrorKind, GcResult, HeapDiff, HeapSnapshot, ObjectList, RefGraph};
 
 /// What a backend wants done for one memory step.
 #[derive(Debug, Clone, PartialEq)]
@@ -64,6 +64,14 @@ pub enum MemoryError {
     /// A required external tool is missing; the message says how to install it.
     #[error("{0}")]
     ToolMissing(String),
+    /// The backend could not reach the process; `kind` classifies why.
+    #[error("{message}")]
+    Attach {
+        /// Classified cause.
+        kind: AttachErrorKind,
+        /// Backend detail.
+        message: String,
+    },
     /// The backend failed.
     #[error("{0}")]
     Backend(String),

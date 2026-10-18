@@ -261,6 +261,58 @@ async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() 
     service.shutdown().await;
 }
 
+/// `cpu.start` resolves the runtime before anything else ([PROF-CPU-START]
+/// step 1): naming a runtime that cannot profile the PID is
+/// `UNSUPPORTED_RUNTIME` even while the PID has a CPU session, and only a
+/// start that could attach is `ALREADY_PROFILING`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_named_runtime_is_resolved_before_the_pid_is_found_busy() {
+    let fixture = Fixture::start(FIXTURE);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let service = service(dir.path().to_path_buf());
+    let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
+    let named = json!({ "pid": fixture.pid, "runtime": "python" });
+    assert_eq!(
+        error_code(&service, methods::CPU_START, named).await,
+        -32002
+    );
+    let again = json!({ "pid": fixture.pid });
+    assert_eq!(
+        error_code(&service, methods::CPU_START, again).await,
+        -32004
+    );
+    let _ = call(
+        &service,
+        methods::CPU_STOP,
+        json!({ "session_id": started["session_id"] }),
+    )
+    .await;
+    service.shutdown().await;
+}
+
+/// A memory step on a program that has exited is `PROCESS_NOT_FOUND`, the
+/// engine's classified cause, never a bare `OTHER` ([PROF-ERRORS]).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_memory_step_on_an_exited_program_is_process_not_found() {
+    let mut fixture = Fixture::start(FIXTURE);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let service = service(dir.path().to_path_buf());
+    let started = call(
+        &service,
+        methods::MEMORY_START,
+        json!({ "pid": fixture.pid }),
+    )
+    .await;
+    let session = json!({ "memory_session_id": started["memory_session_id"] });
+    let _ = fixture.child.kill();
+    let _ = fixture.child.wait();
+    assert_eq!(
+        error_code(&service, methods::MEMORY_SNAPSHOT, session).await,
+        -32001
+    );
+    service.shutdown().await;
+}
+
 /// A target that exits mid-session keeps the samples taken while it lived: the
 /// recorded trace is still symbolized and reported on stop ([PROF-CPU-STOP]).
 #[tokio::test(flavor = "multi_thread")]

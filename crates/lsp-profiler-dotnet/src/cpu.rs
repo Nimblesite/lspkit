@@ -214,7 +214,8 @@ fn sampler_error(error: EngineError, pid: u32) -> SamplerError {
     }
 }
 
-fn attach_kind(kind: ErrorKind) -> Option<AttachErrorKind> {
+/// The attach failure an engine error kind classifies, if any.
+pub(crate) fn attach_kind(kind: ErrorKind) -> Option<AttachErrorKind> {
     match kind {
         ErrorKind::ProcessNotFound => Some(AttachErrorKind::ProcessNotFound),
         ErrorKind::UnsupportedRuntime => Some(AttachErrorKind::UnsupportedRuntime),

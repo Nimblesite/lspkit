@@ -315,7 +315,7 @@ It also holds the total and per-thread tick counts, deduplicated frames, thread 
 
 ### [PROF-AGGREGATION-LOGIC] Logic
 
-Each tick adds one to `total_samples`. A retained thread stack increments each distinct line and function at most once per tick, so recursion never pushes a share past 100%. The leaf increments self time. Idle threads count only when `include_idle` is set. Weights come from `weight_secs`, otherwise from `1 / sample_rate`.
+Each tick adds one to `total_samples`. A retained thread stack increments each distinct line and function at most once per tick, across every thread's stack, so neither recursion nor a frame every thread shares (a runtime's thread entry point) pushes a share past 100%. The leaf increments self time, also once per tick. Shares are of the ticks that retained at least one stack, reported as `user_samples`. Idle threads count only when `include_idle` is set. Weights come from `weight_secs`, otherwise from `1 / sample_rate`.
 
 ### [PROF-AGGREGATION-SCAFFOLD] Runtime filtering
 

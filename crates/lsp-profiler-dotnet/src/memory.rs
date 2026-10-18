@@ -18,6 +18,7 @@ use lsp_profiler::wire::{
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
+use crate::cpu::attach_kind;
 use crate::engine::{Engine, EngineError};
 use crate::protocol::{EngineMessage, ObjectRecord, RefEdgeRecord, RefNodeRecord, TypeRow};
 
@@ -348,7 +349,10 @@ fn object(item: ObjectRecord) -> ObjectSample {
 fn memory_error(error: EngineError) -> MemoryError {
     match error {
         EngineError::Missing(message) => MemoryError::ToolMissing(message),
-        EngineError::Failed { message, .. } => MemoryError::Backend(message),
+        EngineError::Failed { kind, message } => match attach_kind(kind) {
+            Some(kind) => MemoryError::Attach { kind, message },
+            None => MemoryError::Backend(message),
+        },
         other => {
             warn!(%other, "the .NET profiling engine failed");
             MemoryError::Backend(other.to_string())

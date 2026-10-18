@@ -48,8 +48,7 @@ export function toProfileResult(report: ProfileReport): ProfileResult {
     ...(artifacts.export_error !== undefined ? { exportError: artifacts.export_error } : {}),
     hotFunctions: report.hot_functions.map((fn) => ({
       name: fn.name,
-      file: fn.file ?? "",
-      line: fn.line ?? 0,
+      ...located(fn),
       samples: fn.samples,
       percentage: fn.percentage,
       selfPercentage: fn.self_percentage,
@@ -84,10 +83,13 @@ export function toUiProcess(process: WireProcess): ProcessInfo {
   };
 }
 
+/** [PROF-WIRE]: a source location is both fields or neither, never `""` and line 0. */
+function located(entry: { file?: string | null; line?: number | null }): { file?: string; line?: number } {
+  return entry.file != null && entry.line != null ? { file: entry.file, line: entry.line } : {};
+}
+
 function allocation(site: { file?: string | null; line?: number | null; size_bytes: number; count: number; type_name?: string | null }): Record<string, unknown> {
-  // [PROF-WIRE]: a site with no location carries neither field, never `""` and line 0.
-  const located = site.file != null && site.line != null ? { file: site.file, line: site.line } : {};
-  return { ...located, size: site.size_bytes, count: site.count, typeName: site.type_name ?? "" };
+  return { ...located(site), size: site.size_bytes, count: site.count, typeName: site.type_name ?? "" };
 }
 
 function snapshotFields(snapshot: HeapSnapshot, timeline: TimelinePoint[], heapProfilePath: string | null | undefined): Record<string, unknown> {

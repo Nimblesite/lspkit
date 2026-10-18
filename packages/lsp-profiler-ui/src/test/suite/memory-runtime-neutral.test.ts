@@ -58,6 +58,21 @@ suite('Memory UI — runtime-reported type names survive to the screen', () => {
         assert.strictEqual(snap.topAllocations[0]?.file, '/src/main.py');
     });
 
+    // [PROF-DOTNET-SOURCE] + [PROF-WIRE]: an array, or a framework type, has no
+    // location. It still appears in the UI, by name only: no `""` file, no line 0.
+    test('a site with no location reaches the dashboard by name, with no invented file or line', () => {
+        const snap = toDashboardSnapshot(toMemoryIngestResult(snapshotResult([
+            { type_name: 'App.Order[]', size_bytes: 8192, count: 2 },
+            { type_name: 'App.Order', file: '/src/Ledger.fs', line: 21, size_bytes: 4096, count: 64 },
+        ])));
+        const [array, order] = snap.topAllocations;
+        assert.strictEqual(array?.typeName, 'App.Order[]', 'the unlocated site is still listed');
+        assert.strictEqual(array?.file, undefined, 'no file is invented');
+        assert.strictEqual(array?.line, undefined, 'no line 0 is invented');
+        assert.strictEqual(array?.size, 8192);
+        assert.deepStrictEqual([order?.file, order?.line], ['/src/Ledger.fs', 21], 'a located site keeps its anchor');
+    });
+
     test('a suspected leak keeps the runtime\'s type name', () => {
         const diff = toDashboardDiff({
             kind: 'diff',

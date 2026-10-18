@@ -92,6 +92,7 @@ Hierarchical, non-numeric: `[GROUP-TOPIC]` / `[GROUP-TOPIC-DETAIL]` (e.g. `[PARS
 | `crates/lsp-profiler-dotnet` | The .NET runtime: process classification, engine driver, CPU and memory backends |
 | `dotnet/LspProfiler.DotNet.Engine` | The C# engine: EventPipe CPU sampling and heap snapshots, NDJSON out |
 | `dotnet/fixtures/HotLeakApp` | The .NET test target: a hot loop and a static-rooted leak |
+| `dotnet/fixtures/HotLeakAppFs` | Its F# twin: records, a union and a module value, which are IL shapes only F# emits |
 | `packages/lsp-profiler-ui` | The VS Code UI library (`make profiler-ui`, `make profiler-ui-test`) |
 | `crates/lsp-profiler-python`, `crates/lsp-profiler-helper` | Parked runtimes: excluded from the workspace |
 

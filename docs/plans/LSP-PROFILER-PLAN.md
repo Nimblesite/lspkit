@@ -69,6 +69,7 @@ Status was last verified on **2026-10-15**.
 - [x] `CpuBackend` (`cpu.rs`): spawns `cpu`, forwards frames and ticks with `weight_secs`, stops by writing a line to stdin, 120 s finish timeout, `live_progress: true` (segmented capture).
 - [x] `MemoryBackend` direct mode (`memory.rs`): graphs under `<output_dir>/heap-<session>/`, deleted on stop; `diff` is a fresh snapshot the core compares.
 - [x] e2e through `ProfilerService` against HotLeakApp (`tests/dotnet_e2e.rs`): the process is recognised and attachable; CPU finds `Hot.Spin` and its lines and writes all three artifacts; memory sees the leak's declaration line, growth, the static `Items` root, objects, an observed collection and a clean stop.
+- [x] F# e2e against HotLeakAppFs (`tests/dotnet_fsharp_e2e.rs`, the shared harness in `tests/support/`). It found three engine defects that the C# fixture could never show, each fixed against a failing test. (1) [PROF-DOTNET-SOURCE]: F# records and unions had no location, because their generated members have only hidden sequence points. They now anchor where the code constructs them (`ConstructionSites.cs`). (2) [PROF-DOTNET-HEAP-GRAPH]: every nested type, including every F# union case, was named by its bare simple name (`Small`). The name is now rebuilt from metadata (`NestedTypeNames.cs`). (3) The static root of an F# module value was labelled `static items@15`; it is now `static items`.
 
 ## Phase 4: `lsp-profiler-ui` [PROF-UI]
 

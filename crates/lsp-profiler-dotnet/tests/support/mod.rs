@@ -125,7 +125,10 @@ pub fn assert_only_busy_threads_count(report: &Value, entry_point: &str, hot_fun
         "{entry_point} only runs on the idle main thread: {report}"
     );
     let share = named(hot_function).map_or(0.0, |f| f["percentage"].as_f64().unwrap_or(0.0));
-    assert!(share > 50.0, "{hot_function} owns the busy thread, {share}%: {report}");
+    assert!(
+        share > 50.0,
+        "{hot_function} owns the busy thread, {share}%: {report}"
+    );
 }
 
 /// The result of a memory step the direct backend completed.

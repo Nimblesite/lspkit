@@ -592,6 +592,8 @@ Collection counts (`gc_generations`) and named generation sizes (`generation_siz
 
 Snapshot, compare, GC and stop are reachable from the dashboard, the processes view and, in courier mode, the debug toolbar.
 
+Stop ends the server's session (`memory.stop`) before the UI forgets it, so a stopped session refuses every later step and its kept graphs are removed. A site or hot function with no location is listed by name and paints no line.
+
 ### [PROF-UI-REFGRAPH] Retention graph
 
 The retention graph is a layered layout of a `RefGraph`: a node's row is its `depth`, its distance from the targets, so the roots sit on top and the targets along the bottom.
@@ -695,10 +697,7 @@ The crate maps `error_kind` one-to-one onto [PROF-ERRORS].
 
 ### [PROF-DOTNET-CPU] CPU capture
 
-The engine opens an EventPipe session with rundown and a 256 MB buffer. It enables:
-
-- `Microsoft-DotNETCore-SampleProfiler`, which samples every managed thread each millisecond;
-- `Microsoft-Windows-DotNETRuntime` at Informational with keywords `0x14C14FCCBD`: loader, JIT, IL-to-native maps and stacks.
+The engine opens an EventPipe session with rundown and a 256 MB buffer. It enables only `Microsoft-DotNETCore-SampleProfiler`, which samples every managed thread each millisecond; the rundown that ends each segment names its methods, modules and IL-to-native maps. It never enables `Microsoft-Windows-DotNETRuntime`: while any session does, the runtime keeps its list of the types it has already logged, so a heap snapshot ([PROF-DOTNET-HEAP-CAPTURE]) taken during the CPU session would report every type an earlier snapshot named as a bare address.
 
 Recording runs in segments, each its own session recorded to a temporary `.nettrace` that is deleted with its `.etlx` on every exit path. The first segment lasts 500 ms and each next one doubles, up to 10 s. A segment ends with its rundown, so its frames can be named. The next segment starts before the last one is symbolized, so the gap between them is only the rundown. Ticks therefore stream a segment behind:
 
@@ -819,7 +818,8 @@ The server binds the socket before spawning the helper and accepts one stream. I
 
 - Every backend is tested against a real target process the library owns. Consumer fixtures are never copied in. For .NET the targets are `dotnet/fixtures/HotLeakApp` (C#) and its F# twin `dotnet/fixtures/HotLeakAppFs`: a hot loop in `Hot.Spin` (`Hot.spin`), and a leak of `LeakedPayload` held by the static `LeakCache.Items` (the module value `LeakCache.items`). The F# payload is a record holding a union case and a generic record, which are IL shapes C# never emits. The tests assert:
   - CPU: a hot line inside `Hot.Spin` at its `Program.cs` line, and inside `Hot.spin` at its `Program.fs` line;
-  - memory: `LeakedPayload` grows across snapshots, reaches Medium then High confidence, and has a retention path ending at root `LeakCache.Items`. In F#, the record, the union case `PayloadKind+Small` and the generic record `Tagged`1[System.Int32]` each anchor at the exact `Program.fs` line that constructs them, and the leak's root is `static items`, with no `@<line>` suffix.
+  - memory: `LeakedPayload` grows across snapshots, reaches Low, Medium then High confidence, and has a retention path ending at root `LeakCache.Items`. In F#, the record, the union case `PayloadKind+Small` and the generic record `Tagged`1[System.Int32]` each anchor at the exact `Program.fs` line that constructs them, and the leak's root is `static items`, with no `@<line>` suffix.
+  - the F# fixture's line protocol (`grow`, `payload`, `blob`, `release all`, `work on|off`, `stats`) makes one shape grow at a time. Tests assert the rest of its zoo: `Order` over `CustomerId`, `OrderLine`, `Priority+Express` and a struct record; `Quote` behind a never-evicting cache; never-removed event-handler closures; a two-node reference cycle rooted at `static cycles`; and retained arrays, which anchor at no source line. A release resets the confidence streak, and one 12 MiB growth is Medium.
 - Every test asserts a specific outcome. A call that only proves something returned is not a test.
 - The UI library is tested inside VS Code against a mock language server that speaks the wire (`packages/lsp-profiler-ui/src/test/host`): command registration and advertisement, manifest contributions, settings, reactive state and gating, the processes panel, webview CSP and theming, decorations. Server-backed flows (CPU attach to a live process, heap snapshot and diff, retention graph, induced collection, autopilot) are tested in each host's extension suite against that host's real targets; SharpLsp's are `profiler-cpu-e2e.test.ts` and `memory-e2e.test.ts` against `ProfileTarget` and `ProfileLeakTarget`.
 - [PROF-LSP] conformance is tested at the host boundary:

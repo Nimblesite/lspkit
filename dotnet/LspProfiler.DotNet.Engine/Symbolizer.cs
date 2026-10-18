@@ -9,6 +9,7 @@
 using Microsoft.Diagnostics.Symbols;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Etlx;
+using Microsoft.Diagnostics.Tracing.EventPipe;
 
 namespace LspProfiler.DotNet.Engine;
 
@@ -17,8 +18,6 @@ internal sealed class Symbolizer(bool includeNative)
     private const string SampleProvider = "Microsoft-DotNETCore-SampleProfiler";
     private const int TicksPerMessage = 256;
     private const double MaxTickWeightMs = 10.0;
-    /// <summary>The sample-type payload value for a thread executing managed code.</summary>
-    private const int ManagedSample = 2;
 
     private readonly FrameTable _frames = new(includeNative);
 
@@ -110,8 +109,11 @@ internal sealed class Symbolizer(bool includeNative)
             }
         }
 
+        // A thread waiting in native code (a lock, a sleep, a console read) is
+        // sampled as External and is idle. TraceLog parses every sample as a
+        // ClrThreadSampleTraceData, whose Type is an enum, never a boxed int.
         private static bool IsManaged(TraceEvent sample) =>
-            sample.PayloadByName("Type") is int type ? type == ManagedSample : true;
+            sample is ClrThreadSampleTraceData { Type: ClrThreadSampleType.Managed };
     }
 }
 

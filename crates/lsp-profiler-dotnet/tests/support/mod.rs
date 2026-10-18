@@ -108,6 +108,26 @@ pub async fn call(service: &ProfilerService, method: &str, params: Value) -> Val
         .unwrap_or_else(|error| panic!("{method} failed: {error}"))
 }
 
+/// [PROF-AGGREGATION-LOGIC] and [PROF-DOTNET-CPU-SYMBOLS]: only a thread
+/// executing managed code counts. A fixture's main thread waits on stdin for
+/// the whole session, so its entry point is never hot, and the worker's hot
+/// function holds most of the share. Counting the idle thread caps that share
+/// at half, since the runtime samples both threads every tick.
+pub fn assert_only_busy_threads_count(report: &Value, entry_point: &str, hot_function: &str) {
+    let functions = report["hot_functions"].as_array().expect("hot_functions");
+    let named = |prefix: &str| {
+        functions
+            .iter()
+            .find(|f| f["name"].as_str().is_some_and(|n| n.starts_with(prefix)))
+    };
+    assert!(
+        named(entry_point).is_none(),
+        "{entry_point} only runs on the idle main thread: {report}"
+    );
+    let share = named(hot_function).map_or(0.0, |f| f["percentage"].as_f64().unwrap_or(0.0));
+    assert!(share > 50.0, "{hot_function} owns the busy thread, {share}%: {report}");
+}
+
 /// The result of a memory step the direct backend completed.
 pub fn completed(step: &Value) -> &Value {
     step.get("result")

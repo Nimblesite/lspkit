@@ -24,11 +24,13 @@ use std::time::Duration;
 use lsp_profiler::wire::methods;
 use lsp_profiler::ProfilerService;
 use serde_json::{json, Value};
-use support::{call, completed, engine, service, Fixture};
+use support::{assert_only_busy_threads_count, call, completed, engine, service, Fixture};
 
 const FIXTURE: &str = "HotLeakApp";
 const FIXTURE_TYPE: &str = "HotLeakApp.LeakedPayload";
 const HOT_FUNCTION: &str = "HotLeakApp.Hot.Spin";
+/// `Program.Main`, which only ever waits on stdin.
+const ENTRY_POINT: &str = "HotLeakApp.Program.Main(";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_fixture_is_recognised_as_an_attachable_dotnet_process() {
@@ -104,6 +106,7 @@ async fn cpu_profiling_finds_the_hot_function_and_its_lines() {
             && (29..=32).contains(&l["line"].as_i64().unwrap_or(0))),
         "hot line inside Hot.Spin expected: {report}"
     );
+    assert_only_busy_threads_count(&report, ENTRY_POINT, HOT_FUNCTION);
     for key in ["speedscope_path", "flamegraph_path", "cpuprofile_path"] {
         let path = report["artifacts"][key]
             .as_str()

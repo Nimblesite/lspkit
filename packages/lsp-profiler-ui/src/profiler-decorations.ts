@@ -30,8 +30,10 @@ export interface ProfileHotLine {
 /** Per-function profiling data from the LSP server. */
 export interface ProfileHotFunction {
   name: string;
-  file: string;
-  line: number;
+  /** Source path; absent for a frame the runtime could not place, such as a framework method ([PROF-DOTNET-CPU-SYMBOLS]). */
+  file?: string;
+  /** 1-based definition line; present exactly when `file` is. */
+  line?: number;
   samples: number;
   percentage: number;
   selfPercentage: number;
@@ -227,9 +229,16 @@ function buildLineDecorations(
 }
 
 /** Build function-level heat decoration options for a single editor. */
+/** A hot function the runtime placed in source, so the heat map can paint it. */
+type LocatedHotFunction = ProfileHotFunction & { file: string; line: number };
+
+function isLocated(func: ProfileHotFunction): func is LocatedHotFunction {
+  return func.file !== undefined && func.line !== undefined;
+}
+
 function buildFuncDecorations(
   editor: vscode.TextEditor,
-  funcs: ProfileHotFunction[],
+  funcs: LocatedHotFunction[],
   ctx: { lines: ProfileHotLine[] | undefined; optionsByColor: Map<string, vscode.DecorationOptions[]> },
 ): void {
   const { lines, optionsByColor } = ctx;
@@ -268,7 +277,8 @@ export function applyProfileDecorations(result: ProfileResult): void {
 
   const keyOf = pathKeyer();
   const linesByFile = groupByFile(result.hotLines, keyOf);
-  const funcsByFile = groupByFile(result.hotFunctions, keyOf);
+  // An unlocated frame stays in the results table but paints no line.
+  const funcsByFile = groupByFile(result.hotFunctions.filter(isLocated), keyOf);
 
   const editors = vscode.window.visibleTextEditors;
   for (const editor of editors) {

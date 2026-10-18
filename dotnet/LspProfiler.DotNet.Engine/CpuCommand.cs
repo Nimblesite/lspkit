@@ -57,11 +57,7 @@ internal static class CpuCommand
 /// <summary>One EventPipe recording: a session copied to a temporary trace file.</summary>
 internal sealed class CpuSegment
 {
-    /// <summary>The runtime events dotnet-trace's cpu-sampling profile enables: loader, JIT, IL maps, stacks.</summary>
-    private const long RuntimeKeywords = 0x14C14FCCBD;
-
     private const string SampleProvider = "Microsoft-DotNETCore-SampleProfiler";
-    private const string RuntimeProvider = "Microsoft-Windows-DotNETRuntime";
 
     private readonly EventPipeSession _session;
     private readonly FileStream _file;
@@ -76,14 +72,16 @@ internal sealed class CpuSegment
         _copy = session.EventStream.CopyToAsync(_file);
     }
 
-    /// <summary>Open a segment on <paramref name="client"/>; a failure to attach propagates.</summary>
+    /// <summary>
+    /// Open a segment on <paramref name="client"/>; a failure to attach propagates. Only the sampler
+    /// is enabled: the segment's rundown names every frame. While any session enables the runtime
+    /// provider, the runtime keeps the list of types it has already logged, so a heap snapshot taken
+    /// during a CPU session that enabled it would name only the types no earlier snapshot named.
+    /// [PROF-DOTNET-CPU]
+    /// </summary>
     public static CpuSegment Start(DiagnosticsClient client, int pid)
     {
-        EventPipeProvider[] providers =
-        [
-            new(SampleProvider, EventLevel.Informational),
-            new(RuntimeProvider, EventLevel.Informational, RuntimeKeywords),
-        ];
+        EventPipeProvider[] providers = [new(SampleProvider, EventLevel.Informational)];
         var trace = Path.Combine(Path.GetTempPath(), $"lsp-profiler-dotnet-{pid}-{Guid.NewGuid():N}.nettrace");
         return new CpuSegment(client.StartEventPipeSession(providers, requestRundown: true, circularBufferMB: 256), trace);
     }

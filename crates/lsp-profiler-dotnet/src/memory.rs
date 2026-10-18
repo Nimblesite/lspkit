@@ -31,6 +31,9 @@ struct SessionState {
     snapshots: u32,
     /// Heap bytes the latest snapshot or collection reported.
     heap_bytes: Option<i64>,
+    /// The largest heap any snapshot of the session reported: the wire's
+    /// `peak_bytes`, peak since tracking began, which a collection never lowers.
+    peak_bytes: i64,
 }
 
 /// The .NET memory backend.
@@ -90,15 +93,18 @@ impl DotNetMemory {
                 "the engine answered a snapshot with another message".to_owned(),
             ));
         };
+        let mut peak_bytes = heap_bytes;
         self.remember(&context.session_id, |state| {
             state.graph = Some(graph.clone());
             state.heap_bytes = Some(heap_bytes);
+            state.peak_bytes = state.peak_bytes.max(heap_bytes).max(live_bytes);
+            peak_bytes = state.peak_bytes;
         })
         .await;
         Ok(HeapSnapshot {
             snapshot_id: String::new(),
             current_bytes: live_bytes,
-            peak_bytes: heap_bytes,
+            peak_bytes,
             object_count: live_objects,
             gc_generations: vec![],
             generation_sizes: Some(generation_sizes(generation_bytes)),

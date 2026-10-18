@@ -434,13 +434,18 @@ function flamegraphScriptRender(): string {
     const fnBody = document.getElementById('fn-body');
     for (const fn of hotFunctions) {
       const tr = document.createElement('tr');
-      tr.onclick = () => vscode.postMessage({ type: 'navigateToSource', file: fn.file, line: fn.line });
+      // A frame the runtime could not place (a framework method) has no file: it
+      // is listed by name, with no link to nowhere.
+      const placed = fn.file !== undefined;
+      if (placed) {
+        tr.onclick = () => vscode.postMessage({ type: 'navigateToSource', file: fn.file, line: fn.line });
+      }
       // fn.name/fn.file are CPython co_name/co_filename from the profiled (possibly
       // third-party) program — escape before innerHTML. This also renders synthetic
       // frames like <module>/<lambda> literally instead of as broken HTML elements.
       tr.innerHTML = [
         '<td>' + escapeHtml(fn.name) + '</td>',
-        '<td class="file-link">' + escapeHtml(basename(fn.file)) + ':' + fn.line + '</td>',
+        placed ? '<td class="file-link">' + escapeHtml(basename(fn.file)) + ':' + fn.line + '</td>' : '<td></td>',
         '<td class="pct">' + fn.percentage.toFixed(1) + '%</td>',
         '<td class="pct">' + fn.selfPercentage.toFixed(1) + '%</td>',
         '<td class="bar-cell"><div class="bar ' + heatClass(fn.percentage) + '" style="width:' + Math.max(4, fn.percentage * 2) + 'px"></div></td>',

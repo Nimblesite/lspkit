@@ -41,6 +41,13 @@ impl CpuSession {
             .as_secs_f64()
     }
 
+    /// True once a requested duration has elapsed: the session ended by itself
+    /// and only its recording remains, kept for the next `stop` ([PROF-CPU-SESSIONS]).
+    fn ended(&self) -> bool {
+        self.limit
+            .is_some_and(|limit| self.started_at.elapsed() >= limit)
+    }
+
     /// Seconds one batch represents when the backend gives no weight.
     fn weight(&self) -> f64 {
         1.0 / f64::from(u32::try_from(self.sample_rate).unwrap_or(u32::MAX).max(1))
@@ -224,7 +231,9 @@ impl CpuSessionManager {
         hotspots: &HotspotConfig,
     ) -> Option<ProfileProgress> {
         let mut sessions = self.sessions.lock().await;
-        let session = sessions.get_mut(session_id)?;
+        let session = sessions
+            .get_mut(session_id)
+            .filter(|session| !session.ended())?;
         session.drain();
         let info = session.info();
         Some(ProfileProgress {
@@ -239,11 +248,12 @@ impl CpuSessionManager {
         })
     }
 
-    /// Every active session.
+    /// Every active session; one past its duration has ended and is not listed.
     pub async fn list(&self) -> Vec<ProfileSessionInfo> {
         let mut sessions = self.sessions.lock().await;
         sessions
             .values_mut()
+            .filter(|session| !session.ended())
             .map(|session| {
                 session.drain();
                 session.info()

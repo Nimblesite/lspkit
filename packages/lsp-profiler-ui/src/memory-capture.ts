@@ -57,6 +57,7 @@ export const LSP_MEM_CMD = lspTable({
   objectsByType: "memory.objectsByType",
   gcCollect: "memory.gcCollect",
   ingest: "memory.ingest",
+  stop: "memory.stop",
 });
 
 /** tracemalloc traceback depth injected at start. */
@@ -157,6 +158,26 @@ export function isDirectMemorySession(): boolean {
 
 /** The running LSP client handle. */
 type LspClient = NonNullable<Store["client"]["value"]>;
+
+/**
+ * End the tracked session on the server ([PROF-MEMORY-SESSION]): it answers no
+ * further step and its heap graphs are deleted ([PROF-DOTNET-MEMORY] `stop`).
+ * Call it while the store still holds the session id; a failure is logged,
+ * because the UI's own tracking ends either way.
+ */
+export async function endServerSession(store: Store): Promise<void> {
+  const client = store.client.value;
+  const memorySessionId = store.profiler.value.memorySessionId;
+  if (client?.isRunning() !== true || memorySessionId === undefined) { return; }
+  try {
+    await client.sendRequest("workspace/executeCommand", {
+      command: LSP_MEM_CMD.stop,
+      arguments: [{ memory_session_id: memorySessionId }],
+    });
+  } catch (err: unknown) {
+    Logger.warn(`[Memory] ${LSP_MEM_CMD.stop} failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
 /** Everything one staged memory round-trip needs. */
 interface MemoryOperation {

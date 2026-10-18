@@ -384,6 +384,17 @@ async fn a_duration_caps_the_recorded_time() {
     )
     .await;
     tokio::time::sleep(Duration::from_secs(3)).await;
+    // [PROF-CPU-SESSIONS] the duration ended the session: it is no longer active.
+    let listed = call(&service, methods::CPU_LIST, json!({})).await;
+    assert!(
+        !listed["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .any(|session| session["session_id"] == started["session_id"]),
+        "a session past its duration is not listed as active: {listed}"
+    );
+    // Its report is kept for the next stop.
     let report = call(
         &service,
         methods::CPU_STOP,

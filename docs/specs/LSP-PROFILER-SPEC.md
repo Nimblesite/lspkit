@@ -738,7 +738,7 @@ Every member F# generates for a record, a union or a union case has only hidden 
 - a `newobj` of one of the type's constructors (records, closures, anonymous records), including a generic type's constructor reached through a member reference;
 - a call to the static `New<Case>` factory F# emits on a union. It constructs the nested `Case` class, or the union itself for a single-case union.
 
-Only methods with visible sequence points are searched, so the generated factories themselves never count. Types without a PDB, such as the framework's, have no location and appear by name only. An array (`Element[]`, `Element[,]`) is the runtime's own type, built wherever a collection grows, so it has no location whatever its element type: a `ResizeArray<Order>` keeps its `Order[]` after `Clear()`, and that array must never paint the line that builds an `Order`.
+Only methods with visible sequence points are searched, so the generated factories themselves never count. Types without a PDB, such as the framework's, have no location and appear by name only. A location is a file on this machine: a PDB names the documents it was built from, and a package's (FSharp.Core embeds one) names its build server's checkout, so a type whose sequence points all sit in documents absent here has no location either. An array (`Element[]`, `Element[,]`) is the runtime's own type, built wherever a collection grows, so it has no location whatever its element type: a `ResizeArray<Order>` keeps its `Order[]` after `Clear()`, and that array must never paint the line that builds an `Order`.
 
 ### [PROF-DOTNET-MEMORY] Memory steps
 
@@ -748,7 +748,7 @@ Only methods with visible sequence points are searched, so the generated factori
 | `snapshot` | `snapshot` | `Snapshot`; sites are live types anchored at their declaration |
 | `diff` | `snapshot` | `Compare` |
 | `references` | `refs` on the latest graph | `Refs`; an error before any snapshot |
-| `objectsByType` | `objects` on the latest graph | `Objects`; an error before any snapshot |
+| `objectsByType` | `objects` on the latest graph | `Objects`; the summary ranks the twenty largest types, then adds the requested type's own row when it is too small to rank; an error before any snapshot |
 | `gcCollect` | `gc` | `Gc`; `collected` is 1 when a collection was observed, `freed_bytes` is the drop against the last known heap size |
 | `stop` | none | `Ack`; deletes the session's graphs |
 

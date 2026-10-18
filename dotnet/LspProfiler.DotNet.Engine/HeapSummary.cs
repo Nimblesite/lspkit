@@ -32,7 +32,19 @@ internal static class HeapSummary
             matching.Count,
             matching.Sum(live.Graph.SizeOf),
             matching.Take(limit).Select(node => Describe(live, node)).ToList(),
-            Rows(Tally(live), locator, summaryTypes));
+            Summary(live, locator, matching, typeName, summaryTypes));
+    }
+
+    /// <summary>The largest types, then the requested type's own row when it is too small to rank.</summary>
+    private static List<TypeRow> Summary(LiveHeap live, SourceLocator locator, List<int> matching, string typeName, int maxTypes)
+    {
+        var rows = Rows(Tally(live), locator, maxTypes);
+        if (matching.Count == 0 || rows.Exists(row => string.Equals(row.TypeName, typeName, StringComparison.Ordinal)))
+        {
+            return rows;
+        }
+        var type = live.Graph.TypeOf(matching[0]);
+        return [.. rows, Row(type, new TypeTally(matching.Count, matching.Sum(live.Graph.SizeOf)), locator.Locate(type))];
     }
 
     public static string Id(HeapGraph graph, int node) => $"0x{graph.AddressOf(node):x}";

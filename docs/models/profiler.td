@@ -642,7 +642,7 @@ type ObjectList {
   total_bytes: Int
   # Largest objects of the type.
   objects: List<ObjectSample>
-  # Largest types overall.
+  # Largest types overall, then the requested type's own row when it is too small to rank.
   type_summary: List<TypeStat>
 }
 

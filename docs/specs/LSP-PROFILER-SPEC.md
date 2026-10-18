@@ -738,7 +738,7 @@ Every member F# generates for a record, a union or a union case has only hidden 
 - a `newobj` of one of the type's constructors (records, closures, anonymous records), including a generic type's constructor reached through a member reference;
 - a call to the static `New<Case>` factory F# emits on a union. It constructs the nested `Case` class, or the union itself for a single-case union.
 
-Only methods with visible sequence points are searched, so the generated factories themselves never count. Types without a PDB, such as the framework's, have no location and appear by name only.
+Only methods with visible sequence points are searched, so the generated factories themselves never count. Types without a PDB, such as the framework's, have no location and appear by name only. An array (`Element[]`, `Element[,]`) is the runtime's own type, built wherever a collection grows, so it has no location whatever its element type: a `ResizeArray<Order>` keeps its `Order[]` after `Clear()`, and that array must never paint the line that builds an `Order`.
 
 ### [PROF-DOTNET-MEMORY] Memory steps
 

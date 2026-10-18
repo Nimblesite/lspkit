@@ -1,7 +1,8 @@
 // Command dispatch for the .NET profiling engine. Implements [PROF-DOTNET-ENGINE].
 //
 //   cpu      --pid N [--native]                  sample until a line (or EOF) arrives on stdin
-//   snapshot --pid N --graph PATH [--max-types K] capture the live heap graph and summarise it
+//   snapshot --pid N --graph PATH [--max-types K] [--buffer-mb M]
+//                                                 capture the live heap graph and summarise it
 //   analyze  --graph PATH [--max-types K]         summarise a kept heap graph
 //   refs     --graph PATH --type T [--max-depth D] [--max-nodes N]
 //   objects  --graph PATH --type T [--limit L]
@@ -30,7 +31,7 @@ namespace LspProfiler.DotNet.Engine
         private static int Dispatch(Options options) => options.Command switch
         {
             "cpu" => CpuCommand.Run(options.Int("pid"), options.Flag("native")),
-            "snapshot" => HeapCommands.Snapshot(options.Int("pid"), options.Text("graph"), options.Int("max-types", 50)),
+            "snapshot" => HeapCommands.Snapshot(options.Int("pid"), options.Text("graph"), options.Int("max-types", 50), options.Int("buffer-mb", HeapCapture.DefaultBufferMB)),
             "analyze" => HeapCommands.Analyze(options.Text("graph"), options.Int("max-types", 50)),
             "refs" => HeapCommands.References(options.Text("graph"), options.Text("type"), options.Int("max-depth", 8), options.Int("max-nodes", 200)),
             "objects" => HeapCommands.ObjectsOfType(options.Text("graph"), options.Text("type"), options.Int("limit", 50)),

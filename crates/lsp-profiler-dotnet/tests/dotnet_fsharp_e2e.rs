@@ -158,7 +158,7 @@ async fn a_pdb_naming_a_build_servers_paths_locates_nothing() {
     let mut fixture = Fixture::start(FIXTURE);
     // Orders hold an F# list, quotes a Set: FSharp.Core objects the program retains.
     let grown = fixture.send("grow 40");
-    assert!(grown.starts_with("OK 40 orders=40"), "{grown}");
+    assert!(grown.contains(" orders=40 "), "{grown}");
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let started = call(

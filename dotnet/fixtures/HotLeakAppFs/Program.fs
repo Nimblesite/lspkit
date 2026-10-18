@@ -84,6 +84,13 @@ module Shapes =
     /// Appends `count` orders, one never-removed subscription closure each and one
     /// cached quote each; the first call also builds a two-node reference cycle.
     let grow count =
+        if cycles.Count = 0 then
+            let first = { Label = "first"; Next = None }
+            let second = { Label = "second"; Next = Some first }
+            first.Next <- Some second
+            cycles.Add first
+            cycles.Add second
+
         for _ in 1..count do
             let created = makeOrder orders.Count
             orders.Add created
@@ -92,13 +99,7 @@ module Shapes =
             subscribed <- subscribed + 1
             let quoted = makeQuote(sprintf "SKU-Q%06d" orders.Count)
             cache.[quoted.Sku] <- quoted
-
-        if cycles.Count = 0 then
-            let first = { Label = "first"; Next = None }
-            let second = { Label = "second"; Next = Some first }
-            first.Next <- Some second
-            cycles.Add first
-            cycles.Add second
+            cycles.Add { Label = quoted.Sku; Next = None }
 
     /// Retains one 1 MiB array per megabyte.
     let retain mebibytes =
@@ -126,21 +127,23 @@ module Shapes =
 
 module Program =
     let mutable private working = true
-
-    /// The one gate: the workload thread and every command mutate the same modules,
-    /// so a command never observes (or races) a half-finished growth step.
-    let private gate = obj ()
+    let mutable private busy = false
 
     let private work (stop: CancellationToken) () =
         let mutable sink = 0.0
 
         while not stop.IsCancellationRequested do
             if Volatile.Read(&working) then
-                lock gate (fun () ->
-                    sink <- sink + Hot.spin 200_000
-                    LeakCache.grow 50)
+                Volatile.Write(&busy, true)
+                sink <- sink + Hot.spin 200_000
+                LeakCache.grow 50
+                Volatile.Write(&busy, false)
             else
-                Thread.Sleep 20
+                // Idle must still allocate: the runtime only performs the snapshot's
+                // induced collection when it is running managed code.
+                sink <- sink + Hot.spin 200_000
+                GC.KeepAlive(Array.zeroCreate<byte> 4_096)
+                Thread.Sleep 5
 
         GC.KeepAlive sink
 
@@ -150,20 +153,20 @@ module Program =
         stdout.WriteLine line
         stdout.Flush()
 
-    let private positive (text: string) (action: int -> unit) =
+    let private positive (name: string) (text: string) (action: int -> unit) =
         match Int32.TryParse text with
         | true, count when count > 0 ->
             action count
-            sprintf "OK %s %s" text (describe ())
-        | _ -> sprintf "ERR count %s" text
+            sprintf "OK %s %s %s" name text (describe ())
+        | _ -> sprintf "ERR %s %s" name text
 
     let private apply (line: string) : string =
         match
             line.Split([| ' ' |], StringSplitOptions.RemoveEmptyEntries) |> List.ofArray
         with
-        | [ "grow"; count ] -> positive count Shapes.grow
-        | [ "payload"; count ] -> positive count LeakCache.grow
-        | [ "blob"; count ] -> positive count Shapes.retain
+        | [ "grow"; count ] -> positive "grow" count Shapes.grow
+        | [ "payload"; count ] -> positive "payload" count LeakCache.grow
+        | [ "blob"; count ] -> positive "blob" count Shapes.retain
         | [ "release"; "all" ] ->
             Shapes.release ()
             sprintf "OK release all %s" (describe ())
@@ -172,11 +175,13 @@ module Program =
             sprintf "OK work on %s" (describe ())
         | [ "work"; "off" ] ->
             Volatile.Write(&working, false)
+            while Volatile.Read(&busy) do
+                Thread.Sleep 1
             sprintf "OK work off %s" (describe ())
         | [ "stats" ] -> sprintf "OK stats %s" (describe ())
         | _ -> sprintf "ERR unknown %s" line
 
-    let private handle (line: string) : string = lock gate (fun () -> apply line)
+    let private handle (line: string) : string = apply line
 
     [<EntryPoint>]
     let main _ =

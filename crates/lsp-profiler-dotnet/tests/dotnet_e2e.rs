@@ -24,11 +24,13 @@ use std::time::Duration;
 use lsp_profiler::wire::methods;
 use lsp_profiler::ProfilerService;
 use serde_json::{json, Value};
-use support::{call, completed, engine, service, Fixture};
+use support::{assert_only_busy_threads_count, call, completed, engine, service, Fixture};
 
 const FIXTURE: &str = "HotLeakApp";
 const FIXTURE_TYPE: &str = "HotLeakApp.LeakedPayload";
 const HOT_FUNCTION: &str = "HotLeakApp.Hot.Spin";
+/// `Program.Main`, which only ever waits on stdin.
+const ENTRY_POINT: &str = "HotLeakApp.Program.Main(";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_fixture_is_recognised_as_an_attachable_dotnet_process() {
@@ -104,6 +106,7 @@ async fn cpu_profiling_finds_the_hot_function_and_its_lines() {
             && (29..=32).contains(&l["line"].as_i64().unwrap_or(0))),
         "hot line inside Hot.Spin expected: {report}"
     );
+    assert_only_busy_threads_count(&report, ENTRY_POINT, HOT_FUNCTION);
     for key in ["speedscope_path", "flamegraph_path", "cpuprofile_path"] {
         let path = report["artifacts"][key]
             .as_str()
@@ -254,6 +257,58 @@ async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() 
     assert_eq!(
         error_code(&service, methods::MEMORY_START, own).await,
         -32002
+    );
+    service.shutdown().await;
+}
+
+/// `cpu.start` resolves the runtime before anything else ([PROF-CPU-START]
+/// step 1): naming a runtime that cannot profile the PID is
+/// `UNSUPPORTED_RUNTIME` even while the PID has a CPU session, and only a
+/// start that could attach is `ALREADY_PROFILING`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_named_runtime_is_resolved_before_the_pid_is_found_busy() {
+    let fixture = Fixture::start(FIXTURE);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let service = service(dir.path().to_path_buf());
+    let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
+    let named = json!({ "pid": fixture.pid, "runtime": "python" });
+    assert_eq!(
+        error_code(&service, methods::CPU_START, named).await,
+        -32002
+    );
+    let again = json!({ "pid": fixture.pid });
+    assert_eq!(
+        error_code(&service, methods::CPU_START, again).await,
+        -32004
+    );
+    let _ = call(
+        &service,
+        methods::CPU_STOP,
+        json!({ "session_id": started["session_id"] }),
+    )
+    .await;
+    service.shutdown().await;
+}
+
+/// A memory step on a program that has exited is `PROCESS_NOT_FOUND`, the
+/// engine's classified cause, never a bare `OTHER` ([PROF-ERRORS]).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_memory_step_on_an_exited_program_is_process_not_found() {
+    let mut fixture = Fixture::start(FIXTURE);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let service = service(dir.path().to_path_buf());
+    let started = call(
+        &service,
+        methods::MEMORY_START,
+        json!({ "pid": fixture.pid }),
+    )
+    .await;
+    let session = json!({ "memory_session_id": started["memory_session_id"] });
+    let _ = fixture.child.kill();
+    let _ = fixture.child.wait();
+    assert_eq!(
+        error_code(&service, methods::MEMORY_SNAPSHOT, session).await,
+        -32001
     );
     service.shutdown().await;
 }

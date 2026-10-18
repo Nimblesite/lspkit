@@ -364,7 +364,7 @@ type ProfileReport {
   duration_secs: Float
   # Sampling ticks taken.
   total_samples: Int
-  # Thread samples that survived runtime filtering (user code).
+  # Ticks in which a thread sample survived runtime filtering (user code): every share's denominator.
   user_samples: Int
   # Samples per second.
   sample_rate: Int

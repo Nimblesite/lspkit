@@ -253,8 +253,8 @@ impl ProfilerService {
             },
         )
         .map_err(ProfilerError::InvalidParams)?;
-        self.inner.cpu.ensure_free(pid).await?;
         let runtime = self.cpu_runtime(request.runtime.as_deref(), pid).await?;
+        self.inner.cpu.ensure_free(pid).await?;
         let sampler = self.attach(runtime.as_ref(), &config).await?;
         let started = self
             .inner

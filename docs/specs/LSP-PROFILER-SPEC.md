@@ -315,7 +315,7 @@ It also holds the total and per-thread tick counts, deduplicated frames, thread 
 
 ### [PROF-AGGREGATION-LOGIC] Logic
 
-Each tick adds one to `total_samples`. A retained thread stack increments each distinct line and function at most once per tick, so recursion never pushes a share past 100%. The leaf increments self time. Idle threads count only when `include_idle` is set. Weights come from `weight_secs`, otherwise from `1 / sample_rate`.
+Each tick adds one to `total_samples`. A retained thread stack increments each distinct line and function at most once per tick, across every thread's stack, so neither recursion nor a frame every thread shares (a runtime's thread entry point) pushes a share past 100%. The leaf increments self time, also once per tick. Shares are of the ticks that retained at least one stack, reported as `user_samples`. Idle threads count only when `include_idle` is set. Weights come from `weight_secs`, otherwise from `1 / sample_rate`.
 
 ### [PROF-AGGREGATION-SCAFFOLD] Runtime filtering
 
@@ -738,7 +738,7 @@ Every member F# generates for a record, a union or a union case has only hidden 
 - a `newobj` of one of the type's constructors (records, closures, anonymous records), including a generic type's constructor reached through a member reference;
 - a call to the static `New<Case>` factory F# emits on a union. It constructs the nested `Case` class, or the union itself for a single-case union.
 
-Only methods with visible sequence points are searched, so the generated factories themselves never count. Types without a PDB, such as the framework's, have no location and appear by name only.
+Only methods with visible sequence points are searched, so the generated factories themselves never count. Types without a PDB, such as the framework's, have no location and appear by name only. An array (`Element[]`, `Element[,]`) is the runtime's own type, built wherever a collection grows, so it has no location whatever its element type: a `ResizeArray<Order>` keeps its `Order[]` after `Clear()`, and that array must never paint the line that builds an `Order`.
 
 ### [PROF-DOTNET-MEMORY] Memory steps
 

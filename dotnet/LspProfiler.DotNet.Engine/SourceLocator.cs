@@ -5,7 +5,9 @@
 // memory finding about the type. A type with no visible point of its own, such
 // as an F# record or union, anchors where the assembly's code constructs it
 // (ConstructionSites). Types from assemblies without a PDB (the framework) have
-// no location and are reported by name alone.
+// no location and are reported by name alone. Neither has an array: `Order[]`
+// is the runtime's type, grown wherever a collection resizes, so anchoring it at
+// Order's line would paint that line long after the last Order died.
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -23,7 +25,9 @@ internal sealed class SourceLocator : IDisposable
         {
             return known;
         }
-        var located = type.Module is { } path && File.Exists(path) ? Module(path)?.Locate(TypeNames.Definition(type.Name)) : null;
+        var located = type.Module is { } path && File.Exists(path) && !TypeNames.IsArray(type.Name)
+            ? Module(path)?.Locate(TypeNames.Definition(type.Name))
+            : null;
         _located[type] = located;
         return located;
     }
@@ -138,6 +142,13 @@ internal static class TypeNames
         var bracket = runtimeName.IndexOf('[', StringComparison.Ordinal);
         var bare = bracket < 0 ? runtimeName : runtimeName[..bracket];
         return bare.Split('+');
+    }
+
+    /// <summary>An array, `Element[]` or `Element[,]`: its last bracket holds only commas, never a type argument.</summary>
+    public static bool IsArray(string runtimeName)
+    {
+        var open = runtimeName.LastIndexOf('[');
+        return open >= 0 && runtimeName.EndsWith(']') && !runtimeName.AsSpan(open + 1, runtimeName.Length - open - 2).ContainsAnyExcept(',');
     }
 
     public static (string Namespace, string Name) Split(string qualified)

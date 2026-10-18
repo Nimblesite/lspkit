@@ -23,13 +23,15 @@ use std::time::Duration;
 
 use lsp_profiler::wire::methods;
 use serde_json::{json, Value};
-use support::{call, completed, service, Fixture};
+use support::{assert_only_busy_threads_count, call, completed, service, Fixture};
 
 const FIXTURE: &str = "HotLeakAppFs";
 const RECORD_TYPE: &str = "HotLeakAppFs.LeakedPayload";
 const UNION_CASE_TYPE: &str = "HotLeakAppFs.PayloadKind+Small";
 const GENERIC_RECORD_TYPE: &str = "HotLeakAppFs.Tagged`1[System.Int32]";
 const HOT_FUNCTION: &str = "HotLeakAppFs.Hot.spin";
+/// `Program.main`, which only ever waits on stdin.
+const ENTRY_POINT: &str = "HotLeakAppFs.Program.main(";
 /// `items.Add { Data = …; Label = …; Kind = kind }` in `LeakCache.grow`.
 const RECORD_CONSTRUCTED_AT: i64 = 23;
 /// `let kind = Small items.Count` in `LeakCache.grow`.
@@ -89,6 +91,7 @@ async fn cpu_profiling_finds_the_fsharp_hot_function_and_its_lines() {
             .any(|l| in_program_fs(l) && (26..=31).contains(&l["line"].as_i64().unwrap_or(0))),
         "hot line inside Hot.spin expected: {report}"
     );
+    assert_only_busy_threads_count(&report, ENTRY_POINT, HOT_FUNCTION);
     service.shutdown().await;
 }
 

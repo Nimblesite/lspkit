@@ -16,15 +16,17 @@ internal static class RetentionGraph
         var targets = live.Parents.Keys
             .Where(node => string.Equals(live.Graph.TypeOf(node).Name, typeName, StringComparison.Ordinal))
             .OrderByDescending(live.Graph.SizeOf)
-            .Take(Math.Max(1, maxNodes / TargetShare));
-        foreach (var target in targets)
+            .ToList();
+        var shown = Math.Max(1, maxNodes / TargetShare);
+        foreach (var target in targets.Take(shown))
         {
             if (!builder.AddTarget(target))
             {
                 break;
             }
         }
-        return builder.Finish();
+        // Instances past the targets' share are left out: the budget cut the walk short.
+        return builder.Finish(omittedTargets: targets.Count > shown);
     }
 
     private sealed class Builder(LiveHeap live, int maxDepth, int maxNodes)
@@ -54,7 +56,8 @@ internal static class RetentionGraph
             return true;
         }
 
-        public Refs Finish() => new("refs", [.. _nodes.Values], _edges, _truncated);
+        public Refs Finish(bool omittedTargets) =>
+            new("refs", [.. _nodes.Values], _edges, _truncated || omittedTargets);
 
         private bool Connect(int holder, int held, int depth)
         {

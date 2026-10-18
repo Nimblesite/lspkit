@@ -68,37 +68,118 @@ export interface MemoryDiffResult {
   suspectedLeaks: SuspectedLeak[];
 }
 
-// ── Applied-decoration ledger ─────────────────────────────────────────────
+// ── Layers ────────────────────────────────────────────────────────────────
 // Implements [PROF-UI-HEATMAP] (memory track) observability — same e2e
 // seam as the CPU heat map, since `setDecorations` is write-only.
 
-let appliedMemDecorations: AppliedDecoration[] = [];
+/** One line to paint: where, in which colour, saying what. */
+interface PaintedLine {
+  file: string;
+  line: number;
+  color: string;
+  text: string;
+}
+
+/**
+ * One layer of the memory track, with its own decoration types and its own
+ * ledger. The allocation track and the leak badges are separate layers: a diff
+ * replaces the last diff's badges and never touches the allocations, even where
+ * a badge and an allocation share a colour.
+ */
+class MemoryLayer {
+  private readonly types = new Map<string, vscode.TextEditorDecorationType>();
+  private applied: AppliedDecoration[] = [];
+
+  get decorations(): readonly AppliedDecoration[] { return this.applied; }
+
+  /** Replace this layer's paint with `lines`, on every visible editor. */
+  paint(lines: readonly PaintedLine[]): void {
+    this.clear();
+    // Keyed, not compared raw: tracemalloc reports the interpreter's own
+    // filename and the editor reports what VS Code resolved. On win32 those
+    // differ in drive-letter case and 8.3 short components, so a raw compare
+    // matches nothing and the memory track silently paints nothing at all
+    // ([PROF-TESTING]).
+    const keyOf = pathKeyer();
+    const byFile = new Map<string, PaintedLine[]>();
+    for (const line of lines) {
+      const key = keyOf(line.file);
+      byFile.set(key, [...(byFile.get(key) ?? []), line]);
+    }
+    for (const editor of vscode.window.visibleTextEditors) {
+      const painted = byFile.get(keyOf(editor.document.uri.fsPath));
+      if (painted !== undefined) { this.paintEditor(editor, painted); }
+    }
+  }
+
+  clear(): void {
+    for (const decorationType of this.types.values()) {
+      for (const editor of vscode.window.visibleTextEditors) {
+        editor.setDecorations(decorationType, []);
+      }
+    }
+    this.applied = [];
+  }
+
+  dispose(): void {
+    for (const decorationType of this.types.values()) {
+      decorationType.dispose();
+    }
+    this.types.clear();
+    this.applied = [];
+  }
+
+  private paintEditor(editor: vscode.TextEditor, lines: readonly PaintedLine[]): void {
+    const optionsByColor = new Map<string, vscode.DecorationOptions[]>();
+    for (const line of lines) {
+      const option = lineOption(editor.document, line);
+      if (option !== undefined) {
+        optionsByColor.set(line.color, [...(optionsByColor.get(line.color) ?? []), option]);
+      }
+    }
+    for (const [color, options] of optionsByColor) {
+      editor.setDecorations(this.typeFor(color), options);
+    }
+    recordApplied(this.applied, editor.document.uri.fsPath, optionsByColor);
+  }
+
+  private typeFor(color: string): vscode.TextEditorDecorationType {
+    const existing = this.types.get(color);
+    if (existing !== undefined) { return existing; }
+    const created = vscode.window.createTextEditorDecorationType({
+      overviewRulerColor: color,
+      overviewRulerLane: vscode.OverviewRulerLane.Right,
+      isWholeLine: false,
+      after: {
+        margin: "0 0 0 2em",
+        fontStyle: "normal",
+        fontWeight: "500",
+      },
+    });
+    this.types.set(color, created);
+    return created;
+  }
+}
+
+/** The whole-line decoration for `line`, or nothing when the document has no such line. */
+function lineOption(document: vscode.TextDocument, line: PaintedLine): vscode.DecorationOptions | undefined {
+  const lineIdx = line.line - 1;
+  if (lineIdx < 0 || lineIdx >= document.lineCount) { return undefined; }
+  return {
+    range: new vscode.Range(
+      new vscode.Position(lineIdx, 0),
+      new vscode.Position(lineIdx, document.lineAt(lineIdx).text.length),
+    ),
+    renderOptions: { after: { contentText: line.text, color: line.color } },
+  };
+}
+
+const allocationLayer = new MemoryLayer();
+const leakLayer = new MemoryLayer();
 
 /** The memory/leak decorations currently applied across visible editors. */
 export function appliedMemoryDecorations(): readonly AppliedDecoration[] {
-  return appliedMemDecorations;
-}
-
-// ── Decoration types ──────────────────────────────────────────────────────
-
-const memDecorationTypes = new Map<string, vscode.TextEditorDecorationType>();
-
-function getMemDecorationTypeForColor(color: string): vscode.TextEditorDecorationType {
-  let existing = memDecorationTypes.get(color);
-  if (existing !== undefined) { return existing; }
-
-  existing = vscode.window.createTextEditorDecorationType({
-    overviewRulerColor: color,
-    overviewRulerLane: vscode.OverviewRulerLane.Right,
-    isWholeLine: false,
-    after: {
-      margin: "0 0 0 2em",
-      fontStyle: "normal",
-      fontWeight: "500",
-    },
-  });
-  memDecorationTypes.set(color, existing);
-  return existing;
+  return [...allocationLayer.decorations, ...leakLayer.decorations];
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────
@@ -151,141 +232,37 @@ function confidenceBadge(confidence: LeakConfidence): string {
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-/** Apply memory allocation decorations to visible editors. */
+/** Apply memory allocation decorations to visible editors; a new snapshot drops the last diff's badges. */
 export function applyMemoryDecorations(result: MemorySnapshotResult): void {
-  clearMemoryDecorations();
-
-  // Keyed, not compared raw: tracemalloc reports the interpreter's own
-  // filename and the editor reports what VS Code resolved. On win32 those
-  // differ in drive-letter case and 8.3 short components, so a raw compare
-  // matches nothing and the memory track silently paints nothing at all
-  // ([PROF-TESTING]).
-  const keyOf = pathKeyer();
-  const allocsByFile = new Map<string, MemoryAllocation[]>();
-  for (const alloc of result.topAllocations) {
-    const key = keyOf(alloc.file);
-    const existing = allocsByFile.get(key);
-    if (existing !== undefined) {
-      existing.push(alloc);
-    } else {
-      allocsByFile.set(key, [alloc]);
-    }
-  }
-
-  for (const editor of vscode.window.visibleTextEditors) {
-    const filePath = editor.document.uri.fsPath;
-    const allocs = allocsByFile.get(keyOf(filePath));
-    if (allocs === undefined) { continue; }
-
-    const optionsByColor = new Map<string, vscode.DecorationOptions[]>();
-
-    for (const alloc of allocs) {
-      const color = memColor(alloc.size);
-      const text = ` \u2588\u2588\u2588\u2588 ${formatBytes(alloc.size)} allocated (${alloc.count} objects)`;
-      const lineIdx = alloc.line - 1;
-      if (lineIdx < 0 || lineIdx >= editor.document.lineCount) { continue; }
-
-      const range = new vscode.Range(
-        new vscode.Position(lineIdx, 0),
-        new vscode.Position(lineIdx, editor.document.lineAt(lineIdx).text.length),
-      );
-
-      const option: vscode.DecorationOptions = {
-        range,
-        renderOptions: { after: { contentText: text, color } },
-      };
-
-      const existing = optionsByColor.get(color);
-      if (existing !== undefined) {
-        existing.push(option);
-      } else {
-        optionsByColor.set(color, [option]);
-      }
-    }
-
-    for (const [color, options] of optionsByColor) {
-      editor.setDecorations(getMemDecorationTypeForColor(color), options);
-    }
-    recordApplied(appliedMemDecorations, filePath, optionsByColor);
-  }
-
+  leakLayer.clear();
+  allocationLayer.paint(result.topAllocations.map((alloc) => ({
+    file: alloc.file,
+    line: alloc.line,
+    color: memColor(alloc.size),
+    text: ` \u2588\u2588\u2588\u2588 ${formatBytes(alloc.size)} allocated (${alloc.count} objects)`,
+  })));
   Logger.info(`Memory decorations applied: ${result.topAllocations.length} allocations`);
 }
 
-/** Apply leak indicator decorations with confidence badges to visible editors. */
+/** Apply leak indicator decorations with confidence badges, replacing the last diff's. */
 export function applyLeakDecorations(result: MemoryDiffResult): void {
-  // Keyed for the same reason as the allocation track above — a raw compare
-  // never matches on win32 ([PROF-TESTING]).
-  const keyOf = pathKeyer();
-  const leaksByFile = new Map<string, SuspectedLeak[]>();
-  for (const leak of result.suspectedLeaks) {
-    const key = keyOf(leak.file);
-    const existing = leaksByFile.get(key);
-    if (existing !== undefined) {
-      existing.push(leak);
-    } else {
-      leaksByFile.set(key, [leak]);
-    }
-  }
-
-  for (const editor of vscode.window.visibleTextEditors) {
-    const filePath = editor.document.uri.fsPath;
-    const leaks = leaksByFile.get(keyOf(filePath));
-    if (leaks === undefined) { continue; }
-
-    const optionsByColor = new Map<string, vscode.DecorationOptions[]>();
-
-    for (const leak of leaks) {
-      const color = leakColor(leak.confidence);
-      const badge = confidenceBadge(leak.confidence);
-      const growth = formatBytes(Math.abs(leak.sizeGrowth));
-      const text = ` ${badge} +${growth} leak (${leak.countGrowth} objects)`;
-
-      const lineIdx = leak.line - 1;
-      if (lineIdx < 0 || lineIdx >= editor.document.lineCount) { continue; }
-
-      const range = new vscode.Range(
-        new vscode.Position(lineIdx, 0),
-        new vscode.Position(lineIdx, editor.document.lineAt(lineIdx).text.length),
-      );
-
-      const option: vscode.DecorationOptions = {
-        range,
-        renderOptions: { after: { contentText: text, color } },
-      };
-
-      const existing = optionsByColor.get(color);
-      if (existing !== undefined) {
-        existing.push(option);
-      } else {
-        optionsByColor.set(color, [option]);
-      }
-    }
-
-    for (const [color, options] of optionsByColor) {
-      editor.setDecorations(getMemDecorationTypeForColor(color), options);
-    }
-    recordApplied(appliedMemDecorations, filePath, optionsByColor);
-  }
-
+  leakLayer.paint(result.suspectedLeaks.map((leak) => ({
+    file: leak.file,
+    line: leak.line,
+    color: leakColor(leak.confidence),
+    text: ` ${confidenceBadge(leak.confidence)} +${formatBytes(Math.abs(leak.sizeGrowth))} leak (${leak.countGrowth} objects)`,
+  })));
   Logger.info(`Leak decorations applied: ${result.suspectedLeaks.length} suspected leaks`);
 }
 
 /** Clear all memory decorations from visible editors. */
 export function clearMemoryDecorations(): void {
-  for (const decorationType of memDecorationTypes.values()) {
-    for (const editor of vscode.window.visibleTextEditors) {
-      editor.setDecorations(decorationType, []);
-    }
-  }
-  appliedMemDecorations = [];
+  allocationLayer.clear();
+  leakLayer.clear();
 }
 
 /** Dispose all memory decoration types. */
 export function disposeMemoryDecorations(): void {
-  for (const decorationType of memDecorationTypes.values()) {
-    decorationType.dispose();
-  }
-  memDecorationTypes.clear();
-  appliedMemDecorations = [];
+  allocationLayer.dispose();
+  leakLayer.dispose();
 }

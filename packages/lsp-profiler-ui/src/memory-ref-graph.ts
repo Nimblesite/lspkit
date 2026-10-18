@@ -2,9 +2,10 @@
 /**
  * Reference-graph webview for memory profiling.
  *
- * Renders the force-directed object-retention graph (`gc.get_referrers()` walk
- * parsed by the LSP) in a Canvas 2D webview. Extracted from `memory-profiler.ts`
- * so that module stays focused on command routing and the courier round-trip.
+ * Renders the object-retention graph in a Canvas 2D webview, layered by each
+ * object's distance from the targets: GC roots on top, named by their labels.
+ * Extracted from `memory-profiler.ts` so that module stays focused on command
+ * routing and the courier round-trip.
  *
  * Panel lifecycle, CSP, and safe data embedding come from the shared webview
  * host ([PROF-UI-WEBVIEW], profiler-webview.ts) — node `repr`/type strings
@@ -55,6 +56,9 @@ interface RefGraphNode {
   repr: string;
   depth: number;
   isTarget: boolean;
+  /** A garbage-collection root; `repr` is then its root label, such as `static sessions`. */
+  isRoot?: boolean;
+  rootKind?: string | undefined;
 }
 
 interface RefGraphEdge {
@@ -82,6 +86,8 @@ export function decodeRefGraph(value: unknown): ReferenceGraphResult["graph"] {
       repr: stringField(node, "repr") ?? "",
       depth: numberField(node, "depth") ?? 0,
       isTarget: booleanField(node, "isTarget") ?? false,
+      isRoot: booleanField(node, "isRoot") ?? false,
+      rootKind: stringField(node, "rootKind"),
     })),
     edges: recordArrayField(value, "edges").map((edge) => ({
       from: numberField(edge, "from") ?? 0,
@@ -177,56 +183,31 @@ function buildRefGraphScriptInit(nodesJson: string, edgesJson: string, cyclesJso
       const ctx = canvas.getContext('2d');
       // Fill the panel width so the graph is not letterboxed into 800px.
       const W = canvas.width = Math.max(800, canvas.parentElement ? canvas.clientWidth : 800);
-      const H = canvas.height;
+      // Layers by distance from the targets: roots on top, targets along the bottom.
+      const LAYER = 120;
+      const top = Math.max(...nodes.map((n) => n.depth));
+      const H = canvas.height = Math.max(360, (top + 1) * LAYER + 40);
       const cycleNodeIds = new Set(cycles.flat());
+      const layers = new Map();
+      nodes.forEach((n) => layers.set(n.depth, [...(layers.get(n.depth) || []), n]));
       const nodeMap = new Map();
-      nodes.forEach((n, i) => {
-        nodeMap.set(n.id, {
+      for (const [depth, members] of layers) {
+        const gap = W / (members.length + 1);
+        // A row too tight to label each node names its type once, with a count.
+        const crowded = gap < 160;
+        members.forEach((n, i) => nodeMap.set(n.id, {
           ...n,
-          x: W / 2 + (Math.random() - 0.5) * W * 0.6,
-          y: H / 2 + (Math.random() - 0.5) * H * 0.6,
-          vx: 0, vy: 0,
-          radius: Math.max(8, Math.min(30, Math.log2(Math.max(n.size, 1)) * 2)),
-        });
-      });
-      for (let iter = 0; iter < 60; iter++) {
-        const alpha = 0.3 * (1 - iter / 60);
-        const nodeList = Array.from(nodeMap.values());
-        for (let i = 0; i < nodeList.length; i++) {
-          for (let j = i + 1; j < nodeList.length; j++) {
-            const a = nodeList[i], b = nodeList[j];
-            let dx = b.x - a.x, dy = b.y - a.y;
-            const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-            const force = 2000 / (dist * dist);
-            dx = (dx / dist) * force * alpha;
-            dy = (dy / dist) * force * alpha;
-            a.x -= dx; a.y -= dy;
-            b.x += dx; b.y += dy;
-          }
-        }
-        for (const edge of edges) {
-          const a = nodeMap.get(edge.from), b = nodeMap.get(edge.to);
-          if (!a || !b) continue;
-          let dx = b.x - a.x, dy = b.y - a.y;
-          const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-          const force = (dist - 80) * 0.01 * alpha;
-          dx = (dx / dist) * force;
-          dy = (dy / dist) * force;
-          a.x += dx; a.y += dy;
-          b.x -= dx; b.y -= dy;
-        }
-        for (const n of nodeList) {
-          n.x = Math.max(40, Math.min(W - 40, n.x));
-          n.y = Math.max(40, Math.min(H - 40, n.y));
-        }
+          x: gap * (i + 1),
+          y: 60 + (top - depth) * LAYER,
+          crowded,
+          radius: Math.min(crowded ? gap / 2.5 : 30, Math.max(8, Math.log2(Math.max(n.size, 1)) * 2)),
+        }));
       }`;
 }
 
 function buildRefGraphScriptDraw(): string {
   return `
       const edgeColor = 'rgba(136, 146, 164, 0.3)';
-      ctx.strokeStyle = edgeColor;
-      ctx.lineWidth = 1;
       for (const edge of edges) {
         const a = nodeMap.get(edge.from), b = nodeMap.get(edge.to);
         if (!a || !b) continue;
@@ -237,35 +218,52 @@ function buildRefGraphScriptDraw(): string {
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
-        if (edge.label) {
-          const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        if (edge.label && !b.crowded) {
           ctx.fillStyle = cssVar('--prof-text-secondary');
           ctx.font = '9px monospace';
-          ctx.fillText(edge.label, mx + 4, my - 4);
+          ctx.textAlign = 'left';
+          ctx.fillText(edge.label, (a.x + b.x) / 2 + 4, (a.y + b.y) / 2 - 4);
         }
       }
+      ${buildRefGraphScriptNodes()}
+    }`;
+}
+
+/** Nodes: targets, roots and cycles in their own colours; a root named by its label above its type. */
+function buildRefGraphScriptNodes(): string {
+  return `
       for (const n of nodeMap.values()) {
-        const isCycle = cycleNodeIds.has(n.id);
-        const color = n.isTarget ? '#c084fc'
-          : isCycle ? '#f87171'
-          : n.depth <= 1 ? '#60a5fa'
-          : '#8892a4';
+        const color = n.isTarget ? '#c084fc' : n.isRoot ? '#60a5fa' : cycleNodeIds.has(n.id) ? '#f87171' : '#8892a4';
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
         ctx.fillStyle = color + '33';
         ctx.fill();
         ctx.strokeStyle = color;
-        ctx.lineWidth = n.isTarget ? 3 : 1.5;
+        ctx.lineWidth = n.isTarget || n.isRoot ? 3 : 1.5;
         ctx.stroke();
+        ctx.textAlign = 'center';
+        if (n.isRoot) {
+          ctx.fillStyle = color;
+          ctx.font = 'bold 13px monospace';
+          ctx.fillText(n.repr, n.x, n.y - n.radius - 10);
+        }
+        if (n.crowded) continue;
         ctx.fillStyle = cssVar('--prof-text');
         ctx.font = '10px monospace';
-        ctx.textAlign = 'center';
         ctx.fillText(n.type, n.x, n.y + n.radius + 14);
         ctx.fillStyle = cssVar('--prof-text-secondary');
         ctx.font = '9px monospace';
         ctx.fillText(formatBytes(n.size), n.x, n.y + n.radius + 26);
       }
-    }`;
+      for (const [depth, members] of layers) {
+        const first = nodeMap.get(members[0].id);
+        if (!first.crowded) continue;
+        const types = new Set(members.map((n) => n.type));
+        ctx.fillStyle = cssVar('--prof-text');
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(members.length + ' × ' + (types.size === 1 ? members[0].type : 'objects'), W / 2, first.y + first.radius + 18);
+      }`;
 }
 
 function buildRefGraphScript(nodesJson: string, edgesJson: string, cyclesJson: string): string {
@@ -293,7 +291,7 @@ export function buildRefGraphHtml(result: ReferenceGraphResult): string {
   <canvas id="graph" width="800" height="500"></canvas>
   <div class="legend">
     <div class="legend-item"><div class="legend-dot" style="background: var(--prof-mem-critical)"></div> Target object</div>
-    <div class="legend-item"><div class="legend-dot" style="background: var(--prof-info)"></div> Root retainer</div>
+    <div class="legend-item"><div class="legend-dot" style="background: var(--prof-info)"></div> GC root</div>
     <div class="legend-item"><div class="legend-dot" style="background: var(--prof-text-secondary)"></div> Intermediate</div>
     <div class="legend-item"><div class="legend-dot" style="background: var(--prof-mem-leak)"></div> Cycle member</div>
   </div>`,

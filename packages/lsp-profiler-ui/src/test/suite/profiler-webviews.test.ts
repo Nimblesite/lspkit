@@ -30,7 +30,7 @@ import {
     type MemoryDashboardSnapshot,
     type MemoryDiffData,
 } from '../../memory-dashboard';
-import { buildRefGraphHtml, type ReferenceGraphResult } from '../../memory-ref-graph';
+import { buildRefGraphHtml, decodeRefGraph, type ReferenceGraphResult } from '../../memory-ref-graph';
 import {
     buildFlamegraphHtml,
     loadFlamegraphSvgDataUri,
@@ -55,6 +55,29 @@ function dashboardSnapshot(overrides: Partial<MemoryDashboardSnapshot> = {}): Me
         heapProfilePath: '',
         ...overrides,
     };
+}
+
+interface DrawnText {
+    readonly text: string;
+    readonly y: number;
+    readonly fill: string;
+}
+
+/**
+ * Run a retention graph's inline script against a recording canvas and return
+ * every text it draws, with where and in which colour: the panel as a reader sees it.
+ */
+function drawnTexts(html: string): DrawnText[] {
+    const script = /<script nonce="[^"]+">([\s\S]*)<\/script>/.exec(html)?.[1] ?? '';
+    const texts: DrawnText[] = [];
+    const pen: Record<string | symbol, unknown> = {
+        fillText(text: string, _x: number, y: number) { texts.push({ text, y, fill: String(pen.fillStyle) }); },
+    };
+    const ctx = new Proxy(pen, { get: (target, key) => (key in target ? target[key] : () => undefined) });
+    const canvas = { width: 800, height: 500, clientWidth: 900, parentElement: {}, style: {}, getContext: () => ctx };
+    const document = { getElementById: () => canvas, documentElement: {}, createElement: () => ({ style: {} }), body: { appendChild: () => undefined } };
+    new Function('document', 'getComputedStyle', script)(document, () => ({ getPropertyValue: () => '#888888' }));
+    return texts;
 }
 
 function profileResult(overrides: Partial<ProfileResult> = {}): ProfileResult {
@@ -155,6 +178,50 @@ suite('Profiler webviews — shared host hardening', () => {
             'node reprs / retention path steps must not close the inline <script> early',
         );
         assert.ok(html.includes('&lt;/script&gt;'), 'the target type in the heading must be HTML-escaped');
+    });
+
+    // [PROF-UI-REFGRAPH]: a root is named by its label and drawn apart from the
+    // objects it holds, so a module value or a static field reads as written.
+    test('retention graph names each root by its label, above the holders and the targets they keep alive', () => {
+        const html = buildRefGraphHtml({
+            targetType: 'Shop.Session', maxDepth: 8, maxNodes: 60, script: '',
+            graph: {
+                nodes: [
+                    { id: 0, type: 'Shop.Session', size: 40, repr: '0x1', depth: 0, isTarget: true },
+                    { id: 1, type: 'Shop.Session', size: 40, repr: '0x2', depth: 0, isTarget: true },
+                    { id: 2, type: 'Entry[]', size: 4096, repr: '0x3', depth: 1, isTarget: false },
+                    { id: 3, type: 'Dictionary`2[Int32,Shop.Session]', size: 80, repr: 'static sessions', depth: 2, isTarget: false, isRoot: true, rootKind: 'Static' },
+                ],
+                edges: [{ from: 3, to: 2, label: '_entries' }, { from: 2, to: 0, label: '[0]' }, { from: 2, to: 1, label: '[1]' }],
+                cycles: [],
+            },
+        });
+        const texts = drawnTexts(html);
+        const drawn = (text: string) => texts.find((item) => item.text === text);
+        const root = drawn('static sessions');
+        const holder = drawn('Entry[]');
+        const target = drawn('Shop.Session');
+        assert.ok(root, `the root is named by its label: ${JSON.stringify(texts.map((item) => item.text))}`);
+        assert.ok(drawn('Dictionary`2[Int32,Shop.Session]'), 'the root still shows its type');
+        assert.ok(holder && target, 'the holder and the targets are labelled');
+        assert.ok(root.y < holder.y && holder.y < target.y, 'roots sit above their holders, and holders above the targets');
+        assert.notStrictEqual(root.fill, holder.fill, 'a root is drawn apart from an intermediate holder');
+    });
+
+    test('a decoded retention graph keeps each root, its kind and its label', () => {
+        const graph = decodeRefGraph({
+            nodes: [
+                { id: 3, type: 'Dictionary', size: 80, repr: 'static sessions', depth: 2, isTarget: false, isRoot: true, rootKind: 'Static' },
+                { id: 2, type: 'Entry[]', size: 4096, repr: '0x3', depth: 1, isTarget: false, isRoot: false },
+            ],
+            edges: [],
+            cycles: [],
+        });
+        const [root, holder] = graph?.nodes ?? [];
+        assert.strictEqual(root?.isRoot, true, 'the root survives decoding');
+        assert.strictEqual(root?.rootKind, 'Static', 'and so does its kind');
+        assert.strictEqual(root?.repr, 'static sessions', 'and its label');
+        assert.strictEqual(holder?.isRoot, false, 'a holder is not a root');
     });
 
     test('retention graph renders an honest empty state when the walk found nothing', () => {

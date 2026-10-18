@@ -594,11 +594,13 @@ Snapshot, compare, GC and stop are reachable from the dashboard, the processes v
 
 ### [PROF-UI-REFGRAPH] Retention graph
 
-The retention graph is a force layout of a `RefGraph`:
+The retention graph is a layered layout of a `RefGraph`: a node's row is its `depth`, its distance from the targets, so the roots sit on top and the targets along the bottom.
 
 - node radius is logarithmic in size;
-- targets, shallow retainers, roots and cycles are distinct;
-- edge labels name the field.
+- targets, roots and cycles are distinct;
+- a root is named by its label above its type, so a static field or an F# module value reads as written (`static sessions`);
+- edge labels name the field;
+- a row too tight to label each node names its type once, with a count (`40 × App.Session`).
 
 The type picker offers the server's ranked type names (the latest snapshot's top types) plus free text, so it is language-neutral. It never offers names taken from source text or from one language's builtins.
 

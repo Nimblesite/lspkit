@@ -32,6 +32,10 @@ pub struct Fixture {
     pub child: Child,
     pub pid: u32,
     stdin: Option<ChildStdin>,
+    #[allow(
+        dead_code,
+        reason = "read only by `send`, which only the F# suite's line protocol calls; each test crate compiles this module on its own"
+    )]
     lines: BufReader<ChildStdout>,
 }
 
@@ -70,6 +74,10 @@ impl Fixture {
 
     /// Send one line command and return the one reply line the fixture writes.
     /// The fixture must answer every command with exactly one line.
+    #[allow(
+        dead_code,
+        reason = "only the F# fixture speaks a line protocol; the C# suite's crate never calls this"
+    )]
     pub fn send(&mut self, command: &str) -> String {
         let stdin = self.stdin.as_mut().expect("fixture stdin is open");
         writeln!(stdin, "{command}").unwrap_or_else(|error| panic!("send {command}: {error}"));

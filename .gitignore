@@ -80,3 +80,4 @@ dotnet/**/obj/
 node_modules/
 packages/*/out/
 packages/*/.vscode-test/
+.deslop/

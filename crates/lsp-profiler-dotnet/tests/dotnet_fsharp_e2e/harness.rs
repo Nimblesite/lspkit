@@ -13,6 +13,13 @@ pub(crate) const RECORD_TYPE: &str = "HotLeakAppFs.LeakedPayload";
 pub(crate) const UNION_CASE_TYPE: &str = "HotLeakAppFs.PayloadKind+Small";
 pub(crate) const GENERIC_RECORD_TYPE: &str = "HotLeakAppFs.Tagged`1[System.Int32]";
 pub(crate) const HOT_FUNCTION: &str = "HotLeakAppFs.Hot.spin";
+/// `Matching.classify`, whose active-pattern tests compile to hidden sequence points.
+pub(crate) const MATCH_FUNCTION: &str = "HotLeakAppFs.Matching.classify(";
+pub(crate) const MATCHING_FS: &str = "Matching.fs";
+/// `classify` in Matching.fs, from its `let` to its last arm.
+pub(crate) const MATCH_LINES: std::ops::RangeInclusive<i64> = 17..=22;
+/// One `classify` command's numbers: about a second of matching per round.
+pub(crate) const CLASSIFY_COUNT: u32 = 50_000_000;
 /// `Program.main`, which only ever waits on stdin.
 pub(crate) const ENTRY_POINT: &str = "HotLeakAppFs.Program.main(";
 /// `items.Add { Data = …; Label = …; Kind = kind }` in `LeakCache.grow`.
@@ -30,9 +37,13 @@ pub(crate) const QUOTE_TYPE: &str = "HotLeakAppFs.Quote";
 pub(crate) const NODE_TYPE: &str = "HotLeakAppFs.Node";
 
 pub(crate) fn in_program_fs(value: &Value) -> bool {
+    in_file(value, "Program.fs")
+}
+
+pub(crate) fn in_file(value: &Value, name: &str) -> bool {
     value["file"]
         .as_str()
-        .is_some_and(|file| file.ends_with("Program.fs"))
+        .is_some_and(|file| file.ends_with(name))
 }
 
 pub(crate) fn site<'a>(snapshot: &'a Value, type_name: &str) -> &'a Value {

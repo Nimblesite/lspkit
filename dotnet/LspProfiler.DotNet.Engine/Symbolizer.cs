@@ -5,7 +5,10 @@
 // Method names come from the JIT rundown; source lines come from the IL-to-
 // native maps and the portable PDBs that sit beside the application's
 // assemblies. The symbol path is the set of directories the trace's modules
-// were loaded from, so lookup never leaves the machine.
+// were loaded from, so lookup never leaves the machine. A sample in code the
+// compiler hid, such as an F# match's decision tree, has no line of its own;
+// it takes its method's nearest visible line before it, so it keeps its file.
+using System.Reflection.Metadata;
 using Microsoft.Diagnostics.Symbols;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Etlx;
@@ -13,7 +16,7 @@ using Microsoft.Diagnostics.Tracing.EventPipe;
 
 namespace LspProfiler.DotNet.Engine;
 
-internal sealed class Symbolizer(bool includeNative)
+internal sealed class Symbolizer(bool includeNative) : IDisposable
 {
     private const string SampleProvider = "Microsoft-DotNETCore-SampleProfiler";
     private const int TicksPerMessage = 256;
@@ -38,6 +41,8 @@ internal sealed class Symbolizer(bool includeNative)
         }
         TickCount += output.Finish();
     }
+
+    public void Dispose() => _frames.Dispose();
 
     private static string SymbolPath(TraceLog log) =>
         string.Join(';', log.ModuleFiles
@@ -121,8 +126,9 @@ internal sealed class Symbolizer(bool includeNative)
 /// Deduplicates symbolized frames and remembers which are not yet sent. IDs are
 /// stable for the whole recording; code addresses only within one segment's log.
 /// </summary>
-internal sealed class FrameTable(bool includeNative)
+internal sealed class FrameTable(bool includeNative) : IDisposable
 {
+    private readonly SourceLocator _locator = new();
     private readonly Dictionary<CodeAddressIndex, int?> _byAddress = [];
     private readonly Dictionary<FrameRecord, int> _ids = [];
     private readonly List<FrameRecord> _fresh = [];
@@ -187,9 +193,29 @@ internal sealed class FrameTable(bool includeNative)
             return null;
         }
         var name = string.IsNullOrEmpty(address.FullMethodName) ? $"{address.ModuleName}!?" : address.FullMethodName;
-        var source = managed ? SourceOf(address) : null;
-        var line = source?.LineNumber is > 0 and var known ? known : (int?)null;
-        return new FrameRecord(name, line is null ? null : source?.SourceFile?.BuildTimeFilePath, line, NullIfEmpty(address.ModuleName));
+        var (file, line) = managed ? Located(address) : (null, null);
+        return new FrameRecord(name, file, line, NullIfEmpty(address.ModuleName));
+    }
+
+    public void Dispose() => _locator.Dispose();
+
+    /// <summary>
+    /// A managed frame's file and line. A line the compiler hid, or none at all (a prolog), takes the
+    /// method's nearest visible sequence point from its PDB, so a function's samples keep their file.
+    /// A method with no visible point, such as a compiler-generated closure, stays unlocated.
+    /// [PROF-DOTNET-CPU-SYMBOLS]
+    /// </summary>
+    private (string? File, int? Line) Located(TraceCodeAddress address)
+    {
+        var source = SourceOf(address);
+        if (source is { LineNumber: > 0 and not SequencePoint.HiddenLine, SourceFile.BuildTimeFilePath: { } file })
+        {
+            return (file, source.LineNumber);
+        }
+        return address.ModuleFile?.FilePath is { } module && address.Method is { } method
+            && _locator.Line(module, method.MethodToken, address.ILOffset) is { } visible
+            ? visible
+            : (null, null);
     }
 
     private SourceLocation? SourceOf(TraceCodeAddress address)

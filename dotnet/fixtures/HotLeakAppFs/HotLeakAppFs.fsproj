@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The F# twin of HotLeakApp: a hot loop on known lines and a growing module-level
        cache of records holding union cases. Records, unions and module values compile
-       to IL shapes C# never emits, so the engine is proven on F# itself. -->
+       to IL shapes C# never emits, and a match's decision tree compiles to hidden sequence
+       points, so the engine is proven on F# itself. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
@@ -10,6 +11,7 @@
     <WarningLevel>5</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Matching.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

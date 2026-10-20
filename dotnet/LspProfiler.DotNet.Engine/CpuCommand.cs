@@ -31,7 +31,7 @@ internal static class CpuCommand
         var segment = CpuSegment.Start(client, pid);
         // The public diagnostics client exposes no process-info command; the version stays unknown.
         Emit.Message(new Attached("attached", pid, null));
-        var symbolizer = new Symbolizer(includeNative);
+        using var symbolizer = new Symbolizer(includeNative);
         Record(client, pid, segment, stop, symbolizer);
         Emit.Message(new Stopped("stopped", symbolizer.TickCount));
         return 0;

@@ -6,8 +6,9 @@ use lsp_profiler::wire::methods;
 use serde_json::{json, Value};
 
 use crate::harness::{
-    artifact, count, error_code, harness, in_program_fs, site, snapshot, start, stop, ENTRY_POINT,
-    FIXTURE, HOT_FUNCTION, ORDER_TYPE,
+    artifact, count, error_code, harness, in_file, in_program_fs, site, snapshot, start, stop,
+    CLASSIFY_COUNT, ENTRY_POINT, FIXTURE, HOT_FUNCTION, MATCHING_FS, MATCH_FUNCTION, MATCH_LINES,
+    ORDER_TYPE,
 };
 use crate::support::{assert_only_busy_threads_count, call, service, Fixture};
 
@@ -112,6 +113,63 @@ async fn cpu_profiling_finds_the_fsharp_hot_function_and_its_lines() {
         );
     }
     assert_every_export_names_the_fsharp_function(&report);
+    service.shutdown().await;
+}
+
+/// [PROF-DOTNET-CPU-SYMBOLS]: F# compiles a match's decision tree to hidden
+/// sequence points. A sample there still ran in `classify`, so it keeps the
+/// method's file and the visible line before it: one hot function, in its file.
+#[tokio::test(flavor = "multi_thread")]
+async fn cpu_samples_in_fsharp_match_code_keep_their_file() {
+    let mut fixture = Fixture::start(FIXTURE);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let service = service(dir.path().to_path_buf());
+    let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
+    for _ in 0..3 {
+        let classified = fixture.send(&format!("classify {CLASSIFY_COUNT}"));
+        assert!(classified.starts_with("OK classify"), "{classified}");
+    }
+    let report = call(
+        &service,
+        methods::CPU_STOP,
+        json!({ "session_id": started["session_id"] }),
+    )
+    .await;
+    let entries: Vec<&Value> = report["hot_functions"]
+        .as_array()
+        .expect("hot_functions")
+        .iter()
+        .filter(|f| {
+            f["name"]
+                .as_str()
+                .is_some_and(|n| n.starts_with(MATCH_FUNCTION))
+        })
+        .collect();
+    assert!(
+        entries.iter().all(|f| in_file(f, MATCHING_FS)),
+        "every sample of the match keeps {MATCHING_FS}: {entries:?}"
+    );
+    assert_eq!(
+        entries.len(),
+        1,
+        "{MATCH_FUNCTION} is one hot function, never split by a fileless twin: {report}"
+    );
+    let line = entries[0]["line"].as_i64().unwrap_or(0);
+    assert!(
+        MATCH_LINES.contains(&line),
+        "its line is in its body: {line}"
+    );
+    let lines: Vec<i64> = report["hot_lines"]
+        .as_array()
+        .expect("hot_lines")
+        .iter()
+        .filter(|l| in_file(l, MATCHING_FS))
+        .map(|l| l["line"].as_i64().unwrap_or(0))
+        .collect();
+    assert!(
+        lines.iter().any(|l| MATCH_LINES.contains(l)),
+        "a hot line sits inside the match: {lines:?}"
+    );
     service.shutdown().await;
 }
 

@@ -10,6 +10,9 @@
 // build server's checkout, an anchor no editor here can open. Neither has an array: `Order[]`
 // is the runtime's type, grown wherever a collection resizes, so anchoring it at
 // Order's line would paint that line long after the last Order died.
+//
+// The same PDBs place a CPU sample that landed in code the compiler hid
+// ([PROF-DOTNET-CPU-SYMBOLS]): it belongs to its method's visible line before it.
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -33,6 +36,13 @@ internal sealed class SourceLocator : IDisposable
         _located[type] = located;
         return located;
     }
+
+    /// <summary>
+    /// The line a sample at <paramref name="ilOffset"/> of method <paramref name="methodToken"/> ran:
+    /// the nearest visible sequence point at or before it, else the method's first visible point.
+    /// </summary>
+    public (string File, int Line)? Line(string module, int methodToken, int ilOffset) =>
+        File.Exists(module) ? Module(module)?.Line(methodToken, ilOffset) : null;
 
     public void Dispose()
     {
@@ -81,6 +91,23 @@ internal sealed class SourceLocator : IDisposable
 
         public (string File, int Line)? Locate(IReadOnlyList<string> nesting) =>
             OnThisMachine && Find(nesting) is { } definition ? Declared(definition) ?? Constructed(definition) : null;
+
+        /// <summary>An F# match's decision tree is hidden code: it belongs to the visible point before it.</summary>
+        public (string File, int Line)? Line(int methodToken, int ilOffset)
+        {
+            var visible = MethodPoints(methodToken).Where(point => !point.IsHidden).ToList();
+            var before = visible.FindLastIndex(point => point.Offset <= ilOffset);
+            return visible.Count == 0 ? null : Location(visible[Math.Max(before, 0)]);
+        }
+
+        /// <summary>A method's sequence points; none for a token that names no method of this PDB.</summary>
+        private IEnumerable<SequencePoint> MethodPoints(int methodToken)
+        {
+            var row = methodToken & 0xFFFFFF;
+            return methodToken >>> 24 == (int)TableIndex.MethodDef && row > 0 && row <= _pdb.MethodDebugInformation.Count
+                ? SequencePoints(MetadataTokens.MethodDefinitionHandle(row))
+                : [];
+        }
 
         /// <summary>Whether any document the PDB names is here; when none is, no IL is scanned for sites.</summary>
         private bool OnThisMachine => _onThisMachine ??= _pdb.Documents.Any(document => Document(document) is not null);

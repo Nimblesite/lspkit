@@ -60,7 +60,7 @@ type Node = { Label: string; mutable Next: Node option }
 
 /// The F# heap zoo: every shape is retained by a module value so it stays reachable.
 /// The line protocol grows one shape at a time: `grow`, `payload`, `blob`, `release all`,
-/// `work on|off` and `stats`; `stop` closes the program.
+/// `work on|off`, `classify` and `stats`; `stop` closes the program.
 module Shapes =
     let orders = ResizeArray<Order>()
     let subscriptions = Event<Order>()
@@ -167,6 +167,7 @@ module Program =
         | [ "grow"; count ] -> positive "grow" count Shapes.grow
         | [ "payload"; count ] -> positive "payload" count LeakCache.grow
         | [ "blob"; count ] -> positive "blob" count Shapes.retain
+        | [ "classify"; count ] -> positive "classify" count (Matching.classifyAll >> ignore)
         | [ "release"; "all" ] ->
             Shapes.release ()
             sprintf "OK release all %s" (describe ())

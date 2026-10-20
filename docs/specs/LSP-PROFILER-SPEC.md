@@ -710,6 +710,8 @@ The backend reports `live_progress`: each finished segment's ticks advance the s
 
 `TraceLog` converts the trace. A `SymbolReader`, whose path is only the directories the trace's modules were loaded from, resolves each managed frame to its method and its PDB `file`:`line`. Native frames are kept only with `--native`.
 
+A sample can land in code the compiler hid. F# compiles a `match`'s decision tree to hidden sequence points, and the reader gives those, like a prolog, no line. Such a frame takes its method's nearest visible sequence point at or before its IL offset, or the method's first visible point when none comes before, read from the same PDB. It keeps its method's file, so a function never splits into a located entry and an unlocated twin. A method with no visible sequence point, such as a compiler-generated closure, stays unlocated.
+
 Thread samples are grouped into ticks:
 
 - A new tick starts when a thread repeats or more than 0.5 ms passes.

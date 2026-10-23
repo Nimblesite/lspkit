@@ -172,33 +172,9 @@ test("a missing jq fails closed instead of skipping every crate check", () => {
   assert.doesNotMatch(gate.stdout, /OK:/, "no crate may be reported OK when the gate cannot run");
 });
 
-test("corrupt JSON thresholds fail closed", () => {
-  const gate = withTempGate(
-    [
-      ["coverage-thresholds.json", '{"per_crate":'],
-      ["lcov.info", lcovFor(allAt100)],
-    ],
-    (dir) => runGate(dir),
-  );
-  assert.notEqual(gate.status, 0, `fail-open: exited 0 on corrupt JSON\n${gate.stdout}`);
-  assert.match(gate.stdout, /per_crate must be a nonempty map of integer thresholds 0\.\.100/);
-  assert.doesNotMatch(gate.stdout, /OK:/);
-});
-
-test("an empty per_crate map fails closed", () => {
-  const gate = withTempGate(
-    [
-      ["coverage-thresholds.json", '{"per_crate":{}}'],
-      ["lcov.info", lcovFor(allAt100)],
-    ],
-    (dir) => runGate(dir),
-  );
-  assert.notEqual(gate.status, 0, `fail-open: exited 0 on empty per_crate\n${gate.stdout}`);
-  assert.match(gate.stdout, /per_crate must be a nonempty map of integer thresholds 0\.\.100/);
-  assert.doesNotMatch(gate.stdout, /OK:/);
-});
-
 for (const invalid of [
+  { name: "corrupt JSON", json: '{"per_crate":' },
+  { name: "empty per_crate", json: '{"per_crate":{}}' },
   { name: "nonnumeric", overrides: { lspkit: "high" } },
   { name: "fractional", overrides: { "lspkit-live": 94.5 } },
   { name: "above 100", overrides: { lspkit: 150 } },
@@ -208,7 +184,7 @@ for (const invalid of [
   test(`a ${invalid.name} threshold fails closed as a config error`, () => {
     const gate = withTempGate(
       [
-        ["coverage-thresholds.json", thresholdsJson(invalid.overrides)],
+        ["coverage-thresholds.json", invalid.json ?? thresholdsJson(invalid.overrides)],
         ["lcov.info", lcovFor(allAt100)],
       ],
       (dir) => runGate(dir),

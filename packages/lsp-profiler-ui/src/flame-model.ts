@@ -7,6 +7,10 @@
 // colors, and substring search. No vscode imports — everything here is unit
 // testable and JSON-serializable for embedding in the webview.
 
+import { boundedRects, boundedTimeOrder } from "./flame-time-order";
+
+export { timeOrderRects } from "./flame-time-order";
+
 export interface SpeedscopeFrame {
   name: string;
   file?: string;
@@ -57,6 +61,9 @@ export interface FiberFlame {
   maxDepthTime: number;
   leftHeavy: RenderRect[];
   timeOrder: RenderRect[];
+  /** Narrow slabs each layout's budget left undrawn (see flame-time-order.ts). */
+  leftHeavyHidden: number;
+  timeOrderHidden: number;
   stats: FrameStats;
 }
 
@@ -216,73 +223,6 @@ export function leftHeavyRects(profile: SpeedscopeProfile): RenderRect[] {
   return out;
 }
 
-// --- time-order layout ----------------------------------------------------------
-
-interface OpenFrame {
-  frameIdx: number;
-  x0: number;
-  self: number;
-}
-
-function commonPrefixLength(open: OpenFrame[], stack: number[]): number {
-  let lcp = 0;
-  while (
-    lcp < open.length &&
-    lcp < stack.length &&
-    open[lcp].frameIdx === stack[lcp]
-  ) {
-    lcp += 1;
-  }
-  return lcp;
-}
-
-function closeFramesAbove(
-  open: OpenFrame[],
-  keep: number,
-  cursor: number,
-  out: RenderRect[],
-): void {
-  while (open.length > keep) {
-    const frame = open.pop();
-    if (frame !== undefined) {
-      out.push({
-        x0: frame.x0,
-        x1: cursor,
-        depth: open.length,
-        frameIdx: frame.frameIdx,
-        selfWeight: frame.self,
-        totalWeight: cursor - frame.x0,
-      });
-    }
-  }
-}
-
-function normalizeRects(rects: RenderRect[], total: number): RenderRect[] {
-  return rects
-    .map((r) => ({ ...r, x0: r.x0 / total, x1: r.x1 / total }))
-    .sort((a, b) => a.depth - b.depth || a.x0 - b.x0);
-}
-
-/** Flame-chart layout: x = time; adjacent identical stacks merge into slabs. */
-export function timeOrderRects(profile: SpeedscopeProfile): RenderRect[] {
-  const out: RenderRect[] = [];
-  const open: OpenFrame[] = [];
-  let cursor = 0;
-  profile.samples.forEach((stack, i) => {
-    const weight = profile.weights[i];
-    closeFramesAbove(open, commonPrefixLength(open, stack), cursor, out);
-    for (let d = open.length; d < stack.length; d += 1) {
-      open.push({ frameIdx: stack[d], x0: cursor, self: 0 });
-    }
-    if (open.length > 0) {
-      open[open.length - 1].self += weight;
-    }
-    cursor += weight;
-  });
-  closeFramesAbove(open, 0, cursor, out);
-  return cursor > 0 ? normalizeRects(out, cursor) : [];
-}
-
 // --- per-frame aggregates ---------------------------------------------------------
 
 /** Self/total weight and sample count per frameIdx (recursion deduplicated). */
@@ -387,16 +327,19 @@ function buildFiber(
   profile: SpeedscopeProfile,
   frameCount: number,
 ): FiberFlame {
-  const leftHeavy = leftHeavyRects(profile);
-  const timeOrder = timeOrderRects(profile);
+  const totalWeight = profile.weights.reduce((sum, w) => sum + w, 0);
+  const leftHeavy = boundedRects(leftHeavyRects(profile), totalWeight);
+  const timeOrder = boundedTimeOrder(profile);
   return {
     name: profile.name,
-    totalWeight: profile.weights.reduce((sum, w) => sum + w, 0),
+    totalWeight,
     sampleCount: profile.samples.length,
-    maxDepthLeft: maxDepth(leftHeavy),
-    maxDepthTime: maxDepth(timeOrder),
-    leftHeavy,
-    timeOrder,
+    maxDepthLeft: maxDepth(leftHeavy.rects),
+    maxDepthTime: maxDepth(timeOrder.rects),
+    leftHeavy: leftHeavy.rects,
+    timeOrder: timeOrder.rects,
+    leftHeavyHidden: leftHeavy.hidden,
+    timeOrderHidden: timeOrder.hidden,
     stats: frameStats(profile, frameCount),
   };
 }

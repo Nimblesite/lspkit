@@ -179,6 +179,7 @@ export function flameBody(model: FlameModel, summary: ProfileSummary, nonce = ""
 <select id="fiber-select">${fiberOptionsHtml(model)}</select>
 <input id="search" type="text" placeholder="Search functions (Esc clears)">
 <span id="match-label" class="stats"></span>
+<span id="hidden-label" class="stats"></span>
 <button id="btn-reset" class="toggle">Reset zoom (0)</button>
 </div>
 <div id="flame-wrap"><canvas id="flame"></canvas></div>

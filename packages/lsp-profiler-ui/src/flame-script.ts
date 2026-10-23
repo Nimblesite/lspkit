@@ -34,6 +34,7 @@ export const FLAME_SCRIPT = `(function () {
   var fiberSelect = document.getElementById("fiber-select");
   var btnLeft = document.getElementById("btn-left");
   var btnTime = document.getElementById("btn-time");
+  var hiddenLabel = document.getElementById("hidden-label");
   var measures = {};
   var labelCache = {};
   var rowsCache = {};
@@ -122,6 +123,13 @@ export const FLAME_SCRIPT = `(function () {
     ctx.font = "11px " + cssVar("--vscode-font-family", "sans-serif");
     ctx.textBaseline = "middle";
     rects().forEach(function (r) { drawRect(r, width); });
+    hiddenNote();
+  }
+
+  // The slab budget drops a long recording's narrowest frames: say so, never silently.
+  function hiddenNote() {
+    var hidden = state.view === "left" ? fiber().leftHeavyHidden : fiber().timeOrderHidden;
+    hiddenLabel.textContent = hidden > 0 ? hidden.toLocaleString() + " narrow frames not drawn \u2014 Speedscope has them all" : "";
   }
 
   function rectAt(offsetX, offsetY) {

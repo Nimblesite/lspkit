@@ -24,7 +24,7 @@ endif
 # Coverage — single source of truth is coverage-thresholds.json
 # See REPO-STANDARDS-SPEC [COVERAGE-THRESHOLDS-JSON].
 # ---------------------------------------------------------------------------
-COVERAGE_THRESHOLDS_FILE := coverage-thresholds.json
+COVERAGE_THRESHOLDS_FILE = coverage-thresholds.json
 
 # =============================================================================
 # Standard Targets (7 — portfolio-wide, identical across every repo)

@@ -541,7 +541,7 @@ Every view ID, command ID, context key, configuration section and webview type i
 
 ### [PROF-UI-CAPABILITIES] Capability gating
 
-The library reads `experimental.lspProfiler`. A runtime without CPU shows no CPU action. A direct-mode runtime shows no debug-session requirement. A runtime without `references` hides retention actions. A runtime's `display_name` labels its rows. A process row opens its `entry` in the editor only when its runtime advertises `source_entries`; an entry that is a binary or an assembly is never opened. The library never branches on a runtime ID.
+The library reads `experimental.lspProfiler`. A runtime without CPU shows no CPU action. Once the server has advertised its runtimes and none of them has memory, the Processes view pins no memory launch, and a host whose runtimes never track memory passes `memory: false` to the contributions generator, so its manifest declares no memory command, menu, launch link or autopilot setting. A direct-mode runtime shows no debug-session requirement. A runtime without `references` hides retention actions. A runtime's `display_name` labels its rows. A process row opens its `entry` in the editor only when its runtime advertises `source_entries`; an entry that is a binary or an assembly is never opened. The library never branches on a runtime ID.
 
 ### [PROF-UI-PROCESSES] Processes view
 

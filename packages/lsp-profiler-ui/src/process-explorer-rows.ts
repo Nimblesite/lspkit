@@ -22,6 +22,8 @@ export interface RowRuntime {
   readonly name: string;
   /** The process's entry is a source file the editor can open (never a binary). */
   readonly sourceEntries: boolean;
+  /** False when the runtime has no memory backend: the row then offers and suggests no memory tracking. */
+  readonly memory?: boolean;
 }
 
 /** One recognised process; the view model of the wire `ProcessInfo` ([PROF-PROCESSES]). */
@@ -206,9 +208,10 @@ export class ProcessTreeItem extends vscode.TreeItem {
     // attachable heap ([PROF-UI-CAPABILITIES]). Trackable rows get the
     // contextValue that reveals the inline Track Memory action, hidden
     // everywhere else so the action is never offered where it would refuse.
-    const memoryTrackable = (activeDebuggeePid !== undefined && activeDebuggeePid === process.pid) || (runtime.directMemory && process.debuggable);
+    const tracksMemory = runtime.memory !== false;
+    const memoryTrackable = tracksMemory && ((activeDebuggeePid !== undefined && activeDebuggeePid === process.pid) || (runtime.directMemory && process.debuggable));
     this.description = rowDescription(process, profilingThis);
-    this.tooltip = rowTooltip(process, runtime.name, profilingThis, memoryTrackable);
+    this.tooltip = rowTooltip(process, runtime.name, profilingThis, tracksMemory && !memoryTrackable);
     this.iconPath = processIcon(process, profilingThis);
     this.contextValue = rowContextValue(process, profilingThis, memoryTrackable);
     // The FileDecorationProvider keys off this synthetic URI to colour the whole
@@ -265,7 +268,7 @@ function rowContextValue(process: ProcessInfo, profilingThis: boolean, memoryTra
 }
 
 /** Multi-line hover tooltip surfacing every resolved detail for a process row. */
-function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: boolean, memoryTrackable: boolean): string {
+function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: boolean, memoryNeedsLaunch: boolean): string {
   return [
     `${process.name} (PID ${process.pid})`,
     process.interpreterPath !== null ? `Executable: ${process.interpreterPath}` : "",
@@ -285,8 +288,9 @@ function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: bo
       ? "🔒 Profiling this process will prompt for elevation"
       : "",
     // A courier runtime tracks memory only on a process the host launched
-    // ([PROF-UI-MEMORY]); elsewhere point at the current-file launch.
-    process.debuggable && !memoryTrackable
+    // ([PROF-UI-MEMORY]); elsewhere point at the current-file launch. A runtime
+    // with no memory backend suggests nothing ([PROF-UI-CAPABILITIES]).
+    process.debuggable && memoryNeedsLaunch
       ? `🧠 Memory tracking needs the process under ${brand()} — use “Run & Track Memory (Current File)”`
       : "",
   ].filter(Boolean).join("\n");

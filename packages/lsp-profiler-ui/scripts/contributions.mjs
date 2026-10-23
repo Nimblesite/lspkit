@@ -5,9 +5,37 @@
 //   import { profilerContributions } from "@nimblesite/lsp-profiler-ui/scripts/contributions.mjs";
 //   const { commands, views, viewsWelcome, menus, configuration, keybindings } =
 //     profilerContributions({ prefix: "sharplsp", brand: "SharpLsp", container: "sharplsp-explorer", debugType: "coreclr" });
+//
+// A host whose runtimes have no memory backend passes `memory: false`: no
+// memory command, menu, launch link or autopilot setting is contributed, so
+// the editor never offers what the server cannot do ([PROF-UI-CAPABILITIES]).
 
-/** @param {{ prefix: string, brand: string, container: string, debugType: string, restartCommand?: string }} host */
+/** The client commands that only a memory backend can serve. */
+const MEMORY_COMMANDS = new Set(["memoryMenu", "memoryStart", "memorySnapshot", "memoryStop", "memoryDiff",
+  "memoryGcCollect", "memoryReferences", "trackMemoryCurrentFile", "memoryTrackProcess"]);
+/** The settings that only tune memory tracking. */
+const MEMORY_SETTINGS = new Set(["autoSnapshotOnPause", "autoSnapshot", "autoSnapshotInterval"]);
+
+/** @param {{ prefix: string, brand: string, container: string, debugType: string, restartCommand?: string, memory?: boolean }} host */
 export function profilerContributions(host) {
+  const all = allContributions(host);
+  return host.memory === false ? withoutMemory(all, `${host.prefix}.profiler.`) : all;
+}
+
+/** `contributions` with every memory command, its menu entries and the memory settings removed. */
+function withoutMemory(contributions, prefix) {
+  const cpuOnly = (entry) => !MEMORY_COMMANDS.has(entry.command.slice(prefix.length));
+  const menus = Object.fromEntries(Object.entries(contributions.menus)
+    .map(([menu, entries]) => [menu, entries.filter(cpuOnly)])
+    .filter(([, entries]) => entries.length > 0));
+  const configuration = Object.fromEntries(Object.entries(contributions.configuration)
+    .filter(([key]) => !MEMORY_SETTINGS.has(key.slice(prefix.length))));
+  return { ...contributions, commands: contributions.commands.filter(cpuOnly), menus, configuration,
+    keybindings: contributions.keybindings.filter(cpuOnly) };
+}
+
+/** @param {{ prefix: string, brand: string, container: string, debugType: string, restartCommand?: string, memory?: boolean }} host */
+function allContributions(host) {
   const cmd = (name) => `${host.prefix}.profiler.${name}`;
   const ctx = (name) => `${host.prefix}.profiler.${name}`;
   const view = `${host.prefix}.profiler.processes`;
@@ -39,9 +67,10 @@ export function profilerContributions(host) {
     { command: cmd("killProcess"), title: "Kill Process", category: B, icon: "$(close)" },
   ];
   const views = { [host.container]: [{ id: view, name: "Processes", icon: "$(pulse)" }] };
-  const launchLinks =
-    `[Run & Profile CPU (Current File)](command:${cmd("profileCurrentFileCpu")})\n` +
-    `[Run & Track Memory (Current File)](command:${cmd("trackMemoryCurrentFile")})`;
+  const launchLinks = [
+    `[Run & Profile CPU (Current File)](command:${cmd("profileCurrentFileCpu")})`,
+    ...(host.memory === false ? [] : [`[Run & Track Memory (Current File)](command:${cmd("trackMemoryCurrentFile")})`]),
+  ].join("\n");
   const running = `${ctx("serverState")} == running`;
   const viewsWelcome = [
     { view, contents: `Connecting to the ${B} language server…`, when: `${ctx("serverState")} != running && ${ctx("serverState")} != stopped` },

@@ -149,6 +149,7 @@ export class ProcessesProvider implements vscode.TreeDataProvider<TreeItem>, vsc
       directMemory: this.store.memoryIsDirect(proc.runtime),
       name: this.store.runtimeName(proc.runtime),
       sourceEntries: this.store.sourceEntries(proc.runtime),
+      memory: this.store.tracksMemory(proc.runtime),
     });
   }
 
@@ -156,14 +157,15 @@ export class ProcessesProvider implements vscode.TreeDataProvider<TreeItem>, vsc
    * The pinned current-file launch rows, gated per-activity: the CPU launch is
    * hidden while CPU profiling is busy, the memory launch while memory tracking
    * is busy — so a second same-metric run is never offered, yet either can start
-   * while the other runs ([PROF-UI-PROCESSES]).
+   * while the other runs ([PROF-UI-PROCESSES]). A server none of whose runtimes
+   * tracks memory never gets the memory launch ([PROF-UI-CAPABILITIES]).
    */
   private launchActionRows(): LaunchActionItem[] {
     const rows: LaunchActionItem[] = [];
     if (!this.store.cpuBusy.value) {
       rows.push(new LaunchActionItem("Run & Profile CPU (Current File)", cmd("profileCurrentFileCpu"), "flame"));
     }
-    if (!this.store.memoryBusy.value) {
+    if (!this.store.memoryBusy.value && this.store.memoryOffered()) {
       rows.push(new LaunchActionItem("Run & Track Memory (Current File)", cmd("trackMemoryCurrentFile"), "database"));
     }
     return rows;

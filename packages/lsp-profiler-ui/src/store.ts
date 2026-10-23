@@ -42,6 +42,10 @@ export interface ProfilerStore extends ProfilerActions, ProcessPanelActions {
   getDebuggeeProcessId(sessionId: string): number | undefined;
   /** Whether `runtime` reads its own heap, so any attachable process can be memory-tracked. */
   memoryIsDirect(runtime: string): boolean;
+  /** False once the server advertised its runtimes and none tracks memory, so no memory action is offered. */
+  memoryOffered(): boolean;
+  /** False once the server advertised `runtime` without a memory backend. */
+  tracksMemory(runtime: string): boolean;
   /** The runtime's advertised `display_name`, or its wire id when the server named none. */
   runtimeName(runtime: string): string;
   /** Whether `runtime`'s process entries are source files the editor can open. */
@@ -70,6 +74,12 @@ export function createProfilerStore(host: ProfilerHost): ProfilerStore {
     capabilities,
     memoryIsDirect: (runtime) =>
       capabilities.value?.runtimes.find((info) => info.id === runtime)?.memory?.mode.kind === "Direct",
+    memoryOffered: () =>
+      capabilities.value?.runtimes.some((info) => info.memory !== undefined) ?? true,
+    tracksMemory: (runtime) => {
+      const known = capabilities.value?.runtimes.find((info) => info.id === runtime);
+      return capabilities.value === undefined || known?.memory !== undefined;
+    },
     runtimeName: (runtime) =>
       capabilities.value?.runtimes.find((info) => info.id === runtime)?.display_name ?? runtime,
     sourceEntries: (runtime) =>

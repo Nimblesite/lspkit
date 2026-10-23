@@ -29,7 +29,7 @@ import {
   presentProfileResult,
 } from "./profiler-flamegraph-html";
 import { disposeProfileServer } from "./profile-server";
-import { shouldProfileOnLaunch, waitForDebuggeePid } from "./profiler-launch";
+import { shouldProfileOnLaunch, startWhenRuntimeReady, waitForDebuggeePid } from "./profiler-launch";
 import { bindProfilerStatusBar, registerProgressListener } from "./profiler-status";
 import { toProfileResult, toStartedSession, type StartedSession } from "./wire-adapters";
 import type { CooperativeScript, ProfileReport, StartProfileResult } from "./wire-generated";
@@ -216,7 +216,7 @@ async function startProfilerOnLaunch(store: Store, debugSessionId: string): Prom
       const client = store.client.value;
       if (ready && pid !== undefined && client?.isRunning() === true && store.profiler.value.cpu === "starting") {
         report("Attaching the sampler…");
-        await attachToDebuggee(store, client, pid);
+        await attachToDebuggee(store, client, pid, () => store.profiler.value.cpu === "starting");
       }
     });
   } finally {
@@ -501,16 +501,20 @@ async function handleProfileAttachToDebug(store: Store): Promise<void> {
  * checked the client and owns the CPU leg: the command path checked that it is
  * free, and profile-on-launch already marked it starting.
  */
-async function attachToDebuggee(store: Store, client: NonNullable<Store["client"]["value"]>, pid: number): Promise<void> {
+/** Attach to the debuggee; a just-launched one is retried while `launching()` holds. */
+async function attachToDebuggee(store: Store, client: NonNullable<Store["client"]["value"]>, pid: number,
+  launching: () => boolean = () => false): Promise<void> {
   const cfg = vscode.workspace.getConfiguration(configSection());
   const sampleRate = cfg.get<number>("profiler.sampleRate", DEFAULT_SAMPLE_RATE);
   const includeNative = cfg.get<boolean>("profiler.includeNative", false);
-
-  try {
-    const raw = await client.sendRequest<StartProfileResult | undefined>("workspace/executeCommand", {
+  const send = async (): Promise<StartProfileResult | undefined> =>
+    client.sendRequest<StartProfileResult | undefined>("workspace/executeCommand", {
       command: LSP_CMD.start,
       arguments: [{ pid, sample_rate: sampleRate, include_native: includeNative }],
     });
+
+  try {
+    const raw = await startWhenRuntimeReady(send, launching);
 
     if (raw !== undefined && raw !== null) {
       const result = toStartedSession(raw);

@@ -266,13 +266,14 @@ While a session runs, the service holds a work-done progress for it.
 
 - Begin: "Profiling `<name>` (PID n)".
 - A report each second gives the elapsed time, plus the sample count and top function when the backend has `live_progress`.
+- The top function is the one with the most self samples, ties broken by name. Ranked by inclusive samples, the root of every whole stack would always win.
 - Cancelling the progress stops the session exactly as `cpu.stop` would. Its report is then delivered to the UI through `cpu.list`, and published as diagnostics.
 
 ### [PROF-CPU-REPORT] Report
 
 A `ProfileReport` contains the session, PID, runtime, duration, total and user samples, the sample rate, and:
 
-- hot functions: inclusive and self share;
+- hot functions: inclusive and self share, ordered by inclusive share, then self share, then name;
 - hot lines;
 - artifacts.
 

@@ -15,7 +15,7 @@ use crate::aggregate::{saturating_i64, HotspotConfig, ProfileData};
 use crate::error::ProfilerError;
 use crate::runtime::Runtime;
 use crate::sampler::SamplerHandle;
-use crate::wire::{ProfileProgress, ProfileSessionInfo, StartProfileResult};
+use crate::wire::{HotFunction, ProfileProgress, ProfileSessionInfo, StartProfileResult};
 
 /// One active CPU session.
 struct CpuSession {
@@ -240,11 +240,7 @@ impl CpuSessionManager {
             session_id: info.session_id,
             sample_count: info.sample_count,
             duration_secs: info.duration_secs,
-            top_function: session
-                .data
-                .hot_functions(hotspots)
-                .first()
-                .map(|hot| hot.name.clone()),
+            top_function: hottest_by_self(&session.data.hot_functions(hotspots)),
         })
     }
 
@@ -297,6 +293,20 @@ pub fn mint_id(prefix: &str, sequence: u64) -> String {
 #[must_use]
 pub fn rfc3339_now() -> String {
     humantime::format_rfc3339_seconds(SystemTime::now()).to_string()
+}
+
+/// The function the program spends its own time in: the most self samples,
+/// ties broken by name. Ranked by inclusive samples, the root of every whole
+/// stack would always be the hottest [PROF-CPU-PROGRESS].
+fn hottest_by_self(functions: &[HotFunction]) -> Option<String> {
+    functions
+        .iter()
+        .max_by(|a, b| {
+            a.self_samples
+                .cmp(&b.self_samples)
+                .then_with(|| b.name.cmp(&a.name))
+        })
+        .map(|hot| hot.name.clone())
 }
 
 #[cfg(test)]

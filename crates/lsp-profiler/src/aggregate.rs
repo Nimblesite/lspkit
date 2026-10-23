@@ -260,7 +260,14 @@ impl ProfileData {
                 self_percentage: pct_of(stats.self_samples, total),
             })
             .collect();
-        result.sort_by_key(|func| std::cmp::Reverse(func.samples));
+        // Equal inclusive totals (a stack's root and its callees) put the one
+        // with more time of its own first, then order by name: never by hash order.
+        result.sort_by(|a, b| {
+            b.samples
+                .cmp(&a.samples)
+                .then_with(|| b.self_samples.cmp(&a.self_samples))
+                .then_with(|| a.name.cmp(&b.name))
+        });
         result
     }
 }

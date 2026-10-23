@@ -12,6 +12,7 @@
  *   Cool (1-5%):     #4a5468  — muted slate
  */
 
+import { profilerPalette } from "./palette";
 import * as vscode from "vscode";
 import { configSection } from "./ids";
 import { Logger } from "./logger";
@@ -41,6 +42,7 @@ export interface ProfileHotFunction {
 
 /** Profile result returned by `<prefix>.lspProfiler.cpu.stop` or `/snapshot`. */
 export interface ProfileResult {
+  sampled?: import("./sampled-view").SampledView;
   sessionId: string;
   duration: number;
   totalSamples: number;
@@ -87,15 +89,15 @@ const BAR_LEN_WARM = 6;
 /** Max bar length for cool heat level. */
 const BAR_LEN_COOL = 4;
 
-const HEAT_LEVELS: HeatLevel[] = [
-  { minPct: HEAT_CRITICAL_PCT, color: "#e8500a", barChar: "\u2588", barMaxLen: BAR_LEN_CRITICAL },
-  { minPct: HEAT_HOT_PCT, color: "#f97316", barChar: "\u2588", barMaxLen: BAR_LEN_HOT },
-  { minPct: HEAT_WARM_PCT, color: "#fbbf24", barChar: "\u2588", barMaxLen: BAR_LEN_WARM },
+const heatLevels = (): HeatLevel[] => [
+  { minPct: HEAT_CRITICAL_PCT, color: profilerPalette().critical, barChar: "\u2588", barMaxLen: BAR_LEN_CRITICAL },
+  { minPct: HEAT_HOT_PCT, color: profilerPalette().hot, barChar: "\u2588", barMaxLen: BAR_LEN_HOT },
+  { minPct: HEAT_WARM_PCT, color: profilerPalette().warm, barChar: "\u2588", barMaxLen: BAR_LEN_WARM },
   { minPct: 1, color: "#4a5468", barChar: "\u2588", barMaxLen: BAR_LEN_COOL },
 ];
 
 function heatLevelFor(pct: number): HeatLevel | undefined {
-  return HEAT_LEVELS.find((h) => pct >= h.minPct);
+  return heatLevels().find((h) => pct >= h.minPct);
 }
 
 // ── Applied-decoration ledger ─────────────────────────────────────────────

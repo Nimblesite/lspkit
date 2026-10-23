@@ -77,7 +77,7 @@ function buildDashboardScriptTag(
   const gcCountsJson = embedJson(snapshot.gcCounts);
   const heapProfileJson = embedJson(snapshot.heapProfilePath);
   return `
-    const vscode = acquireVsCodeApi();
+    const vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
     const allocations = ${allocJson};
     const timeline = ${timelineJson};
     const leaks = ${leaksJson};

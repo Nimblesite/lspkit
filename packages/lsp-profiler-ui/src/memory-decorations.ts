@@ -12,6 +12,7 @@
  *   Freed:    #34d399  — green (memory freed)
  */
 
+import { profilerPalette } from "./palette";
 import * as vscode from "vscode";
 import { Logger } from "./logger";
 import { recordApplied, type AppliedDecoration } from "./profiler-decorations";
@@ -208,10 +209,10 @@ function formatBytes(bytes: number): string {
 }
 
 function memColor(size: number): string {
-  if (size >= MEM_CRITICAL_THRESHOLD) { return "#c084fc"; } // >100 MB — critical purple
-  if (size >= MEM_HOT_THRESHOLD) { return "#a78bfa"; }      // >10 MB — hot purple
-  if (size >= MEM_WARM_THRESHOLD) { return "#8b5cf6"; }     // >1 MB — warm purple
-  return "#7c3aed";                                          // <1 MB — base purple
+  if (size >= MEM_CRITICAL_THRESHOLD) { return profilerPalette().memory; }
+  if (size >= MEM_HOT_THRESHOLD) { return profilerPalette().memoryHot; }
+  if (size >= MEM_WARM_THRESHOLD) { return profilerPalette().memoryWarm ?? profilerPalette().memoryHot; }
+  return profilerPalette().memoryCool ?? profilerPalette().memoryHot;
 }
 
 function leakColor(confidence: LeakConfidence): string {
@@ -219,7 +220,7 @@ function leakColor(confidence: LeakConfidence): string {
     case "DEFINITE": return "#ef4444"; // red-500 — definite leak
     case "HIGH":     return "#f87171"; // red-400 — high confidence
     case "MEDIUM":   return "#fb923c"; // orange-400 — medium confidence
-    case "LOW":      return "#a78bfa"; // purple — low confidence (warmup)
+    case "LOW":      return profilerPalette().memoryHot; // purple — low confidence (warmup)
   }
 }
 

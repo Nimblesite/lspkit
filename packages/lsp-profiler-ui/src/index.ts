@@ -4,6 +4,8 @@
 // whole profiler UI in one call: processes view, CPU profiler, memory
 // profiler and autopilot. Everything renders from the store's signals.
 
+import { registerDebugProfilerLink } from "./debug-link";
+import { walkReferences } from "./memory-ref-picker";
 import type * as vscode from "vscode";
 import type { ProfilerHost } from "./host";
 import { disposeMemoryProfiler, registerMemoryProfiler } from "./memory-profiler";
@@ -37,6 +39,10 @@ export function registerProfilerUi(context: vscode.ExtensionContext, host: Profi
   const view = registerProcessesView(context, store);
   const disposables: vscode.Disposable[] = [
     ...registerDebuggeePauseTracking(),
+    ...registerDebugProfilerLink({ debugType: host.debugType, inspectType: async (type, sessionId) => {
+      if (store.profiler.value.memoryDebugSessionId !== sessionId) throw new Error("Track this debug session before inspecting type retainers.");
+      await walkReferences(store, type);
+    } }),
     ...registerProfiler(store),
     ...registerMemoryProfiler(store),
     ...registerMemoryAutopilot(store),
@@ -75,3 +81,7 @@ export { lastMemorySnapshot } from "./memory-capture";
 export { isDebuggeePaused } from "./debuggee-pause";
 export { panelMessage as processesPanelMessage } from "./process-reactivity";
 export type * as Wire from "./wire-generated";
+
+export { type ProfilerPalette, resolvePalette, DEFAULT_PALETTE } from "./palette";
+export { openFlamegraphWebview } from "./profiler-flamegraph-html";
+export type { SampledView } from "./sampled-view";

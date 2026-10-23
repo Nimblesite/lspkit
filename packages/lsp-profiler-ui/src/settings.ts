@@ -3,6 +3,7 @@
 // its manifest test checks the list against this constant.
 
 export const PROFILER_SETTING_KEYS = [
+  "profiler.palette",
   "profiler.sampleRate",
   "profiler.includeNative",
   "profiler.lineThreshold",

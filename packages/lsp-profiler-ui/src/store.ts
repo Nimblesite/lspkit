@@ -2,6 +2,8 @@
 // screens render from them and mutate only through the actions. The host
 // supplies the client and the debuggee map; the library owns the rest.
 
+import * as vscode from "vscode";
+import { configurePalette, resolvePalette, DEFAULT_PALETTE } from "./palette";
 import { computed, signal, type ReadonlySignal, type Signal } from "@preact/signals-core";
 import type { LanguageClient } from "vscode-languageclient/node";
 import { isRecord } from "./unknown-shape";
@@ -58,6 +60,8 @@ function advertisedCapabilities(client: LanguageClient | undefined): ProfilerCap
 /** Create the profiler's reactive state bound to `host`. Factory, never a singleton. */
 export function createProfilerStore(host: ProfilerHost): ProfilerStore {
   installIds(host);
+  configurePalette(() => resolvePalette(host.palette ?? DEFAULT_PALETTE,
+    vscode.workspace.getConfiguration(host.configSection).get("profiler.palette")));
   bindLogger(() => host.logger);
   const profiler: Signal<ProfilerSession> = signal(IDLE_PROFILER_SESSION);
   const processes: Signal<ProcessPanelState> = signal(IDLE_PROCESS_PANEL);

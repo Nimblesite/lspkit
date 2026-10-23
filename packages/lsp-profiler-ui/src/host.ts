@@ -10,7 +10,10 @@ import type { LogSink } from "./logger";
 /** Which metric a "run the current file" launch collects. */
 export type LaunchMetric = "cpu" | "memory";
 
+import type { ProfilerPalette } from "./palette";
+
 export interface ProfilerHost {
+  readonly palette?: ProfilerPalette;
   /** Command/context/view prefix, e.g. `sharplsp`. */
   readonly idPrefix: string;
   /** Product name for messages, e.g. `SharpLsp`. */

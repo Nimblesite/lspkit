@@ -620,7 +620,23 @@ All panels share:
 - source-navigation routing;
 - theme variables.
 
-The palette is orange/amber for CPU, purple for memory, red for leaks and green for freed memory, all over editor theme colours.
+Palettes follow [PROF-UI-PALETTE], over editor theme surfaces and text.
+
+### [PROF-UI-PALETTE] Host palettes
+
+A host supplies CPU critical/hot/warm, memory critical/hot, leak and success colors. The user can override these through `<host>.profiler.palette`; only six-digit hex colors are accepted. The fallback keeps the original orange/purple palette. SharpLsp supplies green; Osprey supplies olive/brown-green. Panels, sampled frames and editor heat consume the same resolved palette. Runtime frames retain their host-supplied source classification. Frame identity determines color rank, independently of input ordering. Scientific totals render immediately; a counter animation must never temporarily misstate a measurement. Short captures display milliseconds.
+
+### [PROF-UI-SAMPLED] Interactive sampled profiles
+
+The shared CPU panel consumes sampled Speedscope exports and renders a canvas with left-heavy and time-order layouts, zoom, pan, frame tooltips, substring search, reset and per-thread/fiber selection. Existing SVG previews and native trace exports remain available. A native host may supply its already-parsed model and runtime summary, including CPU/waiting counts, sample rate and dropped samples. Missing scheduling metadata is labelled as sample counts rather than fabricated CPU utilization. Osprey owns capture, symbolization, compiler invocation, cancellation and its source classification; the shared package owns rendering and interactions.
+
+### [PROF-UI-DEBUG-LINK] Debugger selections
+
+Watch/Variables actions carry the adapter's expression, type, value and session identity into shared profiler panels. Hosts with a custom variable tree can invoke the same command on selection. The reverse action adds the exact expression to Watch through VS Code's variable context. A selection from another session is rejected; resume and termination clear it. Type-retention navigation is offered only with a backend callback and is explicitly a type query, never a claim that a type uniquely identifies the selected object. Osprey's native heap backend is not supplied by this UI integration.
+
+### [PROF-UI-CONTRACT] Shared VSIX contracts
+
+The same `testing/webview-contract` module runs inside both SharpLsp and Osprey. It covers CSP, hostile payloads, memory/retention presentation, singleton handlers, theme support and debugger selection boundaries. `testing/cpu-capture-contract` drives each host's real runtime capture and checks attribution, Speedscope/V8 exports, interactive controls and source navigation. Runtime-specific capture and debugger tests remain alongside these contracts; sharing UI tests is not proof of backend parity.
 
 ## [PROF-DOTNET] .NET runtime
 

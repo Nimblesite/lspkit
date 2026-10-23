@@ -1,0 +1,62 @@
+// Implements [PROF-TESTING]. Identical native-capture assertions in each real VSIX host.
+import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as vscode from "vscode";
+import type { ProfileResult } from "../profiler-decorations";
+import { buildFlamegraphHtml, openFlamegraphWebview, flamegraphPanelState } from "../profiler-flamegraph-html";
+import { configSection } from "../ids";
+import { handleSourceNavigation, SingletonWebviewPanel, buildWebviewDocument } from "../profiler-webview";
+import { parseSpeedscope } from "../flame-model";
+import { assertHardened, closeAllEditors, pollUntilResult } from "./webview-contract-helpers";
+
+export function registerCpuCaptureContract(capture: () => Promise<ProfileResult>): void {
+  suite("Shared profiler VSIX — real runtime capture", () => {
+    let result: ProfileResult;
+    suiteSetup(async function () { this.timeout(120_000); result = await capture(); });
+    suiteTeardown(closeAllEditors);
+    test("captures attributed CPU samples and valid native trace artifacts", () => {
+      assert.ok(result.totalSamples > 0);
+      assert.ok(result.hotFunctions.some(fn => fn.file && fn.percentage > 0));
+      const parsed = parseSpeedscope(fs.readFileSync(result.outputFile, "utf8"));
+      assert.ok(parsed.ok, parsed.ok ? "" : parsed.error);
+      assert.ok(result.cpuProfilePath);
+      const cpu = JSON.parse(fs.readFileSync(result.cpuProfilePath, "utf8"));
+      assert.ok(cpu.nodes.length > 0 && cpu.samples.length > 0);
+    });
+    test("mounts both interactive views, search, fiber selection and trace actions", () => {
+      openFlamegraphWebview(result);
+      const panel = flamegraphPanelState();
+      assert.ok(panel);
+      for (const id of ["flame", "btn-left", "btn-time", "fiber-select", "search", "btn-reset", "trace-actions", "fn-body", "line-body"])
+        assert.ok(panel.html.includes(`id="${id}"`), `${id} is reachable in the real host`);
+      assertHardened(panel.html, "captured profile");
+      const output = process.env.PROFILER_REVIEW_HTML;
+      if (output) fs.writeFileSync(output, buildFlamegraphHtml(result));
+    });
+    test("palette overrides update an already-open webview", async () => {
+      const config = vscode.workspace.getConfiguration(configSection());
+      const previous = config.inspect("profiler.palette")?.globalValue;
+      let observed: string | undefined;
+      const panel = new SingletonWebviewPanel(() => "profiler.palette.contract", message => { observed = message.file; });
+      panel.show("Palette contract", buildWebviewDocument({ title: "Palette", css: "", body: "", script: `
+        const api = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
+        window.addEventListener('message', event => { if(event.data.type === 'profilerPalette')
+          api.postMessage({type:'palette', file:document.documentElement.style.getPropertyValue('--prof-critical')}); });
+        api.postMessage({type:'ready', file:'ready'});` }));
+      try {
+        await pollUntilResult(() => observed, value => value === "ready");
+        await config.update("profiler.palette", { critical: "#74824f" }, vscode.ConfigurationTarget.Global);
+        await pollUntilResult(() => observed, value => value === "#74824f");
+        assert.equal(observed, "#74824f");
+      } finally { panel.dispose(); await config.update("profiler.palette", previous, vscode.ConfigurationTarget.Global); }
+    });
+    test("a measured hot line navigates to the actual runtime source", async () => {
+      const line = result.hotLines.find(item => item.line > 0 && fs.existsSync(item.file));
+      assert.ok(line, "capture must attribute a real source line");
+      assert.equal(handleSourceNavigation({ type: "navigateToSource", file: line.file, line: line.line }), true);
+      const editor = await pollUntilResult(() => vscode.window.activeTextEditor,
+        editor => editor?.document.uri.fsPath === line.file && editor.selection.active.line === line.line - 1);
+      assert.equal(editor?.selection.active.line, line.line - 1);
+    });
+  });
+}

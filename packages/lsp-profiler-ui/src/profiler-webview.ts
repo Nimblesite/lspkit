@@ -12,6 +12,11 @@
  * CSP at all. Hosting the primitives once makes those bugs unrepresentable.
  */
 
+import { DEBUG_LINK_BODY, DEBUG_LINK_CSS, debugLinkScript } from "./debug-link-view";
+import { bindPanelPalette } from "./palette-vscode";
+import { bindDebugSelection } from "./debug-selection";
+import { cmd } from "./ids";
+import { paletteCss } from "./palette";
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
@@ -56,10 +61,10 @@ export function buildWebviewDocument(doc: WebviewDocument): string {
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${doc.title}</title>
-  <style nonce="${nonce}">${doc.css}</style>
+  <style nonce="${nonce}">${doc.css}${paletteCss()}${DEBUG_LINK_CSS}</style>
 </head>
-<body>${doc.body}
-  <script nonce="${nonce}">${doc.script}</script>
+<body>${DEBUG_LINK_BODY}${doc.body}
+  <script nonce="${nonce}">${debugLinkScript()}${doc.script}</script>
 </body>
 </html>`;
 }
@@ -88,15 +93,29 @@ export interface SingletonWebviewPanelOptions {
  * panels can layer their own message types on top.
  */
 export function handleSourceNavigation(msg: WebviewMessage): boolean {
+  if (msg.type === "profileWatch" || msg.type === "profileRetainers") {
+    void vscode.commands.executeCommand(cmd(msg.type === "profileWatch" ? "watchVariable" : "inspectVariableType"))
+      .then(undefined, error => { void vscode.window.showErrorMessage(String(error)); });
+    return true;
+  }
   if (msg.type !== "navigateToSource" || msg.file === undefined || msg.line === undefined) {
     return false;
   }
-  const position = new vscode.Position(msg.line - 1, 0);
-  void vscode.window.showTextDocument(vscode.Uri.file(msg.file), {
-    selection: new vscode.Range(position, position),
-    viewColumn: vscode.ViewColumn.One,
+  void revealProfileSource({ file: msg.file, line: msg.line }).catch(() => {
+    void vscode.window.showWarningMessage("Cannot open the selected profile source.");
   });
   return true;
+}
+
+/** Open a measured source line, clamped to the current document (source may have changed). */
+export async function revealProfileSource(location: { file: string; line: number; type?: string }): Promise<void> {
+  if (!Number.isFinite(location.line)) throw new Error("Invalid profile source line");
+  const document = await vscode.workspace.openTextDocument(location.file);
+  const editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
+  const line = Math.min(Math.max(Math.trunc(location.line) - 1, 0), document.lineCount - 1);
+  const range = new vscode.Range(line, 0, line, 0);
+  editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+  editor.selection = new vscode.Selection(line, 0, line, 0);
 }
 
 /**
@@ -132,6 +151,8 @@ export class SingletonWebviewPanel {
           localResourceRoots: [],
         },
       );
+      bindDebugSelection(this.panel);
+      bindPanelPalette(this.panel);
       this.panel.onDidDispose(() => {
         this.panel = undefined;
         this.visible = false;

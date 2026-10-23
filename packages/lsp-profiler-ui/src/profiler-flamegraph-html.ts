@@ -12,7 +12,9 @@
  * host ([PROF-UI-WEBVIEW], profiler-webview.ts).
  */
 
-import { readFileSync } from "node:fs";
+import { sampledView, sampledParts } from "./sampled-view";
+import { loadFlamegraphSvgDataUri, flamegraphHeroHtml } from "./flamegraph-artifact";
+export { loadFlamegraphSvgDataUri } from "./flamegraph-artifact";
 import { cmd, brand } from "./ids";
 import * as vscode from "vscode";
 import { Logger } from "./logger";
@@ -46,7 +48,7 @@ const REVEAL_TRACE = "Reveal Trace File";
  * Largest flame graph SVG embedded inline as a data URI (bytes). Anything
  * bigger still opens externally via the panel button; it is just not inlined.
  */
-const MAX_INLINE_SVG_BYTES = 4_194_304;
+
 
 // Implements [PROF-CPU-START]. See docs/specs/LSP-PROFILER-SPEC.md
 /**
@@ -204,7 +206,7 @@ async function offerProfileResultActions(result: ProfileResult): Promise<void> {
 
 /** Route a message posted from the results webview. */
 function handleFlamegraphMessage(msg: WebviewMessage): void {
-  if (handleSourceNavigation(msg)) {
+  if (handleSourceNavigation(msg.type === "select" ? { ...msg, type: "navigateToSource" } : msg)) {
     return;
   }
   if (msg.type === "openSpeedscope" && msg.file !== undefined && msg.file !== "") {
@@ -299,53 +301,32 @@ export function disposeFlamegraphPanel(): void {
 
 // ── Flame graph hero ([PROF-EXPORT-FLAMEGRAPH]) ───────────────────────────────
 
-/**
- * Inline the LSP-exported flame graph SVG as a `data:` URI so the CSP-locked
- * webview (`img-src data:`) can render it without running its embedded script.
- * Returns undefined when there is no SVG, it cannot be read, or it is too large
- * to inline — the panel then simply omits the hero (the tables still work).
- */
-export function loadFlamegraphSvgDataUri(flamegraphPath: string | undefined): string | undefined {
-  if (flamegraphPath === undefined || flamegraphPath === "") {
-    return undefined;
-  }
-  try {
-    const svg = readFileSync(flamegraphPath);
-    if (svg.byteLength === 0 || svg.byteLength > MAX_INLINE_SVG_BYTES) {
-      return undefined;
-    }
-    return `data:image/svg+xml;base64,${svg.toString("base64")}`;
-  } catch (err: unknown) {
-    Logger.warn(
-      `Flame graph SVG could not be inlined (${err instanceof Error ? err.message : String(err)})`,
-    );
-    return undefined;
-  }
-}
-
-/** The flame graph hero markup, or an empty string when no SVG is available. */
-function flamegraphHeroHtml(svgDataUri: string | undefined): string {
-  if (svgDataUri === undefined) {
-    return "";
-  }
-  return `
-  <h2>Flame Graph</h2>
-  <div class="flame-hero">
-    <img id="flame-svg" alt="CPU flame graph" src="${svgDataUri}">
-    <button class="action-link" id="open-flame-svg" title="Open the interactive flame graph (zoom and search) in your default viewer">
-      Open Interactive Flame Graph
-    </button>
-  </div>`;
-}
-
 // ── Document assembly ─────────────────────────────────────────────────────
 
 /** Flamegraph-specific CSS on top of the shared profiler design system. */
 function flamegraphCss(): string {
-  return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}
-    body { padding: 16px; }
+  return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}
+    body { padding: 20px; }
+    .summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 720px; }
+    .card { min-width: 0; padding: 12px; }
+    .data-table { table-layout: fixed; }
+    .data-table td, .data-table th { overflow-wrap: anywhere; }
+    .data-table th:first-child { width: 27%; }
+    .data-table th:nth-child(2) { width: 37%; }
+    .data-table .bar-cell { width: auto; overflow: hidden; }
+    .bar { max-width: 100%; }
+    .toggle.active { background: var(--prof-hot); color: #171b16; }
+    .chip.active { border-color: var(--prof-hot); }
+    #search:focus { outline: 1px solid var(--prof-hot); outline-offset: 1px; }
+    @media (max-width: 600px) {
+      body { padding: 12px; }
+      .summary-cards { gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .data-table td { padding: 7px 4px; font-size: 11px; }
+      .data-table th { padding: 6px 4px; font-size: 10px; }
+      .data-table th:last-child, .data-table .bar-cell { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     h1 .accent { color: var(--prof-critical); }
-    ${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}
     .data-table .pct { font-weight: 500; min-width: 56px; text-align: right; }
     .bar.critical { background: var(--prof-critical); }
     .bar.hot { background: var(--prof-hot); }
@@ -369,7 +350,7 @@ function flamegraphCss(): string {
 }
 
 /** Build the body HTML with the flame graph hero, summary cards and tables. */
-function flamegraphBody(svgDataUri: string | undefined): string {
+function flamegraphBody(svgDataUri: string | undefined, sampledBody = ""): string {
   return `
   ${brandHeading(brand(), "PROFILER")}
   <div class="summary-cards">
@@ -377,7 +358,7 @@ function flamegraphBody(svgDataUri: string | undefined): string {
     <div class="card"><div class="label">Duration</div><div class="value" id="duration">0s</div></div>
     <div class="card"><div class="label">Functions</div><div class="value" id="fn-count">0</div></div>
     <div class="card"><div class="label">Hot Lines</div><div class="value" id="line-count">0</div></div>
-  </div>${flamegraphHeroHtml(svgDataUri)}
+  </div>${sampledBody}${flamegraphHeroHtml(svgDataUri)}
   <h2>Hot Functions</h2>
   <table class="data-table">
     <thead><tr><th>Function</th><th>Location</th><th>Total %</th><th>Self %</th><th></th></tr></thead>
@@ -394,7 +375,7 @@ function flamegraphBody(svgDataUri: string | undefined): string {
 /** Build the script initialization and helpers for the results webview. */
 function flamegraphScriptInit(result: ProfileResult): string {
   return `
-    const vscode = acquireVsCodeApi();
+    const vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
     const hotFunctions = ${embedJson(result.hotFunctions)};
     const hotLines = ${embedJson(result.hotLines)};
     const totalSamples = ${result.totalSamples};
@@ -402,18 +383,8 @@ function flamegraphScriptInit(result: ProfileResult): string {
     const outputFile = ${embedJson(result.outputFile)};
     const flamegraphFile = ${embedJson(result.flamegraphPath ?? "")};
     const cpuProfileFile = ${embedJson(result.cpuProfilePath ?? "")};
-    function animateValue(el, target, suffix) {
-      const start = 0;
-      const stepTime = Math.max(10, Math.floor(400 / target));
-      let current = start;
-      const timer = setInterval(() => {
-        current += Math.ceil(target / 40);
-        if (current >= target) { current = target; clearInterval(timer); }
-        el.textContent = (current >= 1000 ? (current / 1000).toFixed(1) + 'K' : String(current)) + (suffix || '');
-      }, stepTime);
-    }
-    animateValue(document.getElementById('total-samples'), totalSamples, '');
-    document.getElementById('duration').textContent = duration < 60 ? duration.toFixed(1) + 's' : (duration / 60).toFixed(1) + 'm';
+    document.getElementById('total-samples').textContent = String(totalSamples);
+    document.getElementById('duration').textContent = duration < 1 ? (duration * 1000).toFixed(0) + 'ms' : duration < 60 ? duration.toFixed(1) + 's' : (duration / 60).toFixed(1) + 'm';
     document.getElementById('fn-count').textContent = String(hotFunctions.length);
     document.getElementById('line-count').textContent = String(hotLines.length);
     const openSvgButton = document.getElementById('open-flame-svg');
@@ -490,10 +461,11 @@ function flamegraphScriptRender(): string {
 /** Build the complete results-panel HTML for the profiler webview. */
 export function buildFlamegraphHtml(result: ProfileResult): string {
   const svgDataUri = loadFlamegraphSvgDataUri(result.flamegraphPath);
+  const sampled = sampledParts(sampledView(result));
   return buildWebviewDocument({
     title: `${brand()} Profiler`,
-    css: flamegraphCss(),
-    body: flamegraphBody(svgDataUri),
-    script: `${PROFILER_JS_UTILS}${flamegraphScriptInit(result)}${flamegraphScriptRender()}`,
+    css: `${sampled.css}${flamegraphCss()}`,
+    body: flamegraphBody(svgDataUri, sampled.body),
+    script: `${PROFILER_JS_UTILS}${flamegraphScriptInit(result)}${flamegraphScriptRender()}${sampled.script}`,
   });
 }

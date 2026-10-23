@@ -20,6 +20,15 @@ else
   MKDIR = mkdir -p
 endif
 
+# The _coverage_check recipe is POSIX sh. On Windows GNU make defaults SHELL
+# to powershell, so the coverage-gate regression tests must drive it through
+# Git Bash; CI uses /bin/sh.
+ifeq ($(OS),Windows_NT)
+  POSIX_SHELL ?= C:/Program Files/Git/bin/bash.exe
+else
+  POSIX_SHELL ?= /bin/sh
+endif
+
 # ---------------------------------------------------------------------------
 # Coverage — single source of truth is coverage-thresholds.json
 # See REPO-STANDARDS-SPEC [COVERAGE-THRESHOLDS-JSON].
@@ -44,6 +53,9 @@ test:
 	$(MAKE) _profiler_dotnet
 	cargo llvm-cov nextest --workspace --all-targets --features lspkit-server/pull --locked --lcov --output-path lcov.info
 	$(MAKE) _coverage_check
+# The gate itself must not fail open (missing jq, corrupt JSON, invalid
+# thresholds all have to fail closed). This regression cannot be dropped.
+	$(MAKE) _coverage_check_test
 	$(MAKE) _typediagram_test
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
@@ -114,13 +126,26 @@ _typediagram_test:
 _profiler_spec_check:
 	node scripts/profiler-spec-citations.mjs
 
+## Coverage-gate regression: coarse CLI tests driving the real
+## _coverage_check target against fixture LCOV/JSON files (missing jq, missing
+## inputs, corrupt JSON, empty/nonnumeric/fractional/out-of-range thresholds
+## must all fail closed). $(MAKE)/$(POSIX_SHELL) keep it cross-platform.
+_coverage_check_test:
+	node scripts/coverage-gate.test.mjs --make "$(MAKE)" --shell "$(POSIX_SHELL)"
+
 _coverage_check:
 	@if [ ! -f "$(COVERAGE_THRESHOLDS_FILE)" ]; then echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) not found"; exit 1; fi; \
 	if [ ! -f lcov.info ]; then echo "FAIL: lcov.info not found"; exit 1; fi; \
+	command -v jq >/dev/null 2>&1 || { echo "FAIL: jq not found — install jq so coverage thresholds cannot be skipped"; exit 1; }; \
+	jq -e '(.per_crate | type) == "object" and (.per_crate | length) > 0 and ([.per_crate[] | type == "number" and . == floor and . >= 0 and . <= 100] | all)' "$(COVERAGE_THRESHOLDS_FILE)" >/dev/null || { echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) per_crate must be a nonempty map of integer thresholds 0..100"; exit 1; }; \
+	set -e; \
 	FAILED=0; \
-	for CRATE in $$(jq -r '.per_crate | keys[]' "$(COVERAGE_THRESHOLDS_FILE)"); do \
-	  THRESHOLD=$$(jq -r --arg c "$$CRATE" '.per_crate[$$c]' "$(COVERAGE_THRESHOLDS_FILE)"); \
-	  COV=$$(awk -v crate="$$CRATE" 'BEGIN{lh=0;lf=0;in_block=0} /^SF:/{in_block=(index($$0,"/crates/" crate "/src/")>0)?1:0} in_block&&/^LH:/{sub(/^LH:/,""); lh+=$$0} in_block&&/^LF:/{sub(/^LF:/,""); lf+=$$0} /^end_of_record/{in_block=0} END{printf "%d %d", lh, lf}' lcov.info); \
+	CRATES=$$(jq -r '.per_crate | keys[]' "$(COVERAGE_THRESHOLDS_FILE)" | tr -d '\r'); \
+	if [ -z "$$CRATES" ]; then echo "FAIL: could not list crates from $(COVERAGE_THRESHOLDS_FILE)"; exit 1; fi; \
+	for CRATE in $$CRATES; do \
+	  THRESHOLD=$$(jq -r --arg c "$$CRATE" '.per_crate[$$c]' "$(COVERAGE_THRESHOLDS_FILE)" | tr -d '\r') || exit 1; \
+	  if [ -z "$$THRESHOLD" ] || [ "$$THRESHOLD" = "null" ]; then echo "FAIL: $$CRATE — threshold missing in $(COVERAGE_THRESHOLDS_FILE)"; exit 1; fi; \
+	  COV=$$(awk -v crate="$$CRATE" 'BEGIN{lh=0;lf=0;in_block=0} /^SF:/{in_block=(index($$0,"/crates/" crate "/src/")>0)?1:0} in_block&&/^LH:/{sub(/^LH:/,""); lh+=$$0} in_block&&/^LF:/{sub(/^LF:/,""); lf+=$$0} /^end_of_record/{in_block=0} END{printf "%d %d", lh, lf}' lcov.info) || exit 1; \
 	  LH=$${COV% *}; LF=$${COV#* }; \
 	  if [ "$$LF" -eq 0 ]; then echo "FAIL: $$CRATE — no lines in lcov.info"; FAILED=1; continue; fi; \
 	  PCT=$$(awk "BEGIN{printf \"%.2f\", $$LH/$$LF*100}"); \

@@ -3,11 +3,11 @@
 //! Codec and envelope classification belong to the caller. This layer only
 //! separates response flow from unsolicited backend events.
 
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::transport::{read_frame, TransportError};
+use crate::transport::read_frame;
 
 /// A single reader task with distinct notification and response channels.
 pub struct Inbound<E> {
@@ -93,11 +93,18 @@ async fn next_frame<R: AsyncRead + Unpin>(
     reader: &mut R,
     max_frame: usize,
 ) -> Result<Option<Vec<u8>>, String> {
-    match read_frame(reader, max_frame).await {
-        Ok(frame) => Ok(Some(frame)),
-        Err(TransportError::Io(error)) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
-            Ok(None)
-        }
-        Err(error) => Err(error.to_string()),
+    let mut first = [0];
+    if reader
+        .read(&mut first)
+        .await
+        .map_err(|error| error.to_string())?
+        == 0
+    {
+        return Ok(None);
     }
+    let mut prefixed = std::io::Cursor::new(first).chain(reader);
+    read_frame(&mut prefixed, max_frame)
+        .await
+        .map(Some)
+        .map_err(|error| error.to_string())
 }

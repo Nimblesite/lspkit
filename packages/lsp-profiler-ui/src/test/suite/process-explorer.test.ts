@@ -17,6 +17,12 @@ import { numberField, rawField, recordArrayField } from "../../unknown-shape";
 
 const MB = 1024 * 1024;
 
+/** CPython's advertised profilers: sampled CPU, and tracemalloc injected through the debugger (Courier). */
+const CPYTHON_PROFILERS = {
+  cpu: { live_progress: true, line_level: true, native_frames: false, cooperative: true },
+  memory: { mode: { kind: "Courier" }, allocation_sites: true, references: false, objects_by_type: false, gc_collect: true },
+} as const;
+
 /** A representative process table covering launchers, users, and versions. */
 const STUB_PROCESSES: readonly ProcessInfo[] = [
   {
@@ -59,8 +65,10 @@ function storeWith(processes: readonly ProcessInfo[], requests?: RecordedRequest
   const client = {
     isRunning: (): boolean => true,
     // The server names its runtime; the row must show that name, never a
-    // guess derived from the wire id's spelling ([PROF-UI-CAPABILITIES]).
-    initializeResult: { capabilities: { experimental: { lspProfiler: { runtimes: [{ id: "python", display_name: "CPython", source_entries: true }] } } } },
+    // guess derived from the wire id's spelling ([PROF-UI-CAPABILITIES]). It
+    // advertises both profilers, as tracemalloc-backed CPython does: an absent
+    // `memory` block would mean the runtime has no memory profiler at all.
+    initializeResult: { capabilities: { experimental: { lspProfiler: { runtimes: [{ id: "python", display_name: "CPython", source_entries: true, ...CPYTHON_PROFILERS }] } } } },
     onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
     sendRequest: async (_method: string, param?: RecordedRequest): Promise<unknown> => {
       if (param !== undefined) { requests?.push(param); }

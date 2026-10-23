@@ -36,9 +36,10 @@ export function bindMemoryStatusBar(store: Store): vscode.Disposable[] {
   // Click the status-bar item to open the memory action menu (no palette needed).
   memoryStatusBarItem.command = cmd("memoryMenu");
 
-  // Reactive leg: tracking state ([PROF-UI-PROCESSES]).
+  // Reactive leg: tracking state, and whether any runtime offers memory ([PROF-UI-CAPABILITIES]).
   const disposeEffect = effect(() => {
     void store.profiler.value.memory;
+    void store.memoryOffered();
     refreshMemoryStatusBar(store);
   });
 
@@ -61,7 +62,7 @@ export function bindMemoryStatusBar(store: Store): vscode.Disposable[] {
 
 /**
  * Show the memory status-bar entry whenever a host debug session is active
- * (or tracking is starting/on) and click it to open the action menu. Hidden
+ * and a runtime offers memory (or tracking is starting/on) and click it to open the action menu. Hidden
  * otherwise. A start in flight shows a spinner — never silence between the
  * click and the tracking state ([PROF-UI-STATE]).
  */
@@ -70,7 +71,8 @@ function refreshMemoryStatusBar(store: Store): void {
 
   const debugging = vscode.debug.activeDebugSession?.type === debugType();
   const memoryState = store.profiler.value.memory;
-  if (!debugging && memoryState === "idle") {
+  // A host whose runtimes advertise no memory backend never offers tracking.
+  if ((!debugging || !store.memoryOffered()) && memoryState === "idle") {
     hideMemoryStatusBar();
     return;
   }

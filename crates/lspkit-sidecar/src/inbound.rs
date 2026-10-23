@@ -1,0 +1,103 @@
+//! Read notifications while no request is pending. [LSP-PULL-TRANSPORT]
+//!
+//! Codec and envelope classification belong to the caller. This layer only
+//! separates response flow from unsolicited backend events.
+
+use tokio::io::AsyncRead;
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
+
+use crate::transport::{read_frame, TransportError};
+
+/// A single reader task with distinct notification and response channels.
+pub struct Inbound<E> {
+    /// Ordered response stream, including a terminal read/codec failure.
+    pub responses: mpsc::UnboundedReceiver<Result<E, String>>,
+    /// Unsolicited backend notifications, delivered even while idle.
+    pub notifications: mpsc::UnboundedReceiver<E>,
+    /// Reader ownership, aborted when the owning transport is dropped.
+    pub task: JoinHandle<()>,
+}
+
+/// Spawn a framed read loop without coupling shared infrastructure to a codec.
+pub fn spawn<R, E, D, N>(reader: R, max_frame: usize, decode: D, notification: N) -> Inbound<E>
+where
+    R: AsyncRead + Send + Unpin + 'static,
+    E: Send + 'static,
+    D: Fn(Vec<u8>) -> Result<E, String> + Send + 'static,
+    N: Fn(&E) -> bool + Send + 'static,
+{
+    let (responses_tx, responses) = mpsc::unbounded_channel();
+    let (notifications_tx, notifications) = mpsc::unbounded_channel();
+    let task = tokio::spawn(read_loop(
+        reader,
+        max_frame,
+        decode,
+        notification,
+        Channels {
+            responses: responses_tx,
+            notifications: notifications_tx,
+        },
+    ));
+    Inbound {
+        responses,
+        notifications,
+        task,
+    }
+}
+
+async fn read_loop<R, E, D, N>(
+    mut reader: R,
+    max_frame: usize,
+    decode: D,
+    notification: N,
+    channels: Channels<E>,
+) where
+    R: AsyncRead + Send + Unpin + 'static,
+    E: Send + 'static,
+    D: Fn(Vec<u8>) -> Result<E, String> + Send + 'static,
+    N: Fn(&E) -> bool + Send + 'static,
+{
+    loop {
+        let frame = next_frame(&mut reader, max_frame).await;
+        let decoded = frame.and_then(|frame| frame.map(&decode).transpose());
+        if !channels.forward(decoded, &notification) {
+            return;
+        }
+    }
+}
+
+struct Channels<E> {
+    responses: mpsc::UnboundedSender<Result<E, String>>,
+    notifications: mpsc::UnboundedSender<E>,
+}
+
+impl<E> Channels<E> {
+    fn forward(&self, item: Result<Option<E>, String>, notification: &impl Fn(&E) -> bool) -> bool {
+        match item {
+            Ok(Some(envelope)) if notification(&envelope) => {
+                let _ = self.notifications.send(envelope);
+                true
+            }
+            Ok(Some(envelope)) => self.responses.send(Ok(envelope)).is_ok(),
+            Err(error) => {
+                let _ = self.responses.send(Err(error));
+                false
+            }
+            Ok(None) => false,
+        }
+    }
+}
+
+async fn next_frame<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    max_frame: usize,
+) -> Result<Option<Vec<u8>>, String> {
+    match read_frame(reader, max_frame).await {
+        Ok(frame) => Ok(Some(frame)),
+        Err(TransportError::Io(error)) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+            Ok(None)
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}

@@ -10,6 +10,7 @@
 //! - [`lifecycle`] — spawn / health-ping / exponential-backoff restart.
 
 pub mod correlator;
+pub mod inbound;
 pub mod lifecycle;
 pub mod transport;
 

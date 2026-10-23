@@ -17,6 +17,7 @@ include = ["src/**/*", "LICENSE-MIT"]
 workspace = true
 
 [dependencies]
+salsa = { version = "0.28.5", optional = true }
 lspkit.workspace = true
 lspkit-vfs.workspace = true
 
@@ -31,6 +32,9 @@ lsp-types.workspace = true
 
 thiserror.workspace = true
 tracing.workspace = true
+
+[features]
+pull = ["dep:salsa"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "io-util", "time"] }

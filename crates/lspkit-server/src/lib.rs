@@ -18,6 +18,9 @@ pub mod diagnostics;
 pub mod dispatch;
 pub mod jsonrpc;
 pub mod progress;
+#[cfg(feature = "pull")]
+pub mod pull;
+pub mod reply;
 pub mod uri;
 pub mod workspace;
 
@@ -28,5 +31,7 @@ pub use crate::diagnostics::{
 pub use crate::dispatch::{DispatchError, Dispatcher, HandlerResult};
 pub use crate::jsonrpc::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
 pub use crate::progress::{NoopReporter, ProgressReporter, ProgressSink, ProgressUpdate};
+pub use crate::reply::{EmissionError, ReplyGate};
 pub use crate::uri::{path_to_uri, uri_to_path, UriError};
 pub use crate::workspace::{Workspace, WorkspaceFolder};
+pub use tokio_util::sync::CancellationToken;

@@ -17,7 +17,9 @@ fn repo_root() -> PathBuf {
 }
 
 fn built(relative: &str, hint: &str) -> PathBuf {
-    let path = repo_root().join(relative);
+    let path = repo_root()
+        .join(relative)
+        .with_extension(std::env::consts::EXE_EXTENSION);
     assert!(
         path.is_file(),
         "{} is missing: run `{hint}` first",

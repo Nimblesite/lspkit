@@ -33,7 +33,7 @@ COVERAGE_THRESHOLDS_FILE := coverage-thresholds.json
 ## build: Compile/assemble all artifacts
 build:
 	@echo "==> Building..."
-	cargo build --release --workspace --locked
+	cargo build --release --workspace --features lspkit-server/pull --locked
 
 ## test: Fail-fast tests + coverage + threshold enforcement.
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].
@@ -42,14 +42,14 @@ test:
 	@echo "==> Testing (fail-fast + coverage + threshold)..."
 	rustup component add llvm-tools-preview 2>/dev/null || true
 	$(MAKE) _profiler_dotnet
-	cargo llvm-cov nextest --workspace --all-targets --locked --lcov --output-path lcov.info
+	cargo llvm-cov nextest --workspace --all-targets --features lspkit-server/pull --locked --lcov --output-path lcov.info
 	$(MAKE) _coverage_check
 	$(MAKE) _typediagram_test
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
 	@echo "==> Linting..."
-	cargo clippy --release --workspace --all-targets --locked -- -D warnings
+	cargo clippy --release --workspace --all-targets --features lspkit-server/pull --locked -- -D warnings
 	$(MAKE) _profiler_spec_check
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).

@@ -4,6 +4,7 @@
 //! [`CancellationToken`] that fires when the client sends `$/cancelRequest`.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
@@ -32,6 +33,27 @@ pub enum DispatchError {
     /// No handler registered for the method.
     #[error("method not found: {0}")]
     UnknownMethod(String),
+    /// Cancellation registration failed, so the request was never scheduled:
+    /// a poisoned registry lock is reported instead of skipping registration.
+    /// [LSP-PULL-CANCELLATION]
+    #[error("cancellation registry lock poisoned; request {0:?} not registered")]
+    RegistrationPoisoned(RequestId),
+}
+
+/// RAII registration: removes a request's cancellation token on drop, whether
+/// the handler completed or the future was dropped before its first poll.
+/// [LSP-PULL-CANCELLATION]
+struct RegistrationGuard {
+    id: RequestId,
+    cancellations: Arc<RwLock<HashMap<RequestId, CancellationToken>>>,
+}
+
+impl Drop for RegistrationGuard {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.cancellations.write() {
+            guard.remove(&self.id);
+        }
+    }
 }
 
 /// Routes inbound JSON-RPC method calls to async handlers.
@@ -60,6 +82,78 @@ impl Dispatcher {
         }
     }
 
+    /// Prepare a request synchronously and return its execution future.
+    ///
+    /// The cancellation token is registered in the shared map *before* this
+    /// returns, so `$/cancelRequest` cannot race ahead of registration; the
+    /// registration is released when the future completes or is dropped.
+    /// [LSP-PULL-CANCELLATION]
+    ///
+    /// # Errors
+    /// Returns [`DispatchError::UnknownMethod`] if no handler is registered,
+    /// or [`DispatchError::RegistrationPoisoned`] if cancellation registration
+    /// failed (the request is not scheduled in that case).
+    pub fn prepare(
+        &self,
+        id: RequestId,
+        method: &str,
+        params: Value,
+    ) -> Result<impl Future<Output = HandlerResult> + Send + 'static, DispatchError> {
+        let handler = self
+            .handlers
+            .read()
+            .ok()
+            .and_then(|guard| guard.get(method).cloned())
+            .ok_or_else(|| DispatchError::UnknownMethod(method.to_owned()))?;
+        self.prepare_call(id, move |cancel| handler(params, cancel))
+    }
+
+    /// Register application-owned request work in the same cancellation registry.
+    /// The returned future releases its registration on completion or drop.
+    /// Implements [LSP-PULL-CANCELLATION].
+    ///
+    /// # Errors
+    /// Returns a registration error when the shared registry is unavailable.
+    pub fn prepare_call<F, Fut>(
+        &self,
+        id: RequestId,
+        operation: F,
+    ) -> Result<impl Future<Output = HandlerResult> + Send + 'static, DispatchError>
+    where
+        F: FnOnce(CancellationToken) -> Fut + Send + 'static,
+        Fut: Future<Output = HandlerResult> + Send + 'static,
+    {
+        let (cancel, guard) = self.register_cancellation(id)?;
+        Ok(async move {
+            let result = operation(cancel).await;
+            drop(guard);
+            result
+        })
+    }
+
+    /// Register `id` before scheduling and build its RAII release guard.
+    /// [LSP-PULL-CANCELLATION]
+    ///
+    /// # Errors
+    /// Returns [`DispatchError::RegistrationPoisoned`] if the registry lock is
+    /// poisoned; nothing is registered in that case.
+    fn register_cancellation(
+        &self,
+        id: RequestId,
+    ) -> Result<(CancellationToken, RegistrationGuard), DispatchError> {
+        let cancel = CancellationToken::new();
+        let mut registry = self
+            .cancellations
+            .write()
+            .map_err(|_| DispatchError::RegistrationPoisoned(id.clone()))?;
+        registry.insert(id.clone(), cancel.clone());
+        let guard = RegistrationGuard {
+            id,
+            cancellations: Arc::clone(&self.cancellations),
+        };
+        Ok((cancel, guard))
+    }
+
     /// Dispatch a request. Returns the handler's result.
     ///
     /// The supplied `id` is used to register a cancellation token so a later
@@ -73,21 +167,20 @@ impl Dispatcher {
         method: &str,
         params: Value,
     ) -> Result<HandlerResult, DispatchError> {
-        let handler = self
-            .handlers
-            .read()
-            .ok()
-            .and_then(|guard| guard.get(method).cloned())
-            .ok_or_else(|| DispatchError::UnknownMethod(method.to_owned()))?;
-        let cancel = CancellationToken::new();
-        if let Ok(mut guard) = self.cancellations.write() {
-            guard.insert(id.clone(), cancel.clone());
+        Ok(self.prepare(id.clone(), method, params)?.await)
+    }
+
+    /// Trip every in-flight request's cancellation token, e.g. on shutdown.
+    /// Registrations are still released by each request's own guard.
+    /// [LSP-PULL-CANCELLATION]
+    pub fn cancel_all(&self) {
+        if let Ok(guard) = self.cancellations.read() {
+            for token in guard.values() {
+                token.cancel();
+            }
+        } else {
+            tracing::warn!("Request cancellation registry unavailable during shutdown");
         }
-        let result = handler(params, cancel).await;
-        if let Ok(mut guard) = self.cancellations.write() {
-            guard.remove(id);
-        }
-        Ok(result)
     }
 
     /// Trip the cancellation token for an in-flight request. No-op if unknown.

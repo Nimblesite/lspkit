@@ -38,7 +38,42 @@ pub struct FileWatcher {
     rx: mpsc::UnboundedReceiver<ChangeEvent>,
 }
 
+/// Owned watcher and shared debounce stream; dropping it releases native watching.
+pub struct CoalescedWatcher {
+    triggers: mpsc::UnboundedReceiver<crate::scheduler::Trigger>,
+    reader: tokio::task::JoinHandle<()>,
+}
+
+impl CoalescedWatcher {
+    /// Wait for the next coalesced input batch.
+    pub async fn next(&mut self) -> Option<crate::scheduler::Trigger> {
+        self.triggers.recv().await
+    }
+}
+
+impl Drop for CoalescedWatcher {
+    fn drop(&mut self) {
+        self.reader.abort();
+    }
+}
+
 impl FileWatcher {
+    /// Feed the canonical shared debouncer while retaining native watcher ownership.
+    #[must_use]
+    pub fn coalesced(mut self, config: crate::scheduler::ScheduleConfig) -> CoalescedWatcher {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let reader = tokio::spawn(async move {
+            while let Some(event) = self.next().await {
+                if sender.send(event).is_err() {
+                    return;
+                }
+            }
+        });
+        CoalescedWatcher {
+            triggers: crate::scheduler::spawn(receiver, config),
+            reader,
+        }
+    }
     /// Start watching `root` recursively. Returns a watcher that streams events.
     ///
     /// # Errors

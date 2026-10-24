@@ -4,8 +4,8 @@
  *
  * After a memory snapshot, hot allocation lines get decorations showing
  * allocation size and count, in the host palette's memory ramp (memory,
- * memoryHot, memoryWarm, memoryCool by size) and its leak colour for a
- * high-confidence leak ([PROF-UI-PALETTE]).
+ * memoryHot, memoryWarm, memoryCool by size); a suspected leak wears the
+ * palette's leak, warm or memory colour by confidence ([PROF-UI-PALETTE]).
  */
 
 import { profilerPalette } from "./palette";
@@ -13,6 +13,7 @@ import * as vscode from "vscode";
 import { Logger } from "./logger";
 import { recordApplied, type AppliedDecoration } from "./profiler-decorations";
 import { pathKeyer } from "./editor-path-key";
+import { formatBytes } from "./profiler-styles";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -183,26 +184,12 @@ export function appliedMemoryDecorations(): readonly AppliedDecoration[] {
 
 // ── Formatting ────────────────────────────────────────────────────────────
 
-/** 1 GiB in bytes. */
-const BYTES_PER_GIB = 1_073_741_824;
-/** 1 MiB in bytes. */
-const BYTES_PER_MIB = 1_048_576;
-/** 1 KiB in bytes. */
-const BYTES_PER_KIB = 1024;
-
 /** Threshold for "critical" memory allocation color (100 MiB). */
 const MEM_CRITICAL_THRESHOLD = 104_857_600;
 /** Threshold for "hot" memory allocation color (10 MiB). */
 const MEM_HOT_THRESHOLD = 10_485_760;
 /** Threshold for "warm" memory allocation color (1 MiB). */
 const MEM_WARM_THRESHOLD = 1_048_576;
-
-function formatBytes(bytes: number): string {
-  if (bytes >= BYTES_PER_GIB) { return `${(bytes / BYTES_PER_GIB).toFixed(1)} GB`; }
-  if (bytes >= BYTES_PER_MIB) { return `${(bytes / BYTES_PER_MIB).toFixed(1)} MB`; }
-  if (bytes >= BYTES_PER_KIB) { return `${(bytes / BYTES_PER_KIB).toFixed(1)} KB`; }
-  return `${String(bytes)} B`;
-}
 
 function memColor(size: number): string {
   const palette = profilerPalette();
@@ -212,12 +199,14 @@ function memColor(size: number): string {
   return palette.memoryCool ?? palette.memoryHot;
 }
 
+/** The host's colour for a leak of `confidence`, as the dashboard's badges draw it ([PROF-UI-PALETTE]). */
 function leakColor(confidence: LeakConfidence): string {
+  const palette = profilerPalette();
   switch (confidence) {
-    case "DEFINITE": return "#ef4444"; // red-500 — definite leak
-    case "HIGH":     return profilerPalette().leak; // the host's leak colour — high confidence
-    case "MEDIUM":   return "#fb923c"; // orange-400 — medium confidence
-    case "LOW":      return profilerPalette().memoryHot; // the host's memory colour — low confidence (warmup)
+    case "DEFINITE":
+    case "HIGH": return palette.leak;
+    case "MEDIUM": return palette.warm;
+    case "LOW": return palette.memoryHot; // warming up: not yet a leak
   }
 }
 

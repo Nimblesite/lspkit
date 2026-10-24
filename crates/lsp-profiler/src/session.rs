@@ -15,7 +15,7 @@ use crate::aggregate::{saturating_i64, HotspotConfig, ProfileData};
 use crate::error::ProfilerError;
 use crate::runtime::Runtime;
 use crate::sampler::SamplerHandle;
-use crate::wire::{ProfileProgress, ProfileSessionInfo, StartProfileResult};
+use crate::wire::{HotFunction, ProfileProgress, ProfileSessionInfo, StartProfileResult};
 
 /// One active CPU session.
 struct CpuSession {
@@ -240,11 +240,7 @@ impl CpuSessionManager {
             session_id: info.session_id,
             sample_count: info.sample_count,
             duration_secs: info.duration_secs,
-            top_function: session
-                .data
-                .hot_functions(hotspots)
-                .first()
-                .map(|hot| hot.name.clone()),
+            top_function: hottest_by_self(&session.data.hot_functions(hotspots)),
         })
     }
 
@@ -299,6 +295,20 @@ pub fn rfc3339_now() -> String {
     humantime::format_rfc3339_seconds(SystemTime::now()).to_string()
 }
 
+/// The function the program spends its own time in: the most self samples,
+/// ties broken by name. Ranked by inclusive samples, the root of every whole
+/// stack would always be the hottest [PROF-CPU-PROGRESS].
+fn hottest_by_self(functions: &[HotFunction]) -> Option<String> {
+    functions
+        .iter()
+        .max_by(|a, b| {
+            a.self_samples
+                .cmp(&b.self_samples)
+                .then_with(|| b.name.cmp(&a.name))
+        })
+        .map(|hot| hot.name.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,6 +321,33 @@ mod tests {
             now.ends_with('Z') && now.as_bytes().get(10) == Some(&b'T'),
             "{now}"
         );
+    }
+
+    fn hot(name: &str, samples: i64, self_samples: i64) -> HotFunction {
+        HotFunction {
+            name: name.to_owned(),
+            file: None,
+            line: None,
+            samples,
+            percentage: 0.0,
+            self_samples,
+            self_percentage: 0.0,
+        }
+    }
+
+    // [PROF-CPU-PROGRESS] The live top function is where the time is spent,
+    // never the root every whole stack shares.
+    #[test]
+    fn progress_names_the_function_with_the_most_self_samples() {
+        let functions = [hot("main", 10, 0), hot("spin", 9, 9), hot("helper", 9, 1)];
+        assert_eq!(hottest_by_self(&functions).as_deref(), Some("spin"));
+    }
+
+    #[test]
+    fn progress_breaks_equal_self_samples_by_name() {
+        let functions = [hot("zeta", 4, 4), hot("alpha", 4, 4)];
+        assert_eq!(hottest_by_self(&functions).as_deref(), Some("alpha"));
+        assert_eq!(hottest_by_self(&[]), None);
     }
 
     #[test]

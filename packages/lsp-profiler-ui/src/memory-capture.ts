@@ -8,7 +8,7 @@
  * Both the manual commands ([`memory-profiler.ts`](./memory-profiler.ts)) and the
  * autopilot ([`memory-autopilot.ts`](./memory-autopilot.ts)) drive memory through
  * the same primitives here, so an auto-capture is byte-for-byte the same flow as a
- * hand-clicked one — same purple track, leak decorations, dashboard, and timeline.
+ * hand-clicked one — same allocation track, leak decorations, dashboard, and timeline.
  *
  * Round-trip (one operation): ask the LSP for the injection script (leg 1), run it
  * in the paused debuggee via DAP `evaluate`, post the raw output to
@@ -22,6 +22,8 @@ import { lspTable, brand } from "./ids";
 import * as vscode from "vscode";
 import * as fs from "fs";
 import { Logger } from "./logger";
+import { errorText } from "./failure";
+import { executeServerCommand } from "./server-command";
 import type { ProfilerStore as Store } from "./store";
 import { acquireStoppedFrame, evaluateInDebugSession } from "./dap-evaluate";
 import { isDebuggeePaused } from "./debuggee-pause";
@@ -63,7 +65,6 @@ export const LSP_MEM_CMD = lspTable({
 /** tracemalloc traceback depth injected at start. */
 export const TRACEBACK_DEPTH = 25;
 
-/** The progress title for starting memory tracking (shared by both entry points). */
 /** The progress title of a memory start; a function so it follows the installed brand. */
 export function memStartTitle(): string {
   return `${brand()}: Starting memory tracking`;
@@ -170,12 +171,9 @@ export async function endServerSession(store: Store): Promise<void> {
   const memorySessionId = store.profiler.value.memorySessionId;
   if (client?.isRunning() !== true || memorySessionId === undefined) { return; }
   try {
-    await client.sendRequest("workspace/executeCommand", {
-      command: LSP_MEM_CMD.stop,
-      arguments: [{ memory_session_id: memorySessionId }],
-    });
+    await executeServerCommand<unknown>(client, LSP_MEM_CMD.stop, { memory_session_id: memorySessionId });
   } catch (err: unknown) {
-    Logger.warn(`[Memory] ${LSP_MEM_CMD.stop} failed: ${err instanceof Error ? err.message : String(err)}`);
+    Logger.warn(`[Memory] ${LSP_MEM_CMD.stop} failed: ${errorText(err)}`);
   }
 }
 
@@ -189,11 +187,22 @@ interface MemoryOperation {
   readonly quiet: boolean;
 }
 
+/** The running client and the memory session it tracks. */
+interface ActiveMemorySession {
+  readonly client: LspClient;
+  readonly memorySessionId: string;
+}
+
+/** Show `message` unless the operation captures silently. */
+function warnUnlessQuiet(op: MemoryOperation, message: string): void {
+  if (!op.quiet) { void vscode.window.showWarningMessage(message); }
+}
+
 /**
  * Resolve the running client + active memory session, or null (warning unless
  * `quiet`) when the LSP is down or tracking is not active.
  */
-function resolveActiveSession(op: MemoryOperation): { client: LspClient; memorySessionId: string } | null {
+function resolveActiveSession(op: MemoryOperation): ActiveMemorySession | null {
   const client = op.store.client.value;
   function notConnected(): null {
     if (!op.quiet) { void vscode.window.showErrorMessage(`${brand()} LSP not connected`); }
@@ -203,7 +212,7 @@ function resolveActiveSession(op: MemoryOperation): { client: LspClient; memoryS
   if (!client.isRunning()) { return notConnected(); }
   const memorySessionId = op.store.profiler.value.memorySessionId;
   if (op.store.profiler.value.memory !== "active" || memorySessionId === undefined) {
-    if (!op.quiet) { void vscode.window.showWarningMessage(`${brand()}: Start memory tracking first.`); }
+    warnUnlessQuiet(op, `${brand()}: Start memory tracking first.`);
     return null;
   }
   return { client, memorySessionId };
@@ -217,35 +226,14 @@ function resolveActiveSession(op: MemoryOperation): { client: LspClient; memoryS
  */
 async function runMemoryOperation(op: MemoryOperation): Promise<MemoryIngestResult | null> {
   const active = resolveActiveSession(op);
-  if (active === null) { return null; }
-  // A direct runtime reads the live heap, which it cannot do while the debugger
-  // holds the program paused: the step would wait for a resume that may never
-  // come ([PROF-MEMORY-MODE]). Refuse it and say why.
-  if (directSession && isDebuggeePaused(op.store.profiler.value.memoryDebugSessionId)) {
-    if (!op.quiet) {
-      void vscode.window.showWarningMessage(
-        `${brand()}: Continue the program to read its memory — its heap cannot be read while the debugger holds it paused.`,
-      );
-    }
-    return null;
-  }
-
+  if (active === null || refusedWhilePaused(op)) { return null; }
   beginMemoryOp();
   try {
-    op.report("Asking the profiler…");
-    const step = await active.client.sendRequest<MemoryStep | null>("workspace/executeCommand", {
-      command: op.command,
-      arguments: [{ memory_session_id: active.memorySessionId, ...op.extraArgs }],
-    });
-    if (step === null || step === undefined) { return null; }
-    if (step.kind === "Completed") {
-      return toMemoryIngestResult(step.result);
-    }
-    return await courierStep(op, { client: active.client, memorySessionId: active.memorySessionId }, step.script);
+    return await requestStep(op, active);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorText(err);
     Logger.warn(`[Memory] ${op.command} round-trip failed: ${msg}`);
-    if (!op.quiet) { void vscode.window.showWarningMessage(`${brand()}: ${msg}`); }
+    warnUnlessQuiet(op, `${brand()}: ${msg}`);
     return null;
   } finally {
     endMemoryOp();
@@ -253,61 +241,66 @@ async function runMemoryOperation(op: MemoryOperation): Promise<MemoryIngestResu
 }
 
 /**
+ * A direct runtime reads the live heap, which it cannot do while the debugger
+ * holds the program paused: the step would wait for a resume that may never
+ * come ([PROF-MEMORY-MODE]). Refuse it and say why.
+ */
+function refusedWhilePaused(op: MemoryOperation): boolean {
+  if (!directSession || !isDebuggeePaused(op.store.profiler.value.memoryDebugSessionId)) { return false; }
+  warnUnlessQuiet(op, `${brand()}: Continue the program to read its memory — its heap cannot be read while the debugger holds it paused.`);
+  return true;
+}
+
+/** Leg 1: ask for the operation's step; a completed step is the result, a courier step runs in the debuggee. */
+async function requestStep(op: MemoryOperation, active: ActiveMemorySession): Promise<MemoryIngestResult | null> {
+  op.report("Asking the profiler…");
+  const step = await executeServerCommand<MemoryStep>(active.client, op.command,
+    { memory_session_id: active.memorySessionId, ...op.extraArgs });
+  if (step === undefined) { return null; }
+  if (step.kind === "Completed") { return toMemoryIngestResult(step.result); }
+  return await courierStep(op, active, step.script);
+}
+
+/**
  * A courier step ([PROF-MEMORY-MODE]): the runtime cannot read its own heap,
  * so the script runs inside the paused debuggee and its output is posted back.
  */
-async function courierStep(
-  op: MemoryOperation,
-  ctx: Omit<OperationContext, "frameId">,
-  script: string,
-): Promise<MemoryIngestResult | null> {
+async function courierStep(op: MemoryOperation, active: ActiveMemorySession, script: string): Promise<MemoryIngestResult | null> {
   op.report("Pausing the program…");
   const acquired = await acquireStoppedFrame();
   if (acquired === null) {
-    if (!op.quiet) {
-      void vscode.window.showWarningMessage(
-        `${brand()}: Could not pause the program for memory inspection — pause at a breakpoint and retry.`,
-      );
-    }
+    warnUnlessQuiet(op, `${brand()}: Could not pause the program for memory inspection — pause at a breakpoint and retry.`);
     return null;
   }
   try {
-    return await evaluateAndIngest(op, { ...ctx, frameId: acquired.frameId }, script);
+    return await evaluateAndIngest(op, { ...active, frameId: acquired.frameId }, script);
   } finally {
     await acquired.release();
   }
 }
 
 /** The acquired-frame context one round-trip evaluates against. */
-interface OperationContext {
-  readonly client: LspClient;
-  readonly memorySessionId: string;
+interface OperationContext extends ActiveMemorySession {
   readonly frameId: number;
 }
 
 /** Leg 2: run the script in the frame, then post the output to ingest. */
-async function evaluateAndIngest(
-  op: MemoryOperation,
-  ctx: OperationContext,
-  script: string,
-): Promise<MemoryIngestResult | null> {
+async function evaluateAndIngest(op: MemoryOperation, ctx: OperationContext, script: string): Promise<MemoryIngestResult | null> {
   if (script === "") { return null; }
-
   op.report("Inspecting the debuggee…");
   const output = await evaluateInDebugSession(script, ctx.frameId);
   if (output === null) {
-    if (!op.quiet) {
-      void vscode.window.showWarningMessage(`${brand()}: Could not run the memory script in the debuggee.`);
-    }
+    warnUnlessQuiet(op, `${brand()}: Could not run the memory script in the debuggee.`);
     return null;
   }
-
   op.report("Analyzing…");
-  const result = await ctx.client.sendRequest<MemoryResult | null>("workspace/executeCommand", {
-    command: LSP_MEM_CMD.ingest,
-    arguments: [{ memory_session_id: ctx.memorySessionId, output }],
-  });
-  return result === null || result === undefined ? null : toMemoryIngestResult(result);
+  return await ingestOutput(ctx.client, ctx.memorySessionId, output);
+}
+
+/** Post a script's raw output to `<prefix>.lspProfiler.memory.ingest` and read the structured result. */
+export async function ingestOutput(client: LspClient, memorySessionId: string, output: string): Promise<MemoryIngestResult | null> {
+  const result = await executeServerCommand<MemoryResult>(client, LSP_MEM_CMD.ingest, { memory_session_id: memorySessionId, output });
+  return result === undefined ? null : toMemoryIngestResult(result);
 }
 
 /**
@@ -321,16 +314,16 @@ export async function runMemoryScript(
   command: string,
   extraArgs: Record<string, unknown> = {},
 ): Promise<MemoryIngestResult | null> {
-  return withUserProgress(
+  return await withUserProgress(
     memOpTitle(command),
-    async (report) => runMemoryOperation({ store, command, extraArgs, report, quiet: false }),
+    async (report) => await runMemoryOperation({ store, command, extraArgs, report, quiet: false }),
   );
 }
 
 // ── Presentation ────────────────────────────────────────────────────────────
 
 /**
- * Land a snapshot result: paint the purple allocation track, append a timeline
+ * Land a snapshot result: paint the allocation track, append a timeline
  * point, and retain it for a later "Compare". With `openResultsView` (the
  * manual "Take Memory Snapshot" affordance), open the memory dashboard
  * — the raw V8 `.heapprofile` stays one click away on its own button
@@ -346,7 +339,7 @@ export function presentSnapshot(
   recordTimelinePoint(dashboard);
   dashboard.timeline = [...captureTimeline];
   lastDashboardSnapshot = dashboard;
-  Logger.info(`Memory snapshot: ${dashboard.currentMemory} bytes current`);
+  Logger.info(`Memory snapshot: ${String(dashboard.currentMemory)} bytes current`);
   if (options.openResultsView) {
     openMemoryDashboard(dashboard);
   }
@@ -364,7 +357,7 @@ export function presentDiff(result: MemoryIngestResult): MemoryDiffResult {
     openMemoryDashboard(lastDashboardSnapshot, toDashboardDiff(result));
   }
   const leaks = diff.suspectedLeaks;
-  Logger.info(`Memory diff: ${leaks.length} suspected leak(s)`);
+  Logger.info(`Memory diff: ${String(leaks.length)} suspected leak(s)`);
   return diff;
 }
 
@@ -384,17 +377,14 @@ export async function captureSnapshotAndDiff(
   store: Store,
   report: (message: string) => void,
 ): Promise<CaptureResult> {
+  const quietOp = (command: string): MemoryOperation => ({ store, command, extraArgs: {}, report, quiet: true });
   beginMemoryOp();
   try {
-    const snapshotResult = await runMemoryOperation({
-      store, command: LSP_MEM_CMD.snapshot, extraArgs: {}, report, quiet: true,
-    });
+    const snapshotResult = await runMemoryOperation(quietOp(LSP_MEM_CMD.snapshot));
     if (snapshotResult?.kind === "snapshot") {
       presentSnapshot(snapshotResult, { openResultsView: false });
     }
-    const diffResult = await runMemoryOperation({
-      store, command: LSP_MEM_CMD.diff, extraArgs: {}, report, quiet: true,
-    });
+    const diffResult = await runMemoryOperation(quietOp(LSP_MEM_CMD.diff));
     const diff = diffResult?.kind === "diff" ? presentDiff(diffResult) : null;
     return { snapshot: snapshotResult, diff };
   } finally {

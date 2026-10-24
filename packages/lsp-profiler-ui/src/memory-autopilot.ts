@@ -175,7 +175,7 @@ function armIntervalIfEnabled(store: Store): void {
   const seconds = Math.max(MIN_INTERVAL_SECS, config.get<number>("autoSnapshotInterval", DEFAULT_INTERVAL_SECS));
   stopInterval();
   intervalTimer = setInterval(() => { void onIntervalTick(store); }, seconds * MS_PER_SECOND);
-  Logger.info(`[Memory] autopilot interval armed: every ${seconds}s`);
+  Logger.info(`[Memory] autopilot interval armed: every ${String(seconds)}s`);
 }
 
 /** Stop the interval timer if running. */
@@ -207,7 +207,7 @@ async function onIntervalTick(store: Store): Promise<void> {
 async function runAutoCapture(store: Store, trigger: "pause" | "interval"): Promise<void> {
   try {
     const result = await withUserProgress(autoCaptureTitle(), async (report) =>
-      captureSnapshotAndDiff(store, report),
+      await captureSnapshotAndDiff(store, report),
     );
     recordCapture(trigger, result.diff);
     maybeOfferLeakActions(store, result.diff);
@@ -229,7 +229,7 @@ function recordCapture(trigger: "pause" | "interval", diff: MemoryDiffResult | n
     leakLines: leaks.map((leak) => leak.line),
   });
   Logger.info(
-    `[Memory] autopilot capture (${trigger}): ${leaks.length} suspected leak(s), ` +
+    `[Memory] autopilot capture (${trigger}): ${String(leaks.length)} suspected leak(s), ` +
     `max confidence ${worst?.confidence ?? "none"}`,
   );
 }
@@ -258,7 +258,7 @@ function maybeOfferLeakActions(store: Store, diff: MemoryDiffResult | null): voi
   if (sessionId === undefined || leakOfferedForSession === sessionId) { return; }
   leakOfferedForSession = sessionId;
   leakActionOffers.push({ file: worst.file, line: worst.line, confidence: worst.confidence });
-  Logger.warn(`[Memory] autopilot: suspected leak ${path.basename(worst.file)}:${worst.line} (${worst.confidence})`);
+  Logger.warn(`[Memory] autopilot: suspected leak ${path.basename(worst.file)}:${String(worst.line)} (${worst.confidence})`);
   void offerLeakActions(worst);
 }
 
@@ -267,7 +267,7 @@ async function offerLeakActions(leak: SuspectedLeak): Promise<void> {
   const showGraph = "Show Reference Graph";
   const forceGc = "Force Garbage Collection";
   const choice = await vscode.window.showWarningMessage(
-    `${brand()}: Suspected memory leak at ${path.basename(leak.file)}:${leak.line} (${leak.confidence}). ${leak.reason}`,
+    `${brand()}: Suspected memory leak at ${path.basename(leak.file)}:${String(leak.line)} (${leak.confidence}). ${leak.reason}`,
     showGraph,
     forceGc,
   );

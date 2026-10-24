@@ -65,7 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestHo
   };
   context.subscriptions.push(vscode.commands.registerCommand("lspui.restartServer", () => undefined));
   const ui = registerProfilerUi(context, host);
-  context.subscriptions.push({ dispose: () => ui.dispose() });
+  context.subscriptions.push({ dispose: () => { ui.dispose(); } });
   await client.start();
   context.subscriptions.push({ dispose: () => void client.stop() });
   clientSignal.value = client;

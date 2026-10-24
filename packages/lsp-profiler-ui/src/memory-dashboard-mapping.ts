@@ -132,18 +132,21 @@ export function toDashboardDiff(result: MemoryIngestResult): MemoryDiffData {
     totalFreed: asNumber(result.totalFreed),
     netGrowth: asNumber(result.netGrowth),
     grownAllocations: [],
-    suspectedLeaks: leaks.map((leak) => {
-      return {
-        file: asString(leak.file),
-        line: asNumber(leak.line),
-        sizeGrowth: asNumber(leak.sizeGrowth),
-        countGrowth: asNumber(leak.countGrowth),
-        currentSize: asNumber(leak.currentSize),
-        currentCount: asNumber(leak.currentCount),
-        confidence: toConfidence(asString(leak.confidence, "low")),
-        reason: asString(leak.reason),
-        ...typeNameField(leak),
-      };
-    }),
+    suspectedLeaks: leaks.map(toSuspectedLeak),
+  };
+}
+
+/** One suspected leak in the dashboard's shape. */
+function toSuspectedLeak(leak: Record<string, unknown>): MemoryDiffData["suspectedLeaks"][number] {
+  return {
+    file: asString(leak.file),
+    line: asNumber(leak.line),
+    sizeGrowth: asNumber(leak.sizeGrowth),
+    countGrowth: asNumber(leak.countGrowth),
+    currentSize: asNumber(leak.currentSize),
+    currentCount: asNumber(leak.currentCount),
+    confidence: toConfidence(asString(leak.confidence, "low")),
+    reason: asString(leak.reason),
+    ...typeNameField(leak),
   };
 }

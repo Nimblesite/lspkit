@@ -104,14 +104,6 @@ export async function waitForLspReady(): Promise<void> {
   throw new Error("the mock language server did not start");
 }
 
-export interface PollOptions<T> {
-  readonly fn: () => Promise<T> | T;
-  readonly until: (value: T) => boolean;
-  readonly timeoutMs: number;
-  readonly intervalMs?: number;
-  readonly description?: string;
-}
-
 /** The launch configuration the test host builds for `metric`; asserts it exists. */
 export function launchConfigOf(metric: LaunchMetric, program: string): vscode.DebugConfiguration {
   const config = testHostLaunchConfig(metric, program);
@@ -131,27 +123,6 @@ function testHostLaunchConfig(metric: LaunchMetric, program: string): vscode.Deb
   };
 }
 
-/** Poll until `until` accepts the value; the two-argument form uses a 10s budget. */
-export async function pollUntilResult<T>(options: PollOptions<T>): Promise<T>;
-export async function pollUntilResult<T>(fn: () => Promise<T> | T, until: (value: T) => boolean): Promise<T>;
-export async function pollUntilResult<T>(first: PollOptions<T> | (() => Promise<T> | T), until?: (value: T) => boolean): Promise<T> {
-  const options: PollOptions<T> = typeof first === "function" ? { fn: first, until: until ?? (() => true), timeoutMs: 10_000 } : first;
-  const deadline = Date.now() + options.timeoutMs;
-  let last: T = await options.fn();
-  while (!options.until(last)) {
-    if (Date.now() >= deadline) {
-      throw new Error(`${options.description ?? "condition"} not met within ${options.timeoutMs}ms (last: ${JSON.stringify(last)})`);
-    }
-    await delay(options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS);
-    last = await options.fn();
-  }
-  return last;
-}
-
-export async function closeAllEditors(): Promise<void> {
-  await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-}
-
 /** A temp workspace dir plus a hot source file the mock server's reports point at. */
 export async function setupLspTestSuite(tmpDirPrefix: string): Promise<{ tmpDir: string; hotFile: string }> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), tmpDirPrefix));
@@ -161,13 +132,6 @@ export async function setupLspTestSuite(tmpDirPrefix: string): Promise<{ tmpDir:
   await configureMock({ hotFile, processes: null, memoryMode: "Direct" });
   await closeAllEditors();
   return { tmpDir, hotFile };
-}
-
-export function removeTestDir(dir: string): void {
-  if (dir === "" || !fs.existsSync(dir)) {
-    return;
-  }
-  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
 }
 
 export function teardownLspTestSuite(tmpDir: string): void {
@@ -203,3 +167,6 @@ export async function openSourceFile(
   await vscode.window.showTextDocument(doc, { preview: false });
   return { doc, uri };
 }
+
+export { PollOptions, pollUntilResult, closeAllEditors, removeTestDir } from '../../testing/webview-contract-helpers';
+import { closeAllEditors, removeTestDir } from '../../testing/webview-contract-helpers';

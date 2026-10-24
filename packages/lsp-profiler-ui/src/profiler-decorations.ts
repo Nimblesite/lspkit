@@ -4,14 +4,16 @@
  *
  * After profiling completes, hot lines get colored decorations in the
  * editor gutter and after-line text showing CPU percentage and sample
- * count. Uses the profiler palette:
+ * count. Uses the host palette ([PROF-UI-PALETTE]):
  *
- *   Critical (>20%): #e8500a  — orange
- *   Hot (10-20%):    #f97316  — lighter orange
- *   Warm (5-10%):    #fbbf24  — amber
- *   Cool (1-5%):     #4a5468  — muted slate
+ *   Critical (>20%): critical
+ *   Hot (10-20%):    hot
+ *   Warm (5-10%):    warm
+ *   Cool (1-5%):     #4a5468  — muted slate, in every host
  */
 
+import { profilerPalette } from "./palette";
+import type { SampledView } from "./sampled-view";
 import * as vscode from "vscode";
 import { configSection } from "./ids";
 import { Logger } from "./logger";
@@ -41,6 +43,7 @@ export interface ProfileHotFunction {
 
 /** Profile result returned by `<prefix>.lspProfiler.cpu.stop` or `/snapshot`. */
 export interface ProfileResult {
+  sampled?: SampledView;
   sessionId: string;
   duration: number;
   totalSamples: number;
@@ -87,15 +90,15 @@ const BAR_LEN_WARM = 6;
 /** Max bar length for cool heat level. */
 const BAR_LEN_COOL = 4;
 
-const HEAT_LEVELS: HeatLevel[] = [
-  { minPct: HEAT_CRITICAL_PCT, color: "#e8500a", barChar: "\u2588", barMaxLen: BAR_LEN_CRITICAL },
-  { minPct: HEAT_HOT_PCT, color: "#f97316", barChar: "\u2588", barMaxLen: BAR_LEN_HOT },
-  { minPct: HEAT_WARM_PCT, color: "#fbbf24", barChar: "\u2588", barMaxLen: BAR_LEN_WARM },
+const heatLevels = (): HeatLevel[] => [
+  { minPct: HEAT_CRITICAL_PCT, color: profilerPalette().critical, barChar: "\u2588", barMaxLen: BAR_LEN_CRITICAL },
+  { minPct: HEAT_HOT_PCT, color: profilerPalette().hot, barChar: "\u2588", barMaxLen: BAR_LEN_HOT },
+  { minPct: HEAT_WARM_PCT, color: profilerPalette().warm, barChar: "\u2588", barMaxLen: BAR_LEN_WARM },
   { minPct: 1, color: "#4a5468", barChar: "\u2588", barMaxLen: BAR_LEN_COOL },
 ];
 
 function heatLevelFor(pct: number): HeatLevel | undefined {
-  return HEAT_LEVELS.find((h) => pct >= h.minPct);
+  return heatLevels().find((h) => pct >= h.minPct);
 }
 
 // ── Applied-decoration ledger ─────────────────────────────────────────────
@@ -108,7 +111,7 @@ export interface AppliedDecoration {
   readonly file: string;
   /** 1-based line the decoration landed on. */
   readonly line: number;
-  /** Palette color used (e.g. `#e8500a` for critical). */
+  /** Palette color used (the host palette's `critical` for a critical line). */
   readonly color: string;
   /** The after-line text shown to the user (bar + % + samples). */
   readonly contentText: string;
@@ -200,35 +203,31 @@ function addDecorationOption(
   }
 }
 
+/** Decoration options grouped by heat colour: one decoration type per colour. */
+type OptionsByColor = Map<string, vscode.DecorationOptions[]>;
+
+/** Paint `text` after source line `line` (1-based) in `color`, when the line exists. */
+function addLineHint(editor: vscode.TextEditor, optionsByColor: OptionsByColor, line: number, text: string, color: string): void {
+  const lineIdx = line - 1;
+  if (lineIdx < 0 || lineIdx >= editor.document.lineCount) { return; }
+  const range = new vscode.Range(
+    new vscode.Position(lineIdx, 0),
+    new vscode.Position(lineIdx, editor.document.lineAt(lineIdx).text.length),
+  );
+  addDecorationOption(optionsByColor, color, { range, renderOptions: { after: { contentText: text, color } } });
+}
+
 /** Build line-level heat decoration options for a single editor. */
-function buildLineDecorations(
-  editor: vscode.TextEditor,
-  lines: ProfileHotLine[],
-  optionsByColor: Map<string, vscode.DecorationOptions[]>,
-): void {
+function buildLineDecorations(editor: vscode.TextEditor, lines: ProfileHotLine[], optionsByColor: OptionsByColor): void {
   for (const line of lines) {
     const level = heatLevelFor(line.percentage);
     if (level === undefined) { continue; }
-
     const barLen = Math.ceil((line.percentage / level.minPct) * (level.barMaxLen / 2));
     const bar = level.barChar.repeat(Math.min(barLen, level.barMaxLen));
-    const text = ` ${bar} ${line.percentage.toFixed(1)}% (${line.samples} samples)`;
-    const lineIdx = line.line - 1;
-    if (lineIdx < 0 || lineIdx >= editor.document.lineCount) { continue; }
-
-    const range = new vscode.Range(
-      new vscode.Position(lineIdx, 0),
-      new vscode.Position(lineIdx, editor.document.lineAt(lineIdx).text.length),
-    );
-
-    addDecorationOption(optionsByColor, level.color, {
-      range,
-      renderOptions: { after: { contentText: text, color: level.color } },
-    });
+    addLineHint(editor, optionsByColor, line.line, ` ${bar} ${line.percentage.toFixed(1)}% (${String(line.samples)} samples)`, level.color);
   }
 }
 
-/** Build function-level heat decoration options for a single editor. */
 /** A hot function the runtime placed in source, so the heat map can paint it. */
 type LocatedHotFunction = ProfileHotFunction & { file: string; line: number };
 
@@ -236,79 +235,60 @@ function isLocated(func: ProfileHotFunction): func is LocatedHotFunction {
   return func.file !== undefined && func.line !== undefined;
 }
 
+/** Build function-level heat decoration options for a single editor; a line's own heat takes its place. */
 function buildFuncDecorations(
   editor: vscode.TextEditor,
   funcs: LocatedHotFunction[],
-  ctx: { lines: ProfileHotLine[] | undefined; optionsByColor: Map<string, vscode.DecorationOptions[]> },
+  ctx: { lines: ProfileHotLine[] | undefined; optionsByColor: OptionsByColor },
 ): void {
-  const { lines, optionsByColor } = ctx;
   for (const func of funcs) {
     const level = heatLevelFor(func.percentage);
-    if (level === undefined) { continue; }
-    if (lines?.some((l) => l.line === func.line) === true) { continue; }
-
+    if (level === undefined || ctx.lines?.some((l) => l.line === func.line) === true) { continue; }
     const text = ` ${func.name} \u2014 ${func.percentage.toFixed(1)}% CPU (${func.selfPercentage.toFixed(1)}% self)`;
-    const lineIdx = func.line - 1;
-    if (lineIdx < 0 || lineIdx >= editor.document.lineCount) { continue; }
-
-    const range = new vscode.Range(
-      new vscode.Position(lineIdx, 0),
-      new vscode.Position(lineIdx, editor.document.lineAt(lineIdx).text.length),
-    );
-
-    addDecorationOption(optionsByColor, level.color, {
-      range,
-      renderOptions: { after: { contentText: text, color: level.color } },
-    });
+    addLineHint(editor, ctx.optionsByColor, func.line, text, level.color);
   }
 }
 
-export function applyProfileDecorations(result: ProfileResult): void {
-  const showHeatMap = vscode.workspace
-    .getConfiguration(configSection())
-    .get<boolean>("profiler.showInlineHeatMap", true);
+/** The result's hot lines and located hot functions, keyed by editor path. */
+interface HeatByFile {
+  readonly keyOf: (file: string) => string;
+  readonly lines: Map<string, ProfileHotLine[]>;
+  readonly funcs: Map<string, LocatedHotFunction[]>;
+}
 
-  if (!showHeatMap) {
+export function applyProfileDecorations(result: ProfileResult): void {
+  if (!vscode.workspace.getConfiguration(configSection()).get<boolean>("profiler.showInlineHeatMap", true)) {
     Logger.info("Profiler heat map disabled — skipping decorations");
     return;
   }
-
   clearProfileDecorations();
-
   const keyOf = pathKeyer();
-  const linesByFile = groupByFile(result.hotLines, keyOf);
   // An unlocated frame stays in the results table but paints no line.
-  const funcsByFile = groupByFile(result.hotFunctions.filter(isLocated), keyOf);
-
+  const heat: HeatByFile = { keyOf, lines: groupByFile(result.hotLines, keyOf), funcs: groupByFile(result.hotFunctions.filter(isLocated), keyOf) };
   const editors = vscode.window.visibleTextEditors;
-  for (const editor of editors) {
-    const filePath = editor.document.uri.fsPath;
-    const key = keyOf(filePath);
-    const optionsByColor = new Map<string, vscode.DecorationOptions[]>();
-
-    const lines = linesByFile.get(key);
-    if (lines !== undefined) {
-      buildLineDecorations(editor, lines, optionsByColor);
-    }
-
-    const funcs = funcsByFile.get(key);
-    if (funcs !== undefined) {
-      buildFuncDecorations(editor, funcs, { lines, optionsByColor });
-    }
-
-    for (const [color, options] of optionsByColor) {
-      editor.setDecorations(getDecorationTypeForColor(color), options);
-    }
-    recordApplied(appliedDecorations, filePath, optionsByColor);
-  }
-
+  for (const editor of editors) { decorateEditor(editor, heat); }
   // Count what was PAINTED, not what the profile held: a profile full of hot
   // lines that matches no open editor used to log exactly like a successful
   // pass, which is how the heat map stayed silently blank on Windows.
   Logger.info(
-    `Profile decorations applied: ${appliedDecorations.length} across ${editors.length} visible editor(s)`
-    + ` from ${result.hotLines.length} hot lines, ${result.hotFunctions.length} hot functions`,
+    `Profile decorations applied: ${String(appliedDecorations.length)} across ${String(editors.length)} visible editor(s)`
+    + ` from ${String(result.hotLines.length)} hot lines, ${String(result.hotFunctions.length)} hot functions`,
   );
+}
+
+/** Paint one editor's heat and record what was painted. */
+function decorateEditor(editor: vscode.TextEditor, heat: HeatByFile): void {
+  const filePath = editor.document.uri.fsPath;
+  const key = heat.keyOf(filePath);
+  const optionsByColor: OptionsByColor = new Map();
+  const lines = heat.lines.get(key);
+  if (lines !== undefined) { buildLineDecorations(editor, lines, optionsByColor); }
+  const funcs = heat.funcs.get(key);
+  if (funcs !== undefined) { buildFuncDecorations(editor, funcs, { lines, optionsByColor }); }
+  for (const [color, options] of optionsByColor) {
+    editor.setDecorations(getDecorationTypeForColor(color), options);
+  }
+  recordApplied(appliedDecorations, filePath, optionsByColor);
 }
 
 /** Clear all profiling decorations from visible editors. */

@@ -46,14 +46,23 @@ export function trackSuspensionEvent(
   event: "stopped" | "continued",
   body: unknown,
 ): void {
-  const threadId = numberField(body, "threadId");
   if (event === "stopped") {
-    const set = stoppedThreads.get(sessionId) ?? new Set<number>();
-    if (threadId !== undefined) { set.add(threadId); }
-    if (booleanField(body, "allThreadsStopped") === true) { set.add(ALL_THREADS); }
-    if (set.size > 0) { stoppedThreads.set(sessionId, set); }
-    return;
+    trackStopped(sessionId, body);
+  } else {
+    trackContinued(sessionId, body);
   }
+}
+
+function trackStopped(sessionId: string, body: unknown): void {
+  const threadId = numberField(body, "threadId");
+  const set = stoppedThreads.get(sessionId) ?? new Set<number>();
+  if (threadId !== undefined) { set.add(threadId); }
+  if (booleanField(body, "allThreadsStopped") === true) { set.add(ALL_THREADS); }
+  if (set.size > 0) { stoppedThreads.set(sessionId, set); }
+}
+
+function trackContinued(sessionId: string, body: unknown): void {
+  const threadId = numberField(body, "threadId");
   if (booleanField(body, "allThreadsContinued") !== false || threadId === undefined) {
     stoppedThreads.delete(sessionId);
     return;

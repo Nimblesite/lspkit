@@ -24,7 +24,7 @@ endif
 # Coverage — single source of truth is coverage-thresholds.json
 # See REPO-STANDARDS-SPEC [COVERAGE-THRESHOLDS-JSON].
 # ---------------------------------------------------------------------------
-COVERAGE_THRESHOLDS_FILE := coverage-thresholds.json
+COVERAGE_THRESHOLDS_FILE = coverage-thresholds.json
 
 # =============================================================================
 # Standard Targets (7 — portfolio-wide, identical across every repo)
@@ -51,6 +51,8 @@ lint:
 	@echo "==> Linting..."
 	cargo clippy --release --workspace --all-targets --locked -- -D warnings
 	$(MAKE) _profiler_spec_check
+	node scripts/link-skills.mjs --check
+	npm run lint --prefix packages/lsp-profiler-ui
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:
@@ -72,6 +74,7 @@ setup:
 	@echo "==> Setting up development environment..."
 	rustup component add rustfmt clippy llvm-tools-preview
 	cargo install cargo-llvm-cov cargo-nextest cargo-watch
+	node scripts/link-skills.mjs
 	@echo "==> Setup complete. Run 'make ci' to validate."
 
 ## help: List all available targets
@@ -106,9 +109,10 @@ _profiler_dotnet:
 _profiler_codegen:
 	node scripts/typediagram/generate.mjs
 
-## The wire-model generator end to end, and the CLI capture it relies on ([PROF-WIRE-GEN]).
+## The wire-model generator end to end, the CLI capture it relies on ([PROF-WIRE-GEN]),
+## and the .claude/skills links to .agents/skills.
 _typediagram_test:
-	node --test scripts/typediagram/generate.test.mjs scripts/typediagram/run-cli.test.mjs
+	node --test scripts/typediagram/generate.test.mjs scripts/typediagram/run-cli.test.mjs scripts/link-skills.test.mjs
 
 ## Every [PROF-*] citation in the profiler resolves to one spec heading.
 _profiler_spec_check:

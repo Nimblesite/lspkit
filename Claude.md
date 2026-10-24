@@ -42,7 +42,8 @@ Hierarchical, non-numeric: `[GROUP-TOPIC]` / `[GROUP-TOPIC-DETAIL]` (e.g. `[PARS
 - **No legacy code.** Legacy = deleted. Copying files = illegal; move them.
 - **Centralize global state** in a single `state.rs` (or its equivalent in any other language) per crate.
 - **Dependency versions in `Cargo.toml`, CI workflows, and `.devcontainer/` stay in sync.**
-- **Mandatory bug fix process:** [.claude/skills/fix-bug/SKILL.md](.claude/skills/fix-bug/SKILL.md).
+- **Mandatory bug fix process:** [.agents/skills/fix-bug/SKILL.md](.agents/skills/fix-bug/SKILL.md).
+- **Skills live in `.agents/skills/<name>/`**, the location every agent reads; `.claude/skills/<name>` is a link to each for Claude Code. Add a skill there, never under `.claude/`, then run `node scripts/link-skills.mjs` (`make lint` checks the links; the script also repairs a Windows checkout without symlinks).
 
 ## Hard Rules — Rust
 
@@ -129,8 +130,9 @@ lspkit/
 ├── coverage-thresholds.json        # single source of truth for thresholds
 ├── opencode.json                   # OpenCode pointer
 ├── .cursorrules / .windsurfrules   # pointers
-├── .claude/skills/                 # ci-prep, code-dedup, fix-bug, spec-check,
+├── .agents/skills/                 # ci-prep, code-dedup, fix-bug, spec-check,
 │                                   # submit-pr, upgrade-packages
+├── .claude/skills/                 # a link to each skill, for Claude Code
 ├── .clinerules/                    # Cline pointer
 ├── .devcontainer/devcontainer.json
 ├── .github/

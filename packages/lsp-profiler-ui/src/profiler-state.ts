@@ -110,33 +110,37 @@ export function isMemoryBusy(session: ProfilerSession): boolean {
   return session.memory !== "idle";
 }
 
+/** A CPU leg with no session: no PID, no session id, no live progress. */
+const NO_CPU_SESSION = { cpuPid: undefined, cpuSessionId: undefined, sampleCount: 0, durationSecs: 0, topFunction: undefined };
+/** A memory leg with no session. */
+const NO_MEMORY_SESSION = { memorySessionId: undefined, memoryFinalSnapshotFile: undefined, memoryDebugSessionId: undefined };
+
+type SessionPatch = (next: Partial<ProfilerSession>) => void;
+
 /** Build the profiler actions over the store's backing Signal. */
 export function createProfilerActions(profiler: Signal<ProfilerSession>): ProfilerActions {
-  function patch(next: Partial<ProfilerSession>): void {
-    profiler.value = { ...profiler.value, ...next };
-  }
+  const patch: SessionPatch = (next) => { profiler.value = { ...profiler.value, ...next }; };
+  return { ...cpuActions(profiler, patch), ...memoryActions(patch) };
+}
+
+function cpuActions(profiler: Signal<ProfilerSession>, patch: SessionPatch):
+  Pick<ProfilerActions, "profilerStarting" | "profilerActive" | "profilerProgress" | "profilerStopped"> {
   return {
-    profilerStarting() {
-      patch({ cpu: "starting", cpuPid: undefined, cpuSessionId: undefined, sampleCount: 0, durationSecs: 0, topFunction: undefined });
-    },
-    profilerActive(pid, sessionId) {
-      patch({ cpu: "active", cpuPid: pid, cpuSessionId: sessionId, sampleCount: 0, durationSecs: 0, topFunction: undefined });
-    },
+    profilerStarting() { patch({ ...NO_CPU_SESSION, cpu: "starting" }); },
+    profilerActive(pid, sessionId) { patch({ ...NO_CPU_SESSION, cpu: "active", cpuPid: pid, cpuSessionId: sessionId }); },
     profilerProgress(sampleCount, durationSecs, topFunction) {
-      if (profiler.value.cpu !== "active") { return; }
-      patch({ sampleCount, durationSecs, topFunction });
+      if (profiler.value.cpu === "active") { patch({ sampleCount, durationSecs, topFunction }); }
     },
-    profilerStopped() {
-      patch({ cpu: "idle", cpuPid: undefined, cpuSessionId: undefined, sampleCount: 0, durationSecs: 0, topFunction: undefined });
-    },
-    memoryTrackingStarting() {
-      patch({ memory: "starting", memorySessionId: undefined, memoryFinalSnapshotFile: undefined, memoryDebugSessionId: undefined });
-    },
+    profilerStopped() { patch({ ...NO_CPU_SESSION, cpu: "idle" }); },
+  };
+}
+
+function memoryActions(patch: SessionPatch): Pick<ProfilerActions, "memoryTrackingStarting" | "memoryTrackingActive" | "memoryTrackingStopped"> {
+  return {
+    memoryTrackingStarting() { patch({ ...NO_MEMORY_SESSION, memory: "starting" }); },
     memoryTrackingActive(sessionId, finalSnapshotFile, debugSessionId) {
       patch({ memory: "active", memorySessionId: sessionId, memoryFinalSnapshotFile: finalSnapshotFile, memoryDebugSessionId: debugSessionId });
     },
-    memoryTrackingStopped() {
-      patch({ memory: "idle", memorySessionId: undefined, memoryFinalSnapshotFile: undefined, memoryDebugSessionId: undefined });
-    },
+    memoryTrackingStopped() { patch({ ...NO_MEMORY_SESSION, memory: "idle" }); },
   };
 }

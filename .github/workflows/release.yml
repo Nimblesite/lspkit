@@ -88,6 +88,10 @@ jobs:
             cp LICENSE-MIT "${crate}LICENSE-MIT"
           done
 
+      # `make lint` lints the profiler UI package, so its tools come first.
+      - name: Install the profiler UI package
+        run: npm ci --prefix packages/lsp-profiler-ui
+
       # Full gate (lint + test + coverage + build) MUST pass before any publish.
       - name: CI gate
         run: make ci

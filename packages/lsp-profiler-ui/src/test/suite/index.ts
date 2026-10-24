@@ -13,7 +13,7 @@ export async function run(): Promise<void> {
     rootHooks: {
       beforeAll(this: Mocha.Context, done: Mocha.Done) {
         this.timeout(SUITE_SETUP_TIMEOUT_MS);
-        waitForLspReady().then(() => done(), done);
+        waitForLspReady().then(() => { done(); }, done);
       },
     },
   });
@@ -21,6 +21,6 @@ export async function run(): Promise<void> {
   const files = await glob("**/**.test.js", { cwd: testsRoot });
   files.forEach((f) => mocha.addFile(path.resolve(testsRoot, f)));
   return new Promise<void>((resolve, reject) => {
-    mocha.run((failures) => (failures > 0 ? reject(new Error(`${failures} tests failed.`)) : resolve()));
+    mocha.run((failures) => { failures > 0 ? reject(new Error(`${failures} tests failed.`)) : resolve(); });
   });
 }

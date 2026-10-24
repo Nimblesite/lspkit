@@ -20,6 +20,7 @@ import { readFile } from "node:fs/promises";
 import * as http from "node:http";
 import { basename } from "node:path";
 import { Logger } from "./logger";
+import { errorText } from "./failure";
 
 /** How long a registered profile stays fetchable (10 minutes). */
 const REGISTRATION_TTL_MS = 600_000;
@@ -57,7 +58,7 @@ export async function serveProfileForBrowser(
   registrations.set(token, { filePath, expiresAt: Date.now() + ttlMs });
   // The URL carries the real basename — speedscope falls back to
   // extension-based format detection (`.heapprofile` vs speedscope JSON).
-  return `http://127.0.0.1:${port}/${token}/${encodeURIComponent(basename(filePath))}`;
+  return `http://127.0.0.1:${String(port)}/${token}/${encodeURIComponent(basename(filePath))}`;
 }
 
 /** Stop the server and forget every registration (extension teardown). */
@@ -73,7 +74,7 @@ async function ensureServer(): Promise<number> {
   if (server !== undefined && serverPort !== undefined) {
     return serverPort;
   }
-  return new Promise<number>((resolve, reject) => {
+  return await new Promise<number>((resolve, reject) => {
     const created = http.createServer((req, res) => {
       void handleRequest(req, res);
     });
@@ -82,18 +83,21 @@ async function ensureServer(): Promise<number> {
       reject(err);
     });
     // Port 0 = ephemeral; loopback only — never reachable off-machine.
-    created.listen(0, "127.0.0.1", () => {
-      const address = created.address();
-      if (address === null || typeof address === "string") {
-        created.close();
-        reject(new Error("profile loopback server bound without a port"));
-        return;
-      }
-      server = created;
-      serverPort = address.port;
-      resolve(address.port);
-    });
+    created.listen(0, "127.0.0.1", () => { adoptListening(created, resolve, reject); });
   });
+}
+
+/** Keep the server once it is listening on a port; one bound without a port is closed. */
+function adoptListening(created: http.Server, resolve: (port: number) => void, reject: (err: Error) => void): void {
+  const address = created.address();
+  if (address === null || typeof address === "string") {
+    created.close();
+    reject(new Error("profile loopback server bound without a port"));
+    return;
+  }
+  server = created;
+  serverPort = address.port;
+  resolve(address.port);
 }
 
 /** Serve a registered profile by token; anything else is a 404. */
@@ -105,20 +109,20 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
   try {
     const body = await readFile(registration.filePath);
-    res.writeHead(HTTP_OK, {
-      "Content-Type": "application/json",
-      // speedscope.app fetches cross-origin; the token is the access control.
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "no-store",
-    });
+    res.writeHead(HTTP_OK, PROFILE_HEADERS);
     res.end(body);
   } catch (err: unknown) {
-    Logger.warn(
-      `Profile loopback server could not read ${registration.filePath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    Logger.warn(`Profile loopback server could not read ${registration.filePath}: ${errorText(err)}`);
     res.writeHead(HTTP_NOT_FOUND).end();
   }
 }
+
+/** speedscope.app fetches cross-origin; the token is the access control. */
+const PROFILE_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Cache-Control": "no-store",
+};
 
 /** Resolve a request path to its live registration, dropping expired ones. */
 function lookupRegistration(url: string): Registration | undefined {

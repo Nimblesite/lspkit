@@ -258,7 +258,7 @@ async function requestStep(op: MemoryOperation, active: ActiveMemorySession): Pr
     { memory_session_id: active.memorySessionId, ...op.extraArgs });
   if (step === undefined) { return null; }
   if (step.kind === "Completed") { return toMemoryIngestResult(step.result); }
-  return courierStep(op, active, step.script);
+  return await courierStep(op, active, step.script);
 }
 
 /**
@@ -294,7 +294,7 @@ async function evaluateAndIngest(op: MemoryOperation, ctx: OperationContext, scr
     return null;
   }
   op.report("Analyzing…");
-  return ingestOutput(ctx.client, ctx.memorySessionId, output);
+  return await ingestOutput(ctx.client, ctx.memorySessionId, output);
 }
 
 /** Post a script's raw output to `<prefix>.lspProfiler.memory.ingest` and read the structured result. */
@@ -314,9 +314,9 @@ export async function runMemoryScript(
   command: string,
   extraArgs: Record<string, unknown> = {},
 ): Promise<MemoryIngestResult | null> {
-  return withUserProgress(
+  return await withUserProgress(
     memOpTitle(command),
-    async (report) => runMemoryOperation({ store, command, extraArgs, report, quiet: false }),
+    async (report) => await runMemoryOperation({ store, command, extraArgs, report, quiet: false }),
   );
 }
 
@@ -339,7 +339,7 @@ export function presentSnapshot(
   recordTimelinePoint(dashboard);
   dashboard.timeline = [...captureTimeline];
   lastDashboardSnapshot = dashboard;
-  Logger.info(`Memory snapshot: ${dashboard.currentMemory} bytes current`);
+  Logger.info(`Memory snapshot: ${String(dashboard.currentMemory)} bytes current`);
   if (options.openResultsView) {
     openMemoryDashboard(dashboard);
   }
@@ -357,7 +357,7 @@ export function presentDiff(result: MemoryIngestResult): MemoryDiffResult {
     openMemoryDashboard(lastDashboardSnapshot, toDashboardDiff(result));
   }
   const leaks = diff.suspectedLeaks;
-  Logger.info(`Memory diff: ${leaks.length} suspected leak(s)`);
+  Logger.info(`Memory diff: ${String(leaks.length)} suspected leak(s)`);
   return diff;
 }
 

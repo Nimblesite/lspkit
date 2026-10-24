@@ -13,6 +13,7 @@
  */
 
 import { profilerPalette } from "./palette";
+import type { SampledView } from "./sampled-view";
 import * as vscode from "vscode";
 import { configSection } from "./ids";
 import { Logger } from "./logger";
@@ -42,7 +43,7 @@ export interface ProfileHotFunction {
 
 /** Profile result returned by `<prefix>.lspProfiler.cpu.stop` or `/snapshot`. */
 export interface ProfileResult {
-  sampled?: import("./sampled-view").SampledView;
+  sampled?: SampledView;
   sessionId: string;
   duration: number;
   totalSamples: number;
@@ -223,7 +224,7 @@ function buildLineDecorations(editor: vscode.TextEditor, lines: ProfileHotLine[]
     if (level === undefined) { continue; }
     const barLen = Math.ceil((line.percentage / level.minPct) * (level.barMaxLen / 2));
     const bar = level.barChar.repeat(Math.min(barLen, level.barMaxLen));
-    addLineHint(editor, optionsByColor, line.line, ` ${bar} ${line.percentage.toFixed(1)}% (${line.samples} samples)`, level.color);
+    addLineHint(editor, optionsByColor, line.line, ` ${bar} ${line.percentage.toFixed(1)}% (${String(line.samples)} samples)`, level.color);
   }
 }
 
@@ -270,8 +271,8 @@ export function applyProfileDecorations(result: ProfileResult): void {
   // lines that matches no open editor used to log exactly like a successful
   // pass, which is how the heat map stayed silently blank on Windows.
   Logger.info(
-    `Profile decorations applied: ${appliedDecorations.length} across ${editors.length} visible editor(s)`
-    + ` from ${result.hotLines.length} hot lines, ${result.hotFunctions.length} hot functions`,
+    `Profile decorations applied: ${String(appliedDecorations.length)} across ${String(editors.length)} visible editor(s)`
+    + ` from ${String(result.hotLines.length)} hot lines, ${String(result.hotFunctions.length)} hot functions`,
   );
 }
 

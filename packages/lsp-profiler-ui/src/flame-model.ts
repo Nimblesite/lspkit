@@ -87,11 +87,7 @@ export interface FlameModel {
 // --- parsing -----------------------------------------------------------------
 
 function isFrame(value: unknown): value is SpeedscopeFrame {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as SpeedscopeFrame).name === "string"
-  );
+  return isRecord(value) && typeof value.name === "string";
 }
 
 const isWeight = (weight: unknown): boolean =>
@@ -100,20 +96,31 @@ const isWeight = (weight: unknown): boolean =>
 const isStack = (stack: unknown, frameCount: number): boolean =>
   Array.isArray(stack) && stack.every((f) => Number.isInteger(f) && f >= 0 && f < frameCount);
 
-/** What is wrong with the profile's type and array shapes, if anything. */
-function shapeError(p: SpeedscopeProfile): string | undefined {
-  if (p.type !== "sampled") return `profile "${p.name}" has unsupported type "${p.type}"`;
-  if (!Array.isArray(p.samples) || !Array.isArray(p.weights)) return `profile "${p.name}" is missing samples/weights`;
-  return p.samples.length === p.weights.length ? undefined
-    : `profile "${p.name}" has ${p.samples.length} samples but ${p.weights.length} weights`;
-}
-
+/** What is wrong with one profile, if anything. */
 function profileError(raw: unknown, frameCount: number): string | undefined {
   if (!isRecord(raw)) return "speedscope file has a profile that is not an object";
-  const p = raw as unknown as SpeedscopeProfile;
-  return shapeError(p)
-    ?? (p.weights.every(isWeight) ? undefined : `profile "${p.name}" has a weight that is not a non-negative number`)
-    ?? (p.samples.every((s) => isStack(s, frameCount)) ? undefined : `profile "${p.name}" references a frame outside shared.frames`);
+  const { type, samples, weights } = raw;
+  const name = String(raw.name);
+  if (type !== "sampled") return `profile "${name}" has unsupported type "${String(type)}"`;
+  if (!Array.isArray(samples) || !Array.isArray(weights)) return `profile "${name}" is missing samples/weights`;
+  if (samples.length !== weights.length) return `profile "${name}" has ${String(samples.length)} samples but ${String(weights.length)} weights`;
+  if (!weights.every(isWeight)) return `profile "${name}" has a weight that is not a non-negative number`;
+  return samples.every((s) => isStack(s, frameCount)) ? undefined : `profile "${name}" references a frame outside shared.frames`;
+}
+
+/** What is wrong with a parsed speedscope document, if anything. */
+function speedscopeError(doc: unknown): string | undefined {
+  const shared = isRecord(doc) ? doc.shared : undefined;
+  const frames = isRecord(shared) ? shared.frames : undefined;
+  if (!Array.isArray(frames) || !frames.every(isFrame)) return "speedscope file is missing shared.frames";
+  const profiles = isRecord(doc) ? doc.profiles : undefined;
+  if (!Array.isArray(profiles) || profiles.length === 0) return "speedscope file has no profiles";
+  return profiles.map((p) => profileError(p, frames.length)).find((error) => error !== undefined);
+}
+
+/** The document's outline; `speedscopeError` has checked everything inside it. */
+function isSpeedscopeFile(doc: unknown): doc is SpeedscopeFile {
+  return isRecord(doc) && isRecord(doc.shared) && Array.isArray(doc.profiles);
 }
 
 /** JSON.parse into a Result — shared by both profiler artifact parsers. */
@@ -131,17 +138,10 @@ export function parseSpeedscope(text: string): Result<SpeedscopeFile> {
   if (!raw.ok) {
     return raw;
   }
-  const doc = raw.value as SpeedscopeFile;
-  if (!Array.isArray(doc?.shared?.frames) || !doc.shared.frames.every(isFrame)) {
-    return { ok: false, error: "speedscope file is missing shared.frames" };
-  }
-  if (!Array.isArray(doc.profiles) || doc.profiles.length === 0) {
-    return { ok: false, error: "speedscope file has no profiles" };
-  }
-  const bad = doc.profiles
-    .map((p) => profileError(p, doc.shared.frames.length))
-    .find(Boolean);
-  return bad ? { ok: false, error: bad } : { ok: true, value: doc };
+  const error = speedscopeError(raw.value);
+  return error === undefined && isSpeedscopeFile(raw.value)
+    ? { ok: true, value: raw.value }
+    : { ok: false, error: error ?? "speedscope file is missing shared.frames" };
 }
 
 // --- left-heavy layout ---------------------------------------------------------
@@ -208,9 +208,8 @@ export function leftHeavyRects(profile: SpeedscopeProfile): RenderRect[] {
   if (total <= 0) {
     return [];
   }
-  const root: Map<number, AggNode> = new Map();
-  profile.samples.forEach((stack, i) =>
-    insertStack(root, stack, profile.weights[i]),
+  const root = new Map<number, AggNode>();
+  profile.samples.forEach((stack, i) => { insertStack(root, stack, profile.weights[i]); },
   );
   const out: RenderRect[] = [];
   emitAggNodes(sortedByWeight(root), 0, 0, 1 / total, out);
@@ -253,7 +252,7 @@ export function colorForRank(file: string, rank: number, n: number, isSource = h
   const t = bucket / 255;
   const x = triangle(30 * t);
   if (!isSource(file)) {
-    return `hsl(${RUNTIME_HUE}, 12%, ${(58 - 12 * x).toFixed(1)}%)`;
+    return `hsl(${String(RUNTIME_HUE)}, 12%, ${(58 - 12 * x).toFixed(1)}%)`;
   }
   return `hsl(${(324 * t).toFixed(1)}, ${(25 + 20 * x).toFixed(1)}%, ${(65 - 15 * x).toFixed(1)}%)`;
 }

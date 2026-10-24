@@ -24,8 +24,8 @@ function chipsHtml(summary: ProfileSummary): string {
     .filter((fiber) => fiber.samples > 0)
     .map(
       (fiber, i) =>
-        `<button class="chip" data-fiber="${i}">${escapeHtml(fiber.label)} · ` +
-        `${summary.schedulingKnown === false ? `${fiber.samples} samples` : `${onCpuPct(fiber)}% on-CPU`}</button>`,
+        `<button class="chip" data-fiber="${String(i)}">${escapeHtml(fiber.label)} · ` +
+        `${summary.schedulingKnown === false ? `${String(fiber.samples)} samples` : `${String(onCpuPct(fiber))}% on-CPU`}</button>`,
     )
     .join("");
 }
@@ -33,7 +33,7 @@ function chipsHtml(summary: ProfileSummary): string {
 function fiberOptionsHtml(model: FlameModel): string {
   return model.fibers
     .map(
-      (fiber, i) => `<option value="${i}">${escapeHtml(fiber.name)}</option>`,
+      (fiber, i) => `<option value="${String(i)}">${escapeHtml(fiber.name)}</option>`,
     )
     .join("");
 }

@@ -73,7 +73,8 @@ export function toUiProcess(process: WireProcess): ProcessInfo {
 
 /** [PROF-WIRE]: a source location is both fields or neither, never `""` and line 0. */
 function located(entry: { file?: string | null; line?: number | null }): { file?: string; line?: number } {
-  return entry.file != null && entry.line != null ? { file: entry.file, line: entry.line } : {};
+  const { file, line } = entry;
+  return file !== null && file !== undefined && line !== null && line !== undefined ? { file, line } : {};
 }
 
 function allocation(site: { file?: string | null; line?: number | null; size_bytes: number; count: number; type_name?: string | null }): Record<string, unknown> {

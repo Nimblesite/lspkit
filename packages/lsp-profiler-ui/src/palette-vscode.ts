@@ -9,6 +9,6 @@ export function bindPanelPalette(panel: vscode.WebviewPanel): vscode.Disposable 
       void panel.webview.postMessage({ type: "profilerPalette", palette: profilerPalette(), vars: paletteVars() });
     }
   });
-  panel.onDidDispose(() => subscription.dispose());
+  panel.onDidDispose(() => { subscription.dispose(); });
   return subscription;
 }

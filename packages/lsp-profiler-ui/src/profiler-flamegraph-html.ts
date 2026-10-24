@@ -82,7 +82,7 @@ export function presentProfileResult(result: ProfileResult): void {
     return;
   }
   openFlamegraphWebview(result);
-  Logger.info(`Profiling stopped: ${result.totalSamples} samples, ${result.duration.toFixed(1)}s, output: ${result.outputFile}`);
+  Logger.info(`Profiling stopped: ${String(result.totalSamples)} samples, ${result.duration.toFixed(1)}s, output: ${result.outputFile}`);
   // A failed/refused export is never silent — even when there is still data to
   // show, surface why an artifact is missing ([PROF-EXPORT-VALIDATE]).
   if (result.exportError !== undefined && result.exportError !== "") {
@@ -114,7 +114,7 @@ function presentNoUsableData(result: ProfileResult): void {
     return;
   }
   void vscode.window.showWarningMessage(
-    `${brand()}: Captured ${result.totalSamples} sample${result.totalSamples === 1 ? "" : "s"}, but none ` +
+    `${brand()}: Captured ${String(result.totalSamples)} sample${result.totalSamples === 1 ? "" : "s"}, but none ` +
       "landed in your code — the program ran its work too briefly to profile by sampling. " +
       "Short scripts need precise (deterministic) profiling.",
   );
@@ -123,7 +123,7 @@ function presentNoUsableData(result: ProfileResult): void {
 /** Completion toast that always offers a path to the raw trace (#145). */
 async function offerProfileResultActions(result: ProfileResult): Promise<void> {
   const choice = await vscode.window.showInformationMessage(
-    `${brand()}: Profile complete — ${result.totalSamples} samples in ${result.duration.toFixed(1)}s`,
+    `${brand()}: Profile complete — ${String(result.totalSamples)} samples in ${result.duration.toFixed(1)}s`,
     OPEN_NATIVE_TRACE,
     REVEAL_TRACE,
   );
@@ -268,8 +268,8 @@ function flamegraphDataScript(result: ProfileResult): string {
     const vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
     const hotFunctions = ${embedJson(result.hotFunctions)};
     const hotLines = ${embedJson(result.hotLines)};
-    const totalSamples = ${result.totalSamples};
-    const duration = ${result.duration};
+    const totalSamples = ${String(result.totalSamples)};
+    const duration = ${String(result.duration)};
     const outputFile = ${embedJson(result.outputFile)};
     const flamegraphFile = ${embedJson(result.flamegraphPath ?? "")};
     const cpuProfileFile = ${embedJson(result.cpuProfilePath ?? "")};`;

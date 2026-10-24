@@ -73,17 +73,15 @@ export function registerMemoryProfiler(store: Store): vscode.Disposable[] {
 /** The memory command registrations and debug-session listeners. */
 function memoryCommandDisposables(store: Store): vscode.Disposable[] {
   return [
-    vscode.commands.registerCommand(cmd("memoryMenu"), async () => handleMemoryMenu(store)),
-    vscode.commands.registerCommand(cmd("memoryStart"), async (pid?: unknown) =>
-      withUserProgress(memStartTitle(), async (report) =>
-        runMemoryStartCommand(store, report, typeof pid === "number" ? pid : undefined),
-      ),
+    vscode.commands.registerCommand(cmd("memoryMenu"), async () => { await handleMemoryMenu(store); }),
+    vscode.commands.registerCommand(cmd("memoryStart"), async (pid?: unknown) => { await withUserProgress(memStartTitle(), async (report) => { await runMemoryStartCommand(store, report, typeof pid === "number" ? pid : undefined); },
+      ); },
     ),
-    vscode.commands.registerCommand(cmd("memorySnapshot"), async () => handleMemorySnapshot(store)),
-    vscode.commands.registerCommand(cmd("memoryDiff"), async () => handleMemoryDiff(store)),
-    vscode.commands.registerCommand(cmd("memoryGcCollect"), async () => handleMemoryGcCollect(store)),
-    vscode.commands.registerCommand(cmd("memoryStop"), async () => runMemoryStopCommand(store)),
-    vscode.commands.registerCommand(cmd("memoryReferences"), async () => handleMemoryReferences(store)),
+    vscode.commands.registerCommand(cmd("memorySnapshot"), async () => { await handleMemorySnapshot(store); }),
+    vscode.commands.registerCommand(cmd("memoryDiff"), async () => { await handleMemoryDiff(store); }),
+    vscode.commands.registerCommand(cmd("memoryGcCollect"), async () => { await handleMemoryGcCollect(store); }),
+    vscode.commands.registerCommand(cmd("memoryStop"), async () => { await runMemoryStopCommand(store); }),
+    vscode.commands.registerCommand(cmd("memoryReferences"), async () => { await handleMemoryReferences(store); }),
     // The status-bar show/hide on session changes is bound in memory-status.ts.
     vscode.debug.onDidStartDebugSession((session) => { trackMemoryOnLaunch(store, session); }),
     vscode.debug.onDidTerminateDebugSession((session) => { settleMemoryOnSessionEnd(store, session); }),
@@ -189,7 +187,7 @@ async function handleMemoryDiff(store: Store): Promise<void> {
   if (result?.kind === "diff") {
     const diff = presentDiff(result);
     void vscode.window.showInformationMessage(
-      `${brand()}: Compared snapshots — ${diff.suspectedLeaks.length} suspected leak(s)`,
+      `${brand()}: Compared snapshots — ${String(diff.suspectedLeaks.length)} suspected leak(s)`,
     );
   }
 }
@@ -210,7 +208,7 @@ async function handleMemoryGcCollect(store: Store): Promise<void> {
 export function gcSummary(result: MemoryIngestResult): string {
   const freed = formatBytes(Math.max(0, Number(result.freedBytes ?? 0)));
   const uncollectable = Number(result.uncollectable ?? 0);
-  const stuck = uncollectable > 0 ? `; ${uncollectable} object(s) could not be collected` : "";
+  const stuck = uncollectable > 0 ? `; ${String(uncollectable)} object(s) could not be collected` : "";
   return `${brand()}: Garbage collection ran — freed ${freed}${stuck}`;
 }
 

@@ -524,11 +524,11 @@ suite('Profiler — Decoration Lifecycle', () => {
             ],
         };
 
-        assert.doesNotThrow(() => applyProfileDecorations(result),
+        assert.doesNotThrow(() => { applyProfileDecorations(result); },
             'First apply should succeed');
-        assert.doesNotThrow(() => clearProfileDecorations(),
+        assert.doesNotThrow(() => { clearProfileDecorations(); },
             'Clear should succeed');
-        assert.doesNotThrow(() => applyProfileDecorations(result),
+        assert.doesNotThrow(() => { applyProfileDecorations(result); },
             'Re-apply should succeed');
         clearProfileDecorations();
     });

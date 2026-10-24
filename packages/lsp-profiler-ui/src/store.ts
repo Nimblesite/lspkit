@@ -7,7 +7,7 @@ import { configurePalette, resolvePalette, DEFAULT_PALETTE } from "./palette";
 import { computed, signal, type ReadonlySignal, type Signal } from "@preact/signals-core";
 import type { LanguageClient } from "vscode-languageclient/node";
 import { isRecord } from "./unknown-shape";
-import type { ProfilerCapabilities } from "./wire-generated";
+import type { ProfilerCapabilities, RuntimeInfo } from "./wire-generated";
 import type { ProfilerHost } from "./host";
 import { installIds } from "./ids";
 import { bindLogger } from "./logger";
@@ -56,16 +56,22 @@ export interface ProfilerStore extends ProfilerActions, ProcessPanelActions {
 
 /** The `experimental.lspProfiler` block of the server's initialize result, when present. */
 function advertisedCapabilities(client: LanguageClient | undefined): ProfilerCapabilities | undefined {
-  const experimental = client?.initializeResult?.capabilities.experimental;
+  const experimental: unknown = client?.initializeResult?.capabilities.experimental;
   const block = isRecord(experimental) ? experimental.lspProfiler : undefined;
-  return isRecord(block) && Array.isArray(block.runtimes) ? (block as unknown as ProfilerCapabilities) : undefined;
+  return isProfilerCapabilities(block) ? block : undefined;
+}
+
+/** A capabilities block: a runtime list, each runtime naming its id ([PROF-UI-CAPABILITIES]). */
+function isProfilerCapabilities(block: unknown): block is ProfilerCapabilities {
+  return isRecord(block) && Array.isArray(block.runtimes)
+    && block.runtimes.every((runtime) => isRecord(runtime) && typeof runtime.id === "string");
 }
 
 type RuntimeQueries = Pick<ProfilerStore, "memoryIsDirect" | "memoryOffered" | "tracksMemory" | "runtimeName" | "sourceEntries">;
 
 /** What the advertised runtimes can do; before the server advertises, nothing is ruled out. */
 function runtimeQueries(capabilities: ReadonlySignal<ProfilerCapabilities | undefined>): RuntimeQueries {
-  const find = (runtime: string) => capabilities.value?.runtimes.find((info) => info.id === runtime);
+  const find = (runtime: string): RuntimeInfo | undefined => capabilities.value?.runtimes.find((info) => info.id === runtime);
   return {
     memoryIsDirect: (runtime) => find(runtime)?.memory?.mode.kind === "Direct",
     memoryOffered: () => capabilities.value?.runtimes.some((info) => info.memory !== undefined) ?? true,

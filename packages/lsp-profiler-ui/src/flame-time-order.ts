@@ -65,7 +65,7 @@ function bounded(walk: (emit: (rect: RenderRect) => void) => void, total: number
 
 /** `rects`, an already built layout over `total` weight, within the budget. */
 export function boundedRects(rects: readonly RenderRect[], total: number, budget = FLAME_RECT_BUDGET): BoundedRects {
-  return bounded((emit) => rects.forEach(emit), total, budget);
+  return bounded((emit) => { rects.forEach(emit); }, total, budget);
 }
 
 // --- time-order layout ----------------------------------------------------------
@@ -126,6 +126,6 @@ export function timeOrderRects(profile: SpeedscopeProfile): RenderRect[] {
 export function boundedTimeOrder(profile: SpeedscopeProfile, budget = FLAME_RECT_BUDGET): BoundedRects {
   const total = profile.weights.reduce((sum, w) => sum + w, 0);
   if (total <= 0) return { rects: [], hidden: 0 };
-  const kept = bounded((emit) => walkTimeOrder(profile, emit), total, budget);
+  const kept = bounded((emit) => { walkTimeOrder(profile, emit); }, total, budget);
   return { rects: normalizeRects(kept.rects, total), hidden: kept.hidden };
 }

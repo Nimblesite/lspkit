@@ -39,7 +39,7 @@ export async function pollUntilResult<T>(
   let last: T = await options.fn();
   while (!options.until(last)) {
     if (Date.now() >= deadline) {
-      throw new Error(`${options.description ?? 'condition'} not met within ${options.timeoutMs}ms (last: ${JSON.stringify(last)})`);
+      throw new Error(`${options.description ?? 'condition'} not met within ${String(options.timeoutMs)}ms (last: ${JSON.stringify(last)})`);
     }
     await delay(options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS);
     last = await options.fn();

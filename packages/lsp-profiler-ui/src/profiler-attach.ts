@@ -52,7 +52,7 @@ function adoptSession(store: Store, raw: StartProfileResult | undefined, announc
   const result = toStartedSession(raw);
   store.profilerActive(result.pid, result.sessionId);
   Logger.info(
-    `Profiling started: PID ${result.pid}, ${result.runtime} ${result.runtimeVersion}, session ${result.sessionId}`,
+    `Profiling started: PID ${String(result.pid)}, ${result.runtime} ${result.runtimeVersion}, session ${result.sessionId}`,
   );
   vscode.window.showInformationMessage(announce(result));
 }
@@ -83,7 +83,7 @@ function clientForStart(store: Store, busy: () => string): LanguageClient | unde
 /** A "stop the current CPU session first" warning naming the active CPU profile. */
 function busyMessage(store: Store): string {
   const session = store.profiler.value;
-  const pid = session.cpuPid !== undefined ? ` PID ${session.cpuPid}` : "";
+  const pid = session.cpuPid !== undefined ? ` PID ${String(session.cpuPid)}` : "";
   return `${brand()}: Already profiling${pid}. Stop the current CPU session first.`;
 }
 
@@ -103,9 +103,9 @@ export async function startProfilingForPid(store: Store, pid: number, preset: st
   store.profilerStarting();
   try {
     await withUserProgress(cpuStartTitle(), async (report) => {
-      report(`Attaching to PID ${pid}…`);
+      report(`Attaching to PID ${String(pid)}…`);
       const raw = await executeServerCommand<StartProfileResult>(client, CPU_CMD.start, { pid, preset, ...samplerSettings() });
-      adoptSession(store, raw, (result) => `${brand()}: Profiling PID ${result.pid} (${result.runtime} ${result.runtimeVersion})`);
+      adoptSession(store, raw, (result) => `${brand()}: Profiling PID ${String(result.pid)} (${result.runtime} ${result.runtimeVersion})`);
     });
   } catch (err: unknown) {
     reportFailure("Profile start", err);
@@ -144,10 +144,10 @@ async function attachToDebuggee(store: Store, client: LanguageClient, pid: numbe
   launching: () => boolean = () => false): Promise<void> {
   const args = { pid, ...samplerSettings() };
   const send = async (): Promise<StartProfileResult | undefined> =>
-    executeServerCommand<StartProfileResult>(client, CPU_CMD.start, args);
+    await executeServerCommand<StartProfileResult>(client, CPU_CMD.start, args);
   try {
     const raw = await startWhenRuntimeReady(send, launching);
-    adoptSession(store, raw, (result) => `${brand()}: Profiling debug session (PID ${result.pid})`);
+    adoptSession(store, raw, (result) => `${brand()}: Profiling debug session (PID ${String(result.pid)})`);
   } catch (err: unknown) {
     reportFailure("Profile attach-to-debug", err);
   }
@@ -253,7 +253,7 @@ async function injectCooperativeSampler(store: Store, client: LanguageClient, fr
   report("Injecting the in-process sampler…");
   const ack = await evaluateInDebugSession(leg1.script, frameId);
   await vscode.commands.executeCommand("workbench.action.debug.continue");
-  if (!ack?.includes(COOPERATIVE_ACK)) {
+  if (ack?.includes(COOPERATIVE_ACK) !== true) {
     vscode.window.showWarningMessage(`${brand()}: Could not inject the in-process CPU sampler.`);
     return;
   }
@@ -261,5 +261,5 @@ async function injectCooperativeSampler(store: Store, client: LanguageClient, fr
   const raw = await executeServerCommand<StartProfileResult>(client, CPU_CMD.cooperativeAttach,
     { sample_file: leg1.sample_file, sample_rate: sampleRate });
   if (store.profiler.value.cpu === "active") { return; }
-  adoptSession(store, raw, (result) => `${brand()}: Profiling current file (PID ${result.pid}, in-process sampler)`);
+  adoptSession(store, raw, (result) => `${brand()}: Profiling current file (PID ${String(result.pid)}, in-process sampler)`);
 }

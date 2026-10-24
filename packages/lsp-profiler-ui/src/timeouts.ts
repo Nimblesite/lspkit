@@ -25,7 +25,7 @@ export const STARTUP_TIMEOUT_MS = 10_000;
  * timing change happens once rather than in fifty copies.
  */
 export async function delay(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => {
+  await new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
   });
 }

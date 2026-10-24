@@ -18,7 +18,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "build": "npm run compile",
-    "lint": "tsc -p ./ --noEmit",
+    "lint": "tsc -p ./ --noEmit && eslint .",
     "pretest": "node scripts/write-test-host-manifest.mjs",
     "test": "vscode-test",
     "test:paths": "mocha --ui tdd out/src/test/suite/editor-path-key.test.js"
@@ -30,14 +30,17 @@
     "vscode-languageclient": "^9.0.1 || ^10.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.1.2",
     "@types/vscode": "^1.99.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
+    "eslint": "^10.13.0",
     "glob": "^13.0.6",
     "mocha": "^11.7.6",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0",
     "vscode-languageclient": "^10.1.0",
     "vscode-languageserver": "^10.0.0",
     "vscode-languageserver-textdocument": "^1.0.15"

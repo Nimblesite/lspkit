@@ -58,7 +58,7 @@ export async function serveProfileForBrowser(
   registrations.set(token, { filePath, expiresAt: Date.now() + ttlMs });
   // The URL carries the real basename — speedscope falls back to
   // extension-based format detection (`.heapprofile` vs speedscope JSON).
-  return `http://127.0.0.1:${port}/${token}/${encodeURIComponent(basename(filePath))}`;
+  return `http://127.0.0.1:${String(port)}/${token}/${encodeURIComponent(basename(filePath))}`;
 }
 
 /** Stop the server and forget every registration (extension teardown). */
@@ -74,7 +74,7 @@ async function ensureServer(): Promise<number> {
   if (server !== undefined && serverPort !== undefined) {
     return serverPort;
   }
-  return new Promise<number>((resolve, reject) => {
+  return await new Promise<number>((resolve, reject) => {
     const created = http.createServer((req, res) => {
       void handleRequest(req, res);
     });

@@ -89,10 +89,10 @@ class MemoryLayer {
   private readonly types = new Map<string, vscode.TextEditorDecorationType>();
   private applied: AppliedDecoration[] = [];
 
-  get decorations(): readonly AppliedDecoration[] { return this.applied; }
+  public get decorations(): readonly AppliedDecoration[] { return this.applied; }
 
   /** Replace this layer's paint with `lines`, on every visible editor. */
-  paint(lines: readonly PaintedLine[]): void {
+  public paint(lines: readonly PaintedLine[]): void {
     this.clear();
     // Keyed, not compared raw: tracemalloc reports the interpreter's own
     // filename and the editor reports what VS Code resolved. On win32 those
@@ -111,7 +111,7 @@ class MemoryLayer {
     }
   }
 
-  clear(): void {
+  public clear(): void {
     for (const decorationType of this.types.values()) {
       for (const editor of vscode.window.visibleTextEditors) {
         editor.setDecorations(decorationType, []);
@@ -120,7 +120,7 @@ class MemoryLayer {
     this.applied = [];
   }
 
-  dispose(): void {
+  public dispose(): void {
     for (const decorationType of this.types.values()) {
       decorationType.dispose();
     }
@@ -201,7 +201,7 @@ function formatBytes(bytes: number): string {
   if (bytes >= BYTES_PER_GIB) { return `${(bytes / BYTES_PER_GIB).toFixed(1)} GB`; }
   if (bytes >= BYTES_PER_MIB) { return `${(bytes / BYTES_PER_MIB).toFixed(1)} MB`; }
   if (bytes >= BYTES_PER_KIB) { return `${(bytes / BYTES_PER_KIB).toFixed(1)} KB`; }
-  return `${bytes} B`;
+  return `${String(bytes)} B`;
 }
 
 function memColor(size: number): string {
@@ -241,9 +241,9 @@ export function applyMemoryDecorations(result: MemorySnapshotResult): void {
       file,
       line,
       color: memColor(size),
-      text: ` \u2588\u2588\u2588\u2588 ${formatBytes(size)} allocated (${count} objects)`,
+      text: ` \u2588\u2588\u2588\u2588 ${formatBytes(size)} allocated (${String(count)} objects)`,
     }]));
-  Logger.info(`Memory decorations applied: ${result.topAllocations.length} allocations`);
+  Logger.info(`Memory decorations applied: ${String(result.topAllocations.length)} allocations`);
 }
 
 /** Apply leak indicator decorations with confidence badges, replacing the last diff's. */
@@ -252,9 +252,9 @@ export function applyLeakDecorations(result: MemoryDiffResult): void {
     file: leak.file,
     line: leak.line,
     color: leakColor(leak.confidence),
-    text: ` ${confidenceBadge(leak.confidence)} +${formatBytes(Math.abs(leak.sizeGrowth))} leak (${leak.countGrowth} objects)`,
+    text: ` ${confidenceBadge(leak.confidence)} +${formatBytes(Math.abs(leak.sizeGrowth))} leak (${String(leak.countGrowth)} objects)`,
   })));
-  Logger.info(`Leak decorations applied: ${result.suspectedLeaks.length} suspected leaks`);
+  Logger.info(`Leak decorations applied: ${String(result.suspectedLeaks.length)} suspected leaks`);
 }
 
 /** Clear all memory decorations from visible editors. */

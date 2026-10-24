@@ -103,16 +103,16 @@ function formatBytes(bytes: number): string {
   );
   const value = bytes / BYTES_PER_UNIT ** exponent;
   const rounded = exponent === 0 ? value : Math.round(value);
-  return `${rounded} ${MEMORY_UNITS[exponent]}`;
+  return `${String(rounded)} ${MEMORY_UNITS[exponent]}`;
 }
 
 /** Human-readable elapsed runtime, e.g. `3m`, `2h 14m`. */
 function formatRuntime(seconds: number): string {
-  if (seconds < SECONDS_PER_MINUTE) { return `${seconds}s`; }
-  if (seconds < SECONDS_PER_HOUR) { return `${Math.floor(seconds / SECONDS_PER_MINUTE)}m`; }
+  if (seconds < SECONDS_PER_MINUTE) { return `${String(seconds)}s`; }
+  if (seconds < SECONDS_PER_HOUR) { return `${String(Math.floor(seconds / SECONDS_PER_MINUTE))}m`; }
   const hours = Math.floor(seconds / SECONDS_PER_HOUR);
   const minutes = Math.floor((seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
-  return `${hours}h ${minutes}m`;
+  return `${String(hours)}h ${String(minutes)}m`;
 }
 
 /** Final path component, used to render a script's basename. */
@@ -166,7 +166,7 @@ export class ProcessGroupItem extends vscode.TreeItem {
     super(label, vscode.TreeItemCollapsibleState.Expanded);
     // Stable identity so VS Code preserves expansion state across refreshes.
     this.id = `processGroup:${label}`;
-    this.description = `${members.length}`;
+    this.description = String(members.length);
     this.contextValue = "processGroup";
     this.iconPath = new vscode.ThemeIcon("folder");
   }
@@ -190,7 +190,7 @@ export class ProcessTreeItem extends vscode.TreeItem {
     super(rowLabel(process), vscode.TreeItemCollapsibleState.None);
     // Stable identity across the 2s auto-refresh, or VS Code can fail to map an
     // inline-button click to a recreated element and pass no argument (#79).
-    this.id = `process:${process.pid}`;
+    this.id = `process:${String(process.pid)}`;
     const { profilingThis, tracksMemory, memoryTrackable } = rowState(process, runtime, activeProfilingPid, activeDebuggeePid);
     this.description = rowDescription(process, profilingThis);
     this.tooltip = rowTooltip(process, runtime.name, profilingThis, tracksMemory && !memoryTrackable);
@@ -245,7 +245,7 @@ function entryCommand(process: ProcessInfo, runtime: RowRuntime): vscode.Command
 function processResourceUri(process: ProcessInfo): vscode.Uri {
   const ws = process.inWorkspace ? "1" : "0";
   const dbg = process.debuggable ? "1" : "0";
-  return vscode.Uri.from({ scheme: processUriScheme(), path: `/${process.pid}`, query: `ws=${ws}&dbg=${dbg}` });
+  return vscode.Uri.from({ scheme: processUriScheme(), path: `/${String(process.pid)}`, query: `ws=${ws}&dbg=${dbg}` });
 }
 
 /** The launcher chip (`[uvicorn] `) for a row's description, or empty. */
@@ -257,7 +257,7 @@ function launcherChip(process: ProcessInfo): string {
 function rowDescription(process: ProcessInfo, profilingThis: boolean): string {
   const version = process.runtimeVersion ?? "—";
   const profilingSuffix = profilingThis ? " · profiling" : "";
-  return `${launcherChip(process)}PID ${process.pid} · ${version} · ${process.cpuPercent.toFixed(1)}% · ${formatBytes(process.memoryBytes)}${profilingSuffix}`;
+  return `${launcherChip(process)}PID ${String(process.pid)} · ${version} · ${process.cpuPercent.toFixed(1)}% · ${formatBytes(process.memoryBytes)}${profilingSuffix}`;
 }
 
 /**
@@ -285,7 +285,7 @@ function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: bo
 /** The process as resolved: identity, runtime, load and owner. */
 function rowFacts(process: ProcessInfo, runtimeName: string): string[] {
   return [
-    `${process.name} (PID ${process.pid})`,
+    `${process.name} (PID ${String(process.pid)})`,
     process.interpreterPath !== null ? `Executable: ${process.interpreterPath}` : "",
     process.script !== null ? `Entry: ${process.script}` : "",
     `${runtimeName}: ${process.runtimeVersion ?? "unknown"}`,

@@ -56,7 +56,7 @@ export function bindProcessPanelReactivity(
 function onGateChange(provider: ProcessesProvider): (session: ProfilerSession) => void {
   let lastGate = "";
   return (session) => {
-    const gate = `${session.cpu}|${session.cpuPid ?? ""}|${session.memory}`;
+    const gate = `${session.cpu}|${String(session.cpuPid ?? "")}|${session.memory}`;
     if (gate === lastGate) { return; }
     lastGate = gate;
     applyContextKeys(session);
@@ -76,12 +76,12 @@ function onGateChange(provider: ProcessesProvider): (session: ProfilerSession) =
  */
 export function bindDebuggeeTracking(store: Store): vscode.Disposable {
   function update(): void {
+    // Read on every pass, so the effect re-runs when a debuggee PID resolves or clears.
+    const pids = store.sessionIdToPid.value;
     const session = vscode.debug.activeDebugSession;
-    const pid = session?.type === debugType() ? store.getDebuggeeProcessId(session.id) : undefined;
-    store.setActiveDebuggeePid(pid);
+    store.setActiveDebuggeePid(session?.type === debugType() ? pids.get(session.id) : undefined);
   }
   const disposeEffect = effect(() => {
-    void store.sessionIdToPid.value; // re-run when a debuggee PID resolves/clears
     update();
   });
   const subscriptions = [
@@ -115,7 +115,7 @@ function applyContextKeys(session: ProfilerSession): void {
 export function panelMessage(session: ProfilerSession): string | undefined {
   if (session.cpu === "starting") { return "⏳ Starting CPU profiler…"; }
   if (session.cpu === "active") {
-    const head = `🔥 Profiling PID ${session.cpuPid ?? "?"}`;
+    const head = `🔥 Profiling PID ${String(session.cpuPid ?? "?")}`;
     if (session.sampleCount > 0) {
       const live = `${formatSampleCount(session.sampleCount)} samples (${formatProfileDuration(session.durationSecs)})`;
       const top = session.topFunction !== undefined && session.topFunction !== ""

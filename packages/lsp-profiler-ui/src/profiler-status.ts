@@ -80,13 +80,13 @@ function renderActive(item: vscode.StatusBarItem, session: ProfilerSession): voi
   item.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
   if (session.sampleCount === 0) {
     item.text = "$(flame) Profiling...";
-    item.tooltip = `Profiling PID ${session.cpuPid ?? "?"} — click to stop`;
+    item.tooltip = `Profiling PID ${String(session.cpuPid ?? "?")} — click to stop`;
     return;
   }
   const samples = formatSampleCount(session.sampleCount);
   const duration = formatProfileDuration(session.durationSecs);
   item.text = `$(flame) ${samples} samples (${duration})`;
-  item.tooltip = `PID ${session.cpuPid ?? "?"} — ${samples} samples, ${duration}\nTop: ${session.topFunction ?? "—"}\nClick to stop`;
+  item.tooltip = `PID ${String(session.cpuPid ?? "?")} — ${samples} samples, ${duration}\nTop: ${session.topFunction ?? "—"}\nClick to stop`;
 }
 
 /**

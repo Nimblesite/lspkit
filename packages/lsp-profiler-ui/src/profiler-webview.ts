@@ -82,8 +82,9 @@ export interface WebviewMessage {
 /** A posted value as a profiler message: an object with a string `type`, a string `file` and a numeric `line` when present. */
 export function webviewMessage(raw: unknown): WebviewMessage | undefined {
   if (!isRecord(raw) || typeof raw.type !== "string") return undefined;
-  const fieldsOk = (raw.file === undefined || typeof raw.file === "string") && (raw.line === undefined || typeof raw.line === "number");
-  return fieldsOk ? (raw as unknown as WebviewMessage) : undefined;
+  const { type, file, line } = raw;
+  if ((file !== undefined && typeof file !== "string") || (line !== undefined && typeof line !== "number")) return undefined;
+  return { type, ...(file === undefined ? {} : { file }), ...(line === undefined ? {} : { line }) };
 }
 
 /** Lifecycle options for a singleton editor-area webview. */
@@ -103,7 +104,7 @@ export interface SingletonWebviewPanelOptions {
 export function handleSourceNavigation(msg: WebviewMessage): boolean {
   if (msg.type === "profileWatch" || msg.type === "profileRetainers") {
     void vscode.commands.executeCommand(cmd(msg.type === "profileWatch" ? "watchVariable" : "inspectVariableType"))
-      .then(undefined, error => { void vscode.window.showErrorMessage(String(error)); });
+      .then(undefined, (error: unknown) => { void vscode.window.showErrorMessage(String(error)); });
     return true;
   }
   if (msg.type !== "navigateToSource" || msg.file === undefined || msg.line === undefined) {

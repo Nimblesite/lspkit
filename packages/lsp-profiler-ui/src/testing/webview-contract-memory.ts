@@ -5,6 +5,7 @@
  */
 
 import * as assert from 'assert';
+import * as vm from 'node:vm';
 import { buildMemoryDashboardHtml, type MemoryDiffData } from '../memory-dashboard';
 import { buildRefGraphHtml, decodeRefGraph, type ReferenceGraphResult } from '../memory-ref-graph';
 import { buildFlamegraphHtml } from '../profiler-flamegraph-html';
@@ -33,8 +34,8 @@ function drawnTexts(html: string): DrawnText[] {
     const ctx = new Proxy(pen, { get: (target, key) => (key in target ? target[key] : () => undefined) });
     const canvas = { width: 800, height: 500, clientWidth: 900, parentElement: {}, style: {}, getContext: () => ctx };
     const document = { getElementById: () => canvas, documentElement: {}, createElement: () => ({ style: {} }), body: { appendChild: () => undefined } };
-    const computed = () => ({ getPropertyValue: (name: string) => name });
-    new Function('document', 'getComputedStyle', 'window', script)(document, computed, { addEventListener() {} });
+    const getComputedStyle = (): { getPropertyValue: (name: string) => string } => ({ getPropertyValue: (name: string) => name });
+    vm.runInNewContext(script, { document, getComputedStyle, window: { addEventListener: () => undefined } });
     return texts;
 }
 
@@ -102,13 +103,13 @@ const ROOTED_SESSIONS: ReferenceGraphResult = {
 // objects it holds, so a module value or a static field reads as written.
 function rootsAreNamedAboveWhatTheyHold(): void {
     const texts = drawnTexts(buildRefGraphHtml(ROOTED_SESSIONS));
-    const drawn = (text: string) => texts.find((item) => item.text === text);
+    const drawn = (text: string): DrawnText | undefined => texts.find((item) => item.text === text);
     const root = drawn('static sessions');
     const holder = drawn('Entry[]');
     const target = drawn('Shop.Session');
-    assert.ok(root, `the root is named by its label: ${JSON.stringify(texts.map((item) => item.text))}`);
-    assert.ok(drawn('Dictionary`2[Int32,Shop.Session]'), 'the root still shows its type');
-    assert.ok(holder && target, 'the holder and the targets are labelled');
+    assert.ok(root !== undefined, `the root is named by its label: ${JSON.stringify(texts.map((item) => item.text))}`);
+    assert.ok(drawn('Dictionary`2[Int32,Shop.Session]') !== undefined, 'the root still shows its type');
+    assert.ok(holder !== undefined && target !== undefined, 'the holder and the targets are labelled');
     assert.ok(root.y < holder.y && holder.y < target.y, 'roots sit above their holders, and holders above the targets');
     assert.notStrictEqual(root.fill, holder.fill, 'a root is drawn apart from an intermediate holder');
 }
@@ -122,10 +123,12 @@ function decodingKeepsRoots(): void {
         edges: [],
         cycles: [],
     });
-    const [root, holder] = graph?.nodes ?? [];
+    const nodes = graph?.nodes ?? [];
+    const root = nodes.at(0);
+    const holder = nodes.at(1);
     assert.strictEqual(root?.isRoot, true, 'the root survives decoding');
-    assert.strictEqual(root?.rootKind, 'Static', 'and so does its kind');
-    assert.strictEqual(root?.repr, 'static sessions', 'and its label');
+    assert.strictEqual(root.rootKind, 'Static', 'and so does its kind');
+    assert.strictEqual(root.repr, 'static sessions', 'and its label');
     assert.strictEqual(holder?.isRoot, false, 'a holder is not a root');
 }
 

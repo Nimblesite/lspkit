@@ -7,27 +7,28 @@ import { buildFlamegraphHtml, openFlamegraphWebview, flamegraphPanelState } from
 import { configSection } from "../ids";
 import { handleSourceNavigation, SingletonWebviewPanel, buildWebviewDocument } from "../profiler-webview";
 import { parseSpeedscope } from "../flame-model";
+import { isRecord } from "../unknown-shape";
 import { assertHardened, closeAllEditors, pollUntilResult } from "./webview-contract-helpers";
 
 function capturesAttributedSamples(result: ProfileResult): void {
   assert.ok(result.totalSamples > 0);
-  assert.ok(result.hotFunctions.some(fn => fn.file && fn.percentage > 0));
+  assert.ok(result.hotFunctions.some(fn => fn.file !== undefined && fn.file !== "" && fn.percentage > 0));
   const parsed = parseSpeedscope(fs.readFileSync(result.outputFile, "utf8"));
   assert.ok(parsed.ok, parsed.ok ? "" : parsed.error);
-  assert.ok(result.cpuProfilePath);
-  const cpu = JSON.parse(fs.readFileSync(result.cpuProfilePath, "utf8"));
-  assert.ok(cpu.nodes.length > 0 && cpu.samples.length > 0);
+  assert.ok(result.cpuProfilePath !== undefined && result.cpuProfilePath !== "");
+  const cpu: unknown = JSON.parse(fs.readFileSync(result.cpuProfilePath, "utf8"));
+  assert.ok(isRecord(cpu) && Array.isArray(cpu.nodes) && cpu.nodes.length > 0 && Array.isArray(cpu.samples) && cpu.samples.length > 0);
 }
 
 function mountsTheInteractiveViews(result: ProfileResult): void {
   openFlamegraphWebview(result);
   const panel = flamegraphPanelState();
-  assert.ok(panel);
+  assert.ok(panel !== undefined);
   for (const id of ["flame", "btn-left", "btn-time", "fiber-select", "search", "btn-reset", "trace-actions", "fn-body", "line-body"])
     assert.ok(panel.html.includes(`id="${id}"`), `${id} is reachable in the real host`);
   assertHardened(panel.html, "captured profile");
   const output = process.env.PROFILER_REVIEW_HTML;
-  if (output) fs.writeFileSync(output, buildFlamegraphHtml(result));
+  if (output !== undefined && output !== "") fs.writeFileSync(output, buildFlamegraphHtml(result));
 }
 
 /** A panel whose script reports `--prof-critical` back each time the palette is repainted. */
@@ -55,10 +56,10 @@ async function paletteOverridesRepaintOpenPanels(): Promise<void> {
 
 async function hotLinesNavigateToTheirSource(result: ProfileResult): Promise<void> {
   const line = result.hotLines.find(item => item.line > 0 && fs.existsSync(item.file));
-  assert.ok(line, "capture must attribute a real source line");
+  assert.ok(line !== undefined, "capture must attribute a real source line");
   assert.equal(handleSourceNavigation({ type: "navigateToSource", file: line.file, line: line.line }), true);
   const editor = await pollUntilResult(() => vscode.window.activeTextEditor,
-    editor => editor?.document.uri.fsPath === line.file && editor.selection.active.line === line.line - 1);
+    active => active?.document.uri.fsPath === line.file && active.selection.active.line === line.line - 1);
   assert.equal(editor?.selection.active.line, line.line - 1);
 }
 
@@ -71,6 +72,6 @@ export function registerCpuCaptureContract(capture: () => Promise<ProfileResult>
     test("captures attributed CPU samples and valid native trace artifacts", () => { capturesAttributedSamples(result); });
     test("mounts both interactive views, search, fiber selection and trace actions", () => { mountsTheInteractiveViews(result); });
     test("palette overrides update an already-open webview", paletteOverridesRepaintOpenPanels);
-    test("a measured hot line navigates to the actual runtime source", async () => hotLinesNavigateToTheirSource(result));
+    test("a measured hot line navigates to the actual runtime source", async () => { await hotLinesNavigateToTheirSource(result); });
   });
 }

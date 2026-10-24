@@ -13,9 +13,9 @@ export interface DebugLinkHost {
 
 export function registerDebugProfilerLink(host: DebugLinkHost): vscode.Disposable[] {
   const panel = new SingletonWebviewPanel(() => cmd("variable"), handleSourceNavigation);
-  return [panel, vscode.commands.registerCommand(cmd("inspectVariable"), context => inspect(context, host, panel)),
-    vscode.commands.registerCommand(cmd("watchVariable"), () => watchSelected(host)),
-    vscode.commands.registerCommand(cmd("inspectVariableType"), () => inspectType(host)),
+  return [panel, vscode.commands.registerCommand(cmd("inspectVariable"), context => { inspect(context, host, panel); }),
+    vscode.commands.registerCommand(cmd("watchVariable"), async () => { await watchSelected(host); }),
+    vscode.commands.registerCommand(cmd("inspectVariableType"), async () => { await inspectType(host); }),
     vscode.debug.registerDebugAdapterTrackerFactory(host.debugType, { createDebugAdapterTracker: session => ({
       onDidSendMessage(message: unknown) {
         if (isRecord(message) && message.type === "event" && ["continued", "terminated", "exited"].includes(String(message.event))) {
@@ -40,7 +40,7 @@ function inspect(context: unknown, host: DebugLinkHost, panel: SingletonWebviewP
 async function watchSelected(host: DebugLinkHost): Promise<void> {
   const variable = selectedProfileVariable.value;
   const session = vscode.debug.activeDebugSession;
-  if (!variable || session?.id !== variable.sessionId || session.type !== host.debugType) {
+  if (variable === undefined || session?.id !== variable.sessionId || session.type !== host.debugType) {
     throw new Error("The variable's debug session is no longer active.");
   }
   await vscode.commands.executeCommand("debug.addToWatchExpressions", {
@@ -50,8 +50,8 @@ async function watchSelected(host: DebugLinkHost): Promise<void> {
 
 async function inspectType(host: DebugLinkHost): Promise<void> {
   const variable = selectedProfileVariable.value;
-  if (!variable || vscode.debug.activeDebugSession?.id !== variable.sessionId) throw new Error("Select a current debugger variable first.");
-  if (!host.inspectType || !variable.type) {
+  if (variable === undefined || vscode.debug.activeDebugSession?.id !== variable.sessionId) throw new Error("Select a current debugger variable first.");
+  if (host.inspectType === undefined || variable.type === "") {
     void vscode.window.showInformationMessage("This runtime has no type-retention capture for this selection."); return;
   }
   await host.inspectType(variable.type, variable.sessionId);

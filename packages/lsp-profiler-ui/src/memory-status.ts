@@ -33,11 +33,7 @@ export function bindMemoryStatusBar(store: Store): vscode.Disposable[] {
   // Click the status-bar item to open the memory action menu (no palette needed).
   memoryStatusBarItem.command = cmd("memoryMenu");
   // Reactive leg: tracking state, and whether any runtime offers memory ([PROF-UI-CAPABILITIES]).
-  const disposeEffect = effect(() => {
-    void store.profiler.value.memory;
-    void store.memoryOffered();
-    refreshMemoryStatusBar(store);
-  });
+  const disposeEffect = effect(() => { refreshMemoryStatusBar(store); });
   refreshMemoryStatusBar(store);
   const forget = (): void => { memoryStatusBarItem = undefined; memoryStatusVisible = false; };
   return [memoryStatusBarItem, { dispose: disposeEffect }, ...debugSessionRefresh(store), { dispose: forget }];
@@ -62,19 +58,26 @@ function debugSessionRefresh(store: Store): vscode.Disposable[] {
 function refreshMemoryStatusBar(store: Store): void {
   if (memoryStatusBarItem === undefined) { return; }
 
-  const debugging = vscode.debug.activeDebugSession?.type === debugType();
+  // Both signals are read on every pass, so the effect that calls this
+  // re-runs when either changes ([PROF-UI-CAPABILITIES]).
   const memoryState = store.profiler.value.memory;
+  const offered = store.memoryOffered();
+  const debugging = vscode.debug.activeDebugSession?.type === debugType();
   // A host whose runtimes advertise no memory backend never offers tracking.
-  if ((!debugging || !store.memoryOffered()) && memoryState === "idle") {
+  if ((!debugging || !offered) && memoryState === "idle") {
     hideMemoryStatusBar();
     return;
   }
-  const look = memoryStatusLook(memoryState);
-  memoryStatusBarItem.text = look.text;
-  memoryStatusBarItem.tooltip = look.tooltip;
-  memoryStatusBarItem.backgroundColor = look.highlighted ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
+  showMemoryStatusBar(memoryStatusBarItem, memoryStatusLook(memoryState));
+}
+
+/** Paint the item with `look` and show it. */
+function showMemoryStatusBar(item: vscode.StatusBarItem, look: { text: string; tooltip: string; highlighted: boolean }): void {
+  item.text = look.text;
+  item.tooltip = look.tooltip;
+  item.backgroundColor = look.highlighted ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
   memoryStatusVisible = true;
-  memoryStatusBarItem.show();
+  item.show();
 }
 
 /** The item's text and tooltip in each tracking state; live tracking is highlighted. */

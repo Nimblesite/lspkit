@@ -96,7 +96,7 @@ Status was last verified on **2026-10-15**.
 - [ ] The cooperative CPU path and the memory courier still recognise their results by console markers ([PROF-INVARIANTS] forbids scraping). Python is parked; replace before un-parking.
 - [ ] Numeric line decorations → LSP inlay hints [PROF-UI-HEATMAP] (depends on Phase 1).
 - [ ] SharpLsp's richer retention graph (nested expansion, filters, SVG/PNG export, browser harness) was **deleted with SharpLsp's old profiler, not merged** [PROF-UI-REFGRAPH]. Its sources are in SharpLsp's history (`src/editors/vscode/src/profiler-graph*.ts`, `profiler-graph-webview.mts`). Porting them onto the neutral `RefGraph` is open.
-- [ ] Lint config for the package (SharpLsp's reactive-screen and no-legacy rules). `npm run lint` type-checks only (`tsc --noEmit`, as Osprey's extension does); there is no `eslint.config.*` yet, so CI's `npm run build` type-check is the only static gate.
+- [x] Lint config for the package: `eslint.config.mjs` is SharpLsp's extension config, rule for rule (strict and stylistic type-checked, no type assertions, explicit accessibility and return types, awaited returns, no floating promises). `npm run lint` type-checks and lints, and `make lint` runs it. The "reactive-screen" and "no-legacy" rules this item once named exist nowhere in SharpLsp.
 - [ ] Distribution: `file:` dependency today; publish to npm before any consumer releases.
 
 ## Phase 5: SharpLsp integration

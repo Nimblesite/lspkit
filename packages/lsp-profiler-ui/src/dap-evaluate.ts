@@ -142,7 +142,7 @@ async function readPayloadFile(path: string): Promise<string | undefined> {
     if (contents === undefined) { return undefined; }
     const expired = Date.now() >= deadline;
     if (contents.length > 0 || expired) {
-      if (contents.length === 0) { Logger.warn(`[Memory] payload file stayed empty for ${FILE_PAYLOAD_WAIT_MS}ms: ${path}`); }
+      if (contents.length === 0) { Logger.warn(`[Memory] payload file stayed empty for ${String(FILE_PAYLOAD_WAIT_MS)}ms: ${path}`); }
       await fs.promises.unlink(path).catch(() => undefined);
       return contents.length > 0 ? contents : undefined;
     }
@@ -185,8 +185,8 @@ async function waitForMarkerOutput(sessionId: string, cursor: number): Promise<s
 function warnMarkerWaitExpired(out: string, markerAt: number): void {
   Logger.warn(
     markerAt === -1
-      ? `[Memory] no marker in ${out.length} bytes of debuggee output after ${MARKER_WAIT_MS}ms`
-      : `[Memory] marker output still unterminated after ${MARKER_WAIT_MS}ms (${out.length} bytes) — payload likely truncated`,
+      ? `[Memory] no marker in ${String(out.length)} bytes of debuggee output after ${String(MARKER_WAIT_MS)}ms`
+      : `[Memory] marker output still unterminated after ${String(MARKER_WAIT_MS)}ms (${String(out.length)} bytes) — payload likely truncated`,
   );
 }
 
@@ -264,7 +264,7 @@ export async function acquireStoppedFrame(): Promise<AcquiredFrame | null> {
   const existing = await currentStoppedFrameId();
   // The user's own pause: nothing to release.
   if (existing !== null) { return { frameId: existing, release: async () => { await Promise.resolve(); } }; }
-  return pauseForFrame(session);
+  return await pauseForFrame(session);
 }
 
 /** Pause the running debuggee until it stops in an evaluable frame, retrying from bootstrap frames. */
@@ -274,12 +274,12 @@ async function pauseForFrame(session: vscode.DebugSession): Promise<AcquiredFram
     if (!(await pauseDebuggee(session))) { return null; }
     const frameId = await waitForFrameUntil(Math.min(deadline, Date.now() + WAIT_MS));
     if (frameId !== null) {
-      Logger.info(`[Memory] transparently paused the debuggee for evaluation (attempt ${attempt})`);
-      return { frameId, release: async () => resumeDebuggee(session) };
+      Logger.info(`[Memory] transparently paused the debuggee for evaluation (attempt ${String(attempt)})`);
+      return { frameId, release: async () => { await resumeDebuggee(session); } };
     }
     // Paused, but no evaluable frame (bootstrap / hidden frames): resume so
     // the program can reach user code, then try again.
-    Logger.info(`[Memory] pause landed in non-user frames (attempt ${attempt}) — resuming to retry`);
+    Logger.info(`[Memory] pause landed in non-user frames (attempt ${String(attempt)}) — resuming to retry`);
     await resumeDebuggee(session);
     await delay(PAUSE_RETRY_BACKOFF_MS);
   }
@@ -313,7 +313,7 @@ async function pauseDebuggee(session: vscode.DebugSession): Promise<boolean> {
 async function resumeDebuggee(session: vscode.DebugSession): Promise<void> {
   try {
     const stopped = stoppedThreadIds(session.id).filter((id) => id !== ALL_THREADS);
-    const threadId = stopped[0] ?? (await allThreadIds(session))[0];
+    const threadId = stopped.at(0) ?? (await allThreadIds(session)).at(0);
     if (threadId === undefined) { return; }
     await session.customRequest("continue", { threadId });
     Logger.info("[Memory] resumed the debuggee after evaluation");
@@ -328,7 +328,7 @@ async function resumeDebuggee(session: vscode.DebugSession): Promise<void> {
  * both of which wait for the `stopOnEntry` pause before evaluating.
  */
 export async function waitForStoppedFrame(): Promise<number | null> {
-  return waitForFrameUntil(Date.now() + STARTUP_TIMEOUT_MS);
+  return await waitForFrameUntil(Date.now() + STARTUP_TIMEOUT_MS);
 }
 
 /** Top frameId of `threadId` if it is stopped, else null (running threads error). */

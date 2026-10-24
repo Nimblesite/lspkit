@@ -64,7 +64,7 @@ async function profileProcess(store: Store, item: ProcessRowItem | undefined): P
   // the panel already knows will fail; explain why instead (#266).
   if (!item.process.debuggable) {
     vscode.window.showWarningMessage(
-      `${brand()}: Can't profile PID ${item.process.pid} — ${item.process.undebuggableReason ?? "the profiler cannot attach to it"}.`,
+      `${brand()}: Can't profile PID ${String(item.process.pid)} — ${item.process.undebuggableReason ?? "the profiler cannot attach to it"}.`,
     );
     return;
   }
@@ -85,7 +85,7 @@ export interface ProcessRowDeps {
 }
 
 const DEFAULT_ROW_DEPS: ProcessRowDeps = {
-  runCommand: async (command, ...args) => vscode.commands.executeCommand(command, ...args),
+  runCommand: async (command, ...args) => await vscode.commands.executeCommand(command, ...args),
   activeSession: () => vscode.debug.activeDebugSession,
 };
 
@@ -125,7 +125,7 @@ async function memoryTrackProcess(
 /** A courier runtime tracks only its debuggee: offer the launch that makes `pid`'s program one. */
 function offerMemoryLaunch(pid: number, deps: ProcessRowDeps): void {
   const launch = "Run & Track Memory (Current File)";
-  const offer = `${brand()}: Memory tracking needs the target running under the ${brand()} debugger — PID ${pid} is not the active debuggee. Launch the current file with memory tracking instead?`;
+  const offer = `${brand()}: Memory tracking needs the target running under the ${brand()} debugger — PID ${String(pid)} is not the active debuggee. Launch the current file with memory tracking instead?`;
   void vscode.window.showWarningMessage(offer, launch).then((choice) => {
     if (choice === launch) { void deps.runCommand(cmd("trackMemoryCurrentFile")); }
   });
@@ -145,9 +145,8 @@ export function createProcessRowActions(
   readonly memoryTrackProcess: (item?: vscode.TreeItem) => Promise<void>;
 } {
   return {
-    profileProcess: async (item) => profileProcess(store, resolveProcessRow(item, view)),
-    memoryTrackProcess: async (item) =>
-      memoryTrackProcess(store, resolveProcessRow(item, view), deps),
+    profileProcess: async (item) => { await profileProcess(store, resolveProcessRow(item, view)); },
+    memoryTrackProcess: async (item) => { await memoryTrackProcess(store, resolveProcessRow(item, view), deps); },
   };
 }
 
@@ -213,7 +212,7 @@ export function registerLaunchCommands(store: Store, view: ProcessRowSource): vs
   return [
     vscode.commands.registerCommand(cmd("profileProcess"), rowActions.profileProcess),
     vscode.commands.registerCommand(cmd("memoryTrackProcess"), rowActions.memoryTrackProcess),
-    vscode.commands.registerCommand(cmd("profileCurrentFileCpu"), async () => profileCurrentFile(store, "cpu")),
-    vscode.commands.registerCommand(cmd("trackMemoryCurrentFile"), async () => profileCurrentFile(store, "memory")),
+    vscode.commands.registerCommand(cmd("profileCurrentFileCpu"), async () => { await profileCurrentFile(store, "cpu"); }),
+    vscode.commands.registerCommand(cmd("trackMemoryCurrentFile"), async () => { await profileCurrentFile(store, "memory"); }),
   ];
 }

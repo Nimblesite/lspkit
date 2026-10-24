@@ -43,12 +43,12 @@ const formatSeconds = (seconds: number): string =>
 
 /** `4182 samples · 997Hz · 4.2s wall · 3.9s CPU · 3 fibers` (+ dropped). */
 export function formatSummaryHeader(summary: ProfileSummary): string {
-  if (summary.schedulingKnown === false) return `${summary.sampleCount} samples · ${formatSeconds(summary.wallSeconds)} wall · ${summary.fibers.length} threads`;
-  const fibers = `${summary.fibers.length} ${summary.fibers.length === 1 ? "fiber" : "fibers"}`;
+  if (summary.schedulingKnown === false) return `${String(summary.sampleCount)} samples · ${formatSeconds(summary.wallSeconds)} wall · ${String(summary.fibers.length)} threads`;
+  const fibers = `${String(summary.fibers.length)} ${summary.fibers.length === 1 ? "fiber" : "fibers"}`;
   const dropped =
-    summary.droppedSamples > 0 ? ` · ${summary.droppedSamples} dropped` : "";
+    summary.droppedSamples > 0 ? ` · ${String(summary.droppedSamples)} dropped` : "";
   return (
-    `${summary.sampleCount} samples · ${summary.rateHz}Hz · ` +
+    `${String(summary.sampleCount)} samples · ${String(summary.rateHz)}Hz · ` +
     `${formatSeconds(summary.wallSeconds)} wall · ${formatSeconds(summary.cpuSeconds)} CPU · ` +
     `${fibers}${dropped}`
   );

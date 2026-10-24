@@ -39,7 +39,7 @@ function storeServing(processes: readonly ProcessInfo[]): Store {
   // A stand-in for the members the code under test calls. No runtime check
   // can produce the rest of `LanguageClient`, so the test double itself is
   // the one assertion here — it is not a payload being read.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- see above.
+   
   const client = {
     isRunning: (): boolean => true,
     onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
@@ -76,15 +76,15 @@ suite("Processes — pure projection of store Signals (#148)", () => {
       let repaints = 0;
       provider.disposables.push(provider.onDidChangeTreeData(() => { repaints += 1; }));
 
-      assert.deepStrictEqual(await provider.getChildren(), [], "nothing to render before the store holds data");
+      assert.deepStrictEqual(provider.getChildren(), [], "nothing to render before the store holds data");
 
       store.processesLoaded([proc(7)]);
       assert.strictEqual(repaints, 1, "the revision bump must repaint the subscribed tree");
-      assert.deepStrictEqual(pidsOf(await provider.getChildren()), [7], "the tree renders exactly the store's list");
+      assert.deepStrictEqual(pidsOf(provider.getChildren()), [7], "the tree renders exactly the store's list");
 
       store.processesLoaded([]);
       assert.strictEqual(repaints, 2, "clearing the store repaints again");
-      assert.deepStrictEqual(await provider.getChildren(), [], "an emptied store empties the tree");
+      assert.deepStrictEqual(provider.getChildren(), [], "an emptied store empties the tree");
     } finally {
       provider.dispose();
     }
@@ -97,7 +97,7 @@ suite("Processes — pure projection of store Signals (#148)", () => {
     try {
       await fetcher.refreshNow();
       assert.deepStrictEqual(
-        pidsOf(await observer.getChildren()).sort((a, b) => a - b),
+        pidsOf(observer.getChildren()).sort((a, b) => a - b),
         [1, 2],
         "a panel that never fetched renders the centralised list — the data lives in the store",
       );
@@ -113,21 +113,21 @@ suite("Processes — pure projection of store Signals (#148)", () => {
     const panelB = subscribedProvider(store);
     try {
       await panelA.refreshNow();
-      assert.deepStrictEqual(pidsOf(await panelB.getChildren()), [20, 10], "default sort: CPU descending");
+      assert.deepStrictEqual(pidsOf(panelB.getChildren()), [20, 10], "default sort: CPU descending");
 
       panelA.cycleSortMode(); // cpu → memory
       assert.deepStrictEqual(
-        pidsOf(await panelB.getChildren()),
+        pidsOf(panelB.getChildren()),
         [10, 20],
         "panel A's sort change re-orders panel B — the mode lives in the store, not the panel",
       );
 
       panelA.setFilter("p20");
-      assert.deepStrictEqual(pidsOf(await panelB.getChildren()), [20], "the filter is centralised too");
+      assert.deepStrictEqual(pidsOf(panelB.getChildren()), [20], "the filter is centralised too");
       panelA.setFilter("");
 
       store.setActiveDebuggeePid(20);
-      const debuggeeRow = (await panelB.getChildren()).find(
+      const debuggeeRow = (panelB.getChildren()).find(
         (row) => numberField(rawField(row, "process"), "pid") === 20,
       );
       assert.strictEqual(
@@ -170,7 +170,7 @@ suite("Processes — pure projection of store Signals (#148)", () => {
     // A stand-in for the members the code under test calls. No runtime check
   // can produce the rest of `LanguageClient`, so the test double itself is
   // the one assertion here — it is not a payload being read.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- see above.
+   
   const client = {
       isRunning: (): boolean => true,
       onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),

@@ -2,6 +2,8 @@
 // framePaletteColor, paletteFrames and everything they call are embedded in
 // the flame webview by Function.prototype.toString (flame-script.ts), so they
 // stay self-contained declarations that call only each other.
+import { isRecord } from "./unknown-shape";
+
 export interface ProfilerPalette {
   readonly critical: string;
   readonly hot: string;
@@ -20,11 +22,14 @@ export const DEFAULT_PALETTE: ProfilerPalette = {
 };
 
 /** The CSS variable each palette colour sets, in every profiler view and on every live repaint. */
-export const PALETTE_CSS_VARS = {
-  critical: "--prof-critical", hot: "--prof-hot", warm: "--prof-warm", memory: "--prof-mem-critical",
-  memoryHot: "--prof-mem-hot", memoryWarm: "--prof-mem-warm", memoryCool: "--prof-mem-cool",
-  leak: "--prof-mem-leak", success: "--prof-success",
-} as const;
+const PALETTE_CSS_VARS: readonly (readonly [keyof ProfilerPalette, string])[] = [
+  ["critical", "--prof-critical"], ["hot", "--prof-hot"], ["warm", "--prof-warm"], ["memory", "--prof-mem-critical"],
+  ["memoryHot", "--prof-mem-hot"], ["memoryWarm", "--prof-mem-warm"], ["memoryCool", "--prof-mem-cool"],
+  ["leak", "--prof-mem-leak"], ["success", "--prof-success"],
+];
+
+/** A six-digit hex colour: the only override CSS can never be injected through. */
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 let readPalette: () => ProfilerPalette = () => DEFAULT_PALETTE;
 
@@ -34,11 +39,17 @@ export function profilerPalette(): ProfilerPalette { return readPalette(); }
 
 /** Reject CSS injection and invalid overrides, retaining the host default. */
 export function resolvePalette(base: ProfilerPalette, overrides: unknown): ProfilerPalette {
-  if (typeof overrides !== "object" || overrides === null) return base;
-  return Object.fromEntries(Object.entries({ memoryWarm: base.memoryHot, memoryCool: base.memoryHot, ...base }).map(([key, fallback]) => {
-    const value: unknown = Reflect.get(overrides, key);
-    return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
-  })) as unknown as ProfilerPalette;
+  if (!isRecord(overrides)) return base;
+  const pick = (key: keyof ProfilerPalette, fallback: string): string => {
+    const value = overrides[key];
+    return typeof value === "string" && HEX_COLOR.test(value) ? value : fallback;
+  };
+  return {
+    critical: pick("critical", base.critical), hot: pick("hot", base.hot), warm: pick("warm", base.warm),
+    memory: pick("memory", base.memory), memoryHot: pick("memoryHot", base.memoryHot),
+    memoryWarm: pick("memoryWarm", base.memoryWarm ?? base.memoryHot), memoryCool: pick("memoryCool", base.memoryCool ?? base.memoryHot),
+    leak: pick("leak", base.leak), success: pick("success", base.success),
+  };
 }
 
 /**
@@ -49,7 +60,7 @@ export function resolvePalette(base: ProfilerPalette, overrides: unknown): Profi
 export function paletteVars(palette: ProfilerPalette = profilerPalette()): Record<string, string> {
   const valid = resolvePalette(DEFAULT_PALETTE, { ...palette,
     memoryWarm: palette.memoryWarm ?? palette.memoryHot, memoryCool: palette.memoryCool ?? palette.memoryHot });
-  const vars = Object.entries(PALETTE_CSS_VARS).map(([key, name]) => [name, String(Reflect.get(valid, key))]);
+  const vars = PALETTE_CSS_VARS.map(([key, name]): [string, string] => [name, valid[key] ?? valid.memoryHot]);
   return { ...Object.fromEntries(vars), "--prof-hot-ink": inkFor(valid.hot) };
 }
 
@@ -75,7 +86,7 @@ export function hasSourceFile(file: string): boolean {
 }
 
 /** A frame reduced to what decides its rank: its key, and where it came from. */
-export type FrameRank = { key: string; i: number };
+export interface FrameRank { key: string; i: number }
 
 /**
  * The frame ordering policy: by key, then by original index.

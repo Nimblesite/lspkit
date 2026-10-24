@@ -70,7 +70,7 @@ export async function handleMemoryStart(store: Store, report: (message: string) 
   } catch (err) {
     store.memoryTrackingStopped();
     const message = errorText(err);
-    Logger.warn(`Memory tracking failed for PID ${target}: ${message}`);
+    Logger.warn(`Memory tracking failed for PID ${String(target)}: ${message}`);
     void vscode.window.showErrorMessage(`Memory tracking failed: ${message}`);
     return false;
   }
@@ -145,7 +145,7 @@ async function startMemoryTrackingOnLaunch(store: Store, session: vscode.DebugSe
     return;
   }
   // One notification spans the whole auto-start ([PROF-UI-STATE]).
-  await withUserProgress(memStartTitle(), async (report) => trackFromEntryPause(store, report));
+  await withUserProgress(memStartTitle(), async (report) => { await trackFromEntryPause(store, report); });
 }
 
 /** Start tracking at the launch's entry pause, then resume the program. */

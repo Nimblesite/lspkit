@@ -85,10 +85,10 @@ export function registerProfiler(store: Store): vscode.Disposable[] {
 /** The client-side commands that proxy to the LSP. */
 function registerProfilerCommands(store: Store): vscode.Disposable[] {
   return [
-    vscode.commands.registerCommand(cmd("profileStart"), async () => handleProfileStart()),
-    vscode.commands.registerCommand(cmd("profileStop"), async () => handleProfileStop(store)),
-    vscode.commands.registerCommand(cmd("profileSnapshot"), async () => handleProfileSnapshot(store)),
-    vscode.commands.registerCommand(cmd("profileAttachToDebug"), async () => handleProfileAttachToDebug(store)),
+    vscode.commands.registerCommand(cmd("profileStart"), async () => { await handleProfileStart(); }),
+    vscode.commands.registerCommand(cmd("profileStop"), async () => { await handleProfileStop(store); }),
+    vscode.commands.registerCommand(cmd("profileSnapshot"), async () => { await handleProfileSnapshot(store); }),
+    vscode.commands.registerCommand(cmd("profileAttachToDebug"), async () => { await handleProfileAttachToDebug(store); }),
     vscode.commands.registerCommand(cmd("profileShowResults"), () => { handleProfileShowResults(); }),
   ];
 }
@@ -139,7 +139,7 @@ function activeSession(store: Store): ActiveSession | undefined {
  * ([PROF-UI-STATE]).
  */
 async function collectReport(active: ActiveSession, command: string, title: string, step: string): Promise<ProfileResult | undefined> {
-  return withUserProgress(title, async (report) => {
+  return await withUserProgress(title, async (report) => {
     report(step);
     const raw = await executeServerCommand<ProfileReport>(active.client, command, { session_id: active.sessionId });
     return raw === undefined ? undefined : toProfileResult(raw);
@@ -181,9 +181,9 @@ async function handleProfileSnapshot(store: Store): Promise<void> {
  */
 function announceSnapshot(result: ProfileResult): void {
   keepResult(result);
-  Logger.info(`Profile snapshot: ${result.totalSamples} samples so far`);
+  Logger.info(`Profile snapshot: ${String(result.totalSamples)} samples so far`);
   void vscode.window
-    .showInformationMessage(`${brand()}: Snapshot — ${result.totalSamples} samples (profiling continues)`, "View Results")
+    .showInformationMessage(`${brand()}: Snapshot — ${String(result.totalSamples)} samples (profiling continues)`, "View Results")
     .then((choice) => {
       if (choice === "View Results") { openFlamegraphWebview(result); }
     });

@@ -138,7 +138,7 @@ export function formatBytes(bytes: number): string {
   if (bytes >= BYTES_PER_GB) { return `${(bytes / BYTES_PER_GB).toFixed(1)} GB`; }
   if (bytes >= BYTES_PER_MB) { return `${(bytes / BYTES_PER_MB).toFixed(1)} MB`; }
   if (bytes >= BYTES_PER_KB) { return `${(bytes / BYTES_PER_KB).toFixed(1)} KB`; }
-  return `${bytes} B`;
+  return `${String(bytes)} B`;
 }
 
 // ── Shared inline JS utilities ───────────────────────────────────────────

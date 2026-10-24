@@ -52,6 +52,7 @@ lint:
 	cargo clippy --release --workspace --all-targets --locked -- -D warnings
 	$(MAKE) _profiler_spec_check
 	node scripts/link-skills.mjs --check
+	npm run lint --prefix packages/lsp-profiler-ui
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:

@@ -26,11 +26,11 @@ async function reRenderingNeverStacksAHandler(this: Mocha.Context): Promise<void
     const panel = new SingletonWebviewPanel(() => 'lspui.test.handlerOnce', (msg) => { received.push(msg); });
     try {
         panel.show('probe', postingDoc(['first']));
-        await pollUntilResult(async () => received.length, (count) => count >= 1);
+        await pollUntilResult(() => received.length, (count) => count >= 1);
         // With a handler re-registered per open, every post of the second
         // render is delivered twice, and `second` arrives again before `end`.
         panel.show('probe', postingDoc(['second', 'end']));
-        await pollUntilResult(async () => filesOf(received).includes('end'), (ended) => ended);
+        await pollUntilResult(() => filesOf(received).includes('end'), (ended) => ended);
         assert.deepStrictEqual(filesOf(received), ['first', 'second', 'end'], 'each render must deliver its messages exactly once; a repeat means stacked handlers');
         assert.ok(panel.isOpen(), 'the singleton panel must stay open across re-renders');
     } finally {
@@ -48,7 +48,7 @@ async function malformedMessagesNeverReachTheHandler(this: Mocha.Context): Promi
         panel.show('probe', buildWebviewDocument({ title: 'malformed probe', css: '', body: '',
             script: `const api = acquireVsCodeApi(); ${malformed}.forEach((m) => api.postMessage(m));` +
                 ` api.postMessage({ type: 'ready', file: 'last', line: 3 });` }));
-        await pollUntilResult(async () => received.length, (count) => count >= 1);
+        await pollUntilResult(() => received.length, (count) => count >= 1);
         assert.deepStrictEqual(received, [{ type: 'ready', file: 'last', line: 3 }]);
     } finally {
         panel.dispose();

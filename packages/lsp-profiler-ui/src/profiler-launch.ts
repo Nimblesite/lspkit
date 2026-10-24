@@ -48,7 +48,7 @@ export async function waitForDebuggeePid(store: Store, sessionId: string): Promi
   if (store.getDebuggeeProcessId(sessionId) !== undefined) {
     return true;
   }
-  return new Promise((resolve) => {
+  return await new Promise((resolve) => {
     const interval = setInterval(() => {
       if (store.getDebuggeeProcessId(sessionId) !== undefined) {
         clearInterval(interval);

@@ -189,7 +189,7 @@ function sortProcesses(processes: ProcessInfo[], state: ProcessPanelState): Proc
 
 /** Why the filtered view is empty though processes are running (procexp-2). */
 function filteredEmptyLabel(state: ProcessPanelState): string {
-  return `No process matches "${state.filterText}" (${state.list.length} running)`;
+  return `No process matches "${state.filterText}" (${String(state.list.length)} running)`;
 }
 
 /**
@@ -199,7 +199,7 @@ function filteredEmptyLabel(state: ProcessPanelState): string {
 function applyFilter(state: ProcessPanelState): ProcessInfo[] {
   if (state.filterText === "") { return [...state.list]; }
   return state.list.filter((proc) => {
-    const haystack = `${proc.name} ${proc.script ?? ""} ${proc.pid}`.toLowerCase();
+    const haystack = `${proc.name} ${proc.script ?? ""} ${String(proc.pid)}`.toLowerCase();
     return haystack.includes(state.filterText);
   });
 }
@@ -225,7 +225,7 @@ function groupKey(proc: ProcessInfo, groupMode: GroupMode): string {
     case "version": return proc.runtimeVersion ?? "Unknown version";
     case "interpreter": return proc.interpreterPath ?? proc.name;
     case "user": return proc.user ?? "Unknown user";
-    case "parent": return `Parent ${proc.ppid}`;
+    case "parent": return `Parent ${String(proc.ppid)}`;
     case "none": return "";
   }
 }
@@ -251,7 +251,7 @@ export class ProcessDecorationProvider implements vscode.FileDecorationProvider,
   constructor(provider: ProcessesProvider) {
     // Rows are recreated on every refresh with state baked into their URI query;
     // re-query decorations whenever the tree repaints so colours never go stale.
-    this.subscription = provider.onDidChangeTreeData(() => this.emitter.fire(undefined));
+    this.subscription = provider.onDidChangeTreeData(() => { this.emitter.fire(undefined); });
   }
 
   public provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
@@ -294,8 +294,7 @@ function registerViewCommands(store: Store, provider: ProcessesProvider): vscode
   return [
     // Manual refresh runs under the view's progress bar so the click visibly
     // does something; returns the promise so callers/tests can await it.
-    vscode.commands.registerCommand(cmd("refreshProcesses"), async () =>
-      withViewProgress(viewId(), "Refresh processes", async () => provider.refreshNow())),
+    vscode.commands.registerCommand(cmd("refreshProcesses"), async () => { await withViewProgress(viewId(), "Refresh processes", async () => { await provider.refreshNow(); }); }),
     vscode.commands.registerCommand(cmd("sortProcesses"), () => { provider.cycleSortMode(); }),
     vscode.commands.registerCommand(cmd("groupProcesses"), () => { provider.cycleGroupMode(); }),
     ...registerRowCommands(store, provider),
@@ -329,11 +328,11 @@ function registerRowCommands(store: Store, provider: ProcessesProvider): vscode.
       const input = await vscode.window.showInputBox({ prompt: "Filter processes by name, script, or PID", placeHolder: "e.g. uvicorn" });
       provider.setFilter(input ?? "");
     }),
-    vscode.commands.registerCommand(cmd("killProcess"), async (item?: ProcessTreeItem) => killProcess(store, item)),
+    vscode.commands.registerCommand(cmd("killProcess"), async (item?: ProcessTreeItem) => { await killProcess(store, item); }),
     vscode.commands.registerCommand(cmd("copyProcessPid"), (item?: ProcessTreeItem) => {
       if (item !== undefined) {
         void vscode.env.clipboard.writeText(String(item.process.pid));
-        vscode.window.showInformationMessage(`Copied PID ${item.process.pid}`);
+        vscode.window.showInformationMessage(`Copied PID ${String(item.process.pid)}`);
       }
     }),
     vscode.commands.registerCommand(cmd("revealProcessScript"), (item?: ProcessTreeItem) => { revealProcessScript(store, item); }),
@@ -358,13 +357,13 @@ async function killProcess(store: Store, item?: ProcessTreeItem): Promise<void> 
   if (item === undefined || client?.isRunning() !== true) {
     return;
   }
-  const question = `${brand()}: Kill process ${item.process.name} (PID ${item.process.pid})? It will be terminated immediately.`;
+  const question = `${brand()}: Kill process ${item.process.name} (PID ${String(item.process.pid)})? It will be terminated immediately.`;
   if ((await vscode.window.showWarningMessage(question, { modal: true }, "Kill")) !== "Kill") {
     return;
   }
   try {
     await executeServerCommand<unknown>(client, lsp("kill"), { pid: item.process.pid });
-    vscode.window.showInformationMessage(`${brand()}: Killed PID ${item.process.pid}.`);
+    vscode.window.showInformationMessage(`${brand()}: Killed PID ${String(item.process.pid)}.`);
     await fetchProcessesIntoStore(store);
   } catch (err: unknown) {
     vscode.window.showErrorMessage(`${brand()}: ${errorText(err)}`);

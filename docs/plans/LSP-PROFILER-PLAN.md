@@ -98,6 +98,7 @@ Status was last verified on **2026-10-15**.
 - [ ] SharpLsp's richer retention graph (nested expansion, filters, SVG/PNG export, browser harness) was **deleted with SharpLsp's old profiler, not merged** [PROF-UI-REFGRAPH]. Its sources are in SharpLsp's history (`src/editors/vscode/src/profiler-graph*.ts`, `profiler-graph-webview.mts`). Porting them onto the neutral `RefGraph` is open.
 - [x] Lint config for the package: `eslint.config.mjs` is SharpLsp's extension config, rule for rule (strict and stylistic type-checked, no type assertions, explicit accessibility and return types, awaited returns, no floating promises). `npm run lint` type-checks and lints, and `make lint` runs it. The "reactive-screen" and "no-legacy" rules this item once named exist nowhere in SharpLsp.
 - [ ] Distribution: `file:` dependency today; publish to npm before any consumer releases.
+- [ ] The VS Code suites under `src/test` keep 60-odd functions over 20 lines, nearly all of them suite bodies whose tests share setup state, plus the host's `activate` and the mock server's `memoryStep` and `handle`. Every production module, and the shipped contracts under `src/testing`, are under the limits, and no file is over 500 lines. Hoisting each test into a named function needs that state threaded through explicitly, suite by suite.
 
 ## Phase 5: SharpLsp integration
 

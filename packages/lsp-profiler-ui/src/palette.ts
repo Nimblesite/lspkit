@@ -22,7 +22,8 @@ export const DEFAULT_PALETTE: ProfilerPalette = {
 /** The CSS variable each palette colour sets, in every profiler view and on every live repaint. */
 export const PALETTE_CSS_VARS = {
   critical: "--prof-critical", hot: "--prof-hot", warm: "--prof-warm", memory: "--prof-mem-critical",
-  memoryHot: "--prof-mem-hot", leak: "--prof-mem-leak", success: "--prof-success",
+  memoryHot: "--prof-mem-hot", memoryWarm: "--prof-mem-warm", memoryCool: "--prof-mem-cool",
+  leak: "--prof-mem-leak", success: "--prof-success",
 } as const;
 
 let readPalette: () => ProfilerPalette = () => DEFAULT_PALETTE;
@@ -40,10 +41,32 @@ export function resolvePalette(base: ProfilerPalette, overrides: unknown): Profi
   })) as unknown as ProfilerPalette;
 }
 
+/**
+ * Every palette CSS variable with its value, and `--prof-hot-ink`, the text
+ * colour readable on the hot accent. A palette without a memory ramp ramps
+ * from its own memory accent, never the default's.
+ */
+export function paletteVars(palette: ProfilerPalette = profilerPalette()): Record<string, string> {
+  const valid = resolvePalette(DEFAULT_PALETTE, { ...palette,
+    memoryWarm: palette.memoryWarm ?? palette.memoryHot, memoryCool: palette.memoryCool ?? palette.memoryHot });
+  const vars = Object.entries(PALETTE_CSS_VARS).map(([key, name]) => [name, String(Reflect.get(valid, key))]);
+  return { ...Object.fromEntries(vars), "--prof-hot-ink": inkFor(valid.hot) };
+}
+
 /** The palette as CSS variables, with the same names in every profiler view. */
 export function paletteCss(palette: ProfilerPalette = profilerPalette()): string {
-  const valid = resolvePalette(DEFAULT_PALETTE, palette);
-  return `:root { ${Object.entries(PALETTE_CSS_VARS).map(([key, name]) => `${name}: ${Reflect.get(valid, key)};`).join(" ")} }`;
+  return `:root { ${Object.entries(paletteVars(palette)).map(([name, value]) => `${name}: ${value};`).join(" ")} }`;
+}
+
+/**
+ * Text that stays readable on `fill`, a six-digit hex colour: dark ink on a
+ * light fill, light ink on a dark one. Embedded in the flame webview, so it
+ * calls nothing else.
+ */
+export function inkFor(fill: string): string {
+  const channel = (at: number): number => parseInt(fill.slice(at, at + 2), 16) / 255;
+  const luma = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  return luma < 0.5 ? "rgba(245, 245, 245, 0.95)" : "rgba(15, 15, 15, 0.9)";
 }
 
 /** The source classification a host that supplies none gets: a frame with a file is source. */

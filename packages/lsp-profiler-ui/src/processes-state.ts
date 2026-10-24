@@ -92,39 +92,49 @@ export interface ProcessPanelActions {
   setActiveDebuggeePid(pid: number | undefined): void;
 }
 
+/** The mode after `current` in `cycle`, wrapping round. */
+function nextInCycle<T>(cycle: readonly T[], current: T): T {
+  return cycle[(cycle.indexOf(current) + 1) % cycle.length] ?? current;
+}
+
+/** Apply `next` to the panel state, bumping its revision so every subscribed panel repaints (#148). */
+function patchPanel(panel: Signal<ProcessPanelState>, next: Partial<ProcessPanelState>): void {
+  panel.value = { ...panel.value, ...next, revision: panel.value.revision + 1 };
+}
+
+type Patch = (next: Partial<ProcessPanelState>) => void;
+
 /** Build the process-panel actions over the store's backing Signal. */
 export function createProcessPanelActions(panel: Signal<ProcessPanelState>): ProcessPanelActions {
-  function patch(next: Partial<ProcessPanelState>): void {
-    panel.value = { ...panel.value, ...next, revision: panel.value.revision + 1 };
-  }
+  const patch: Patch = (next) => { patchPanel(panel, next); };
+  return { ...fetchActions(patch), ...viewActions(panel, patch) };
+}
+
+/** What each fetch outcome leaves in the panel (#147). */
+function fetchActions(patch: Patch): Pick<ProcessPanelActions, "processesLoading" | "processesLoaded" | "processesFetchFailed"> {
   return {
-    processesLoading() {
-      patch({ list: [], fetch: "loading" });
-    },
-    processesLoaded(list) {
-      patch({ list, fetch: "loaded" });
-    },
-    processesFetchFailed() {
-      patch({ list: [], fetch: "error" });
-    },
+    processesLoading() { patch({ list: [], fetch: "loading" }); },
+    processesLoaded(list) { patch({ list, fetch: "loaded" }); },
+    processesFetchFailed() { patch({ list: [], fetch: "error" }); },
+  };
+}
+
+/** How the user arranges the rows, and which row is the debuggee. */
+function viewActions(panel: Signal<ProcessPanelState>, patch: Patch): Omit<ProcessPanelActions, keyof ReturnType<typeof fetchActions>> {
+  return {
     cycleProcessSort() {
-      const idx = SORT_CYCLE.indexOf(panel.value.sortMode);
-      const sortMode = SORT_CYCLE[(idx + 1) % SORT_CYCLE.length];
+      const sortMode = nextInCycle(SORT_CYCLE, panel.value.sortMode);
       patch({ sortMode });
       return sortMode;
     },
     cycleProcessGroup() {
-      const idx = GROUP_CYCLE.indexOf(panel.value.groupMode);
-      const groupMode = GROUP_CYCLE[(idx + 1) % GROUP_CYCLE.length];
+      const groupMode = nextInCycle(GROUP_CYCLE, panel.value.groupMode);
       patch({ groupMode });
       return groupMode;
     },
-    setProcessFilter(text) {
-      patch({ filterText: text.trim().toLowerCase() });
-    },
+    setProcessFilter(text) { patch({ filterText: text.trim().toLowerCase() }); },
     setActiveDebuggeePid(pid) {
-      if (panel.value.activeDebuggeePid === pid) { return; }
-      patch({ activeDebuggeePid: pid });
+      if (panel.value.activeDebuggeePid !== pid) { patch({ activeDebuggeePid: pid }); }
     },
   };
 }

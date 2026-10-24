@@ -1,40 +1,13 @@
-// Pure builder for the flame-graph webview document ([PROF-UI-SAMPLED]).
-// Produces the COMPLETE self-contained HTML string: strict CSP with a nonce
-// (no external resources), theme-aware chrome via --vscode-* variables, the
-// header strip + fiber chips, the Left Heavy / Time Order toolbar, the canvas,
-// the tooltip, the hot-functions table, the JSON data blob, and the inline
-// renderer script. No vscode imports — unit tested as a string.
+// Markup for the interactive sampled view ([PROF-UI-SAMPLED]) that the shared
+// CPU results panel mounts: the header strip + fiber chips, the Left Heavy /
+// Time Order toolbar, the canvas, the tooltip and the JSON data blob, styled by
+// theme-aware --vscode-* variables. No vscode imports — unit tested as a string.
 
 import type { FlameModel } from "./flame-model";
-import { FLAME_SCRIPT } from "./flame-script";
-import { paletteCss, paletteFrames, type ProfilerPalette } from "./palette";
 import { escapeHtml } from "./profiler-styles";
 import { formatSummaryHeader, onCpuPct, type ProfileSummary } from "./sample-summary";
 
 export { escapeHtml } from "./profiler-styles";
-
-export interface FlameHtmlInput {
-  palette?: ProfilerPalette;
-  nonce: string;
-  title: string;
-  model: FlameModel;
-  summary: ProfileSummary;
-}
-
-const NONCE_ALPHABET =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-const NONCE_LENGTH = 32;
-
-/** A fresh random nonce for the webview CSP. */
-export function makeNonce(): string {
-  let nonce = "";
-  for (let i = 0; i < NONCE_LENGTH; i += 1) {
-    nonce += NONCE_ALPHABET.charAt(
-      Math.floor(Math.random() * NONCE_ALPHABET.length),
-    );
-  }
-  return nonce;
-}
 
 /** The final path segment (both separators), for compact locations. */
 export function pathBasename(filePath: string): string {
@@ -63,27 +36,6 @@ function fiberOptionsHtml(model: FlameModel): string {
       (fiber, i) => `<option value="${i}">${escapeHtml(fiber.name)}</option>`,
     )
     .join("");
-}
-
-function hotFunctionRow(fn: ProfileSummary["hotFunctions"][number]): string {
-  const location = fn.file ? `${pathBasename(fn.file)}:${fn.line}` : "—";
-  const attrs = fn.file
-    ? ` data-file="${escapeHtml(fn.file)}" data-line="${fn.line}"`
-    : "";
-  return (
-    `<tr${attrs}><td class="num">${fn.selfPct.toFixed(1)}</td>` +
-    `<td class="num">${fn.totalPct.toFixed(1)}</td>` +
-    `<td>${escapeHtml(fn.name)}</td><td class="loc">${escapeHtml(location)}</td></tr>`
-  );
-}
-
-function hotFunctionsTable(summary: ProfileSummary): string {
-  const rows = summary.hotFunctions.map(hotFunctionRow).join("");
-  return (
-    `<h2 class="section">Hot functions</h2>` +
-    `<table id="hot-table"><thead><tr><th class="num">SELF%</th><th class="num">TOTAL%</th>` +
-    `<th>FUNCTION</th><th>LOCATION</th></tr></thead><tbody>${rows}</tbody></table>`
-  );
 }
 
 // The webview stylesheet: VS Code theme tokens only — no external fonts.
@@ -133,14 +85,6 @@ body {
 }
 .tt-name { font-weight: 600; }
 .tt-loc, .tt-nums { color: var(--vscode-descriptionForeground); }
-h2.section { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; margin: 16px 0 6px; }
-table { border-collapse: collapse; width: 100%; }
-th, td { padding: 2px 10px 2px 0; text-align: left; }
-th { color: var(--vscode-descriptionForeground); font-weight: 600; border-bottom: 1px solid var(--vscode-panel-border, #5554); }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; width: 64px; }
-td.loc { color: var(--vscode-descriptionForeground); }
-tr[data-file] { cursor: pointer; }
-tr[data-file]:hover { background: var(--vscode-list-hoverBackground, #ffffff12); }
 `;
 
 function embedJson(model: FlameModel, summary: ProfileSummary): string {
@@ -148,30 +92,8 @@ function embedJson(model: FlameModel, summary: ProfileSummary): string {
   return JSON.stringify({ model, summary }).replace(/</g, "\\u003c");
 }
 
-/** Build the complete flame-graph webview HTML document. */
-export function buildFlameHtml(input: FlameHtmlInput): string {
-  const { nonce, summary } = input;
-  const model = input.palette === undefined ? input.model : {
-    ...input.model, frames: paletteFrames(input.model.frames, input.palette),
-  };
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Profile: ${escapeHtml(input.title)}</title>
-<style nonce="${nonce}">${FLAME_CSS}${paletteCss(input.palette)}</style>
-</head>
-<body>
-${flameBody(model, summary, nonce)}
-<script nonce="${nonce}">${FLAME_SCRIPT}</script>
-</body>
-</html>`;
-}
-
 /** The interactive sampled view, mounted in the shared CPU results panel. */
-export function flameBody(model: FlameModel, summary: ProfileSummary, nonce = "", includeTable = true): string {
+export function flameBody(model: FlameModel, summary: ProfileSummary): string {
   return `<div class="header"><span class="stats">${escapeHtml(formatSummaryHeader(summary))}</span>${chipsHtml(summary)}</div>
 <div class="toolbar">
 <button id="btn-left" class="toggle active">Left Heavy</button>
@@ -184,6 +106,5 @@ export function flameBody(model: FlameModel, summary: ProfileSummary, nonce = ""
 </div>
 <div id="flame-wrap"><canvas id="flame"></canvas></div>
 <div id="tooltip"></div>
-${includeTable ? hotFunctionsTable(summary) : ""}
-<script type="application/json" id="flame-data" nonce="${nonce}">${embedJson(model, summary)}</script>`;
+<script type="application/json" id="flame-data">${embedJson(model, summary)}</script>`;
 }

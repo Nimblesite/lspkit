@@ -49,6 +49,15 @@ export function recordedOperations(): readonly string[] {
   return operationLog;
 }
 
+/** The `report` a task narrates its stages through: recorded, logged and shown. */
+function stageReporter(title: string, progress: vscode.Progress<{ message?: string }>): (message: string) => void {
+  return (message) => {
+    record(`step:${title}:${message}`);
+    Logger.debug(`[Progress] ${title} — ${message}`);
+    progress.report({ message });
+  };
+}
+
 /**
  * Run `task` under a user-facing progress notification. The task receives a
  * `report` callback for live stage messages ("Attaching…", "Collecting
@@ -64,12 +73,7 @@ export async function withUserProgress<T>(
   try {
     return await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title },
-      async (progress) =>
-        task((message) => {
-          record(`step:${title}:${message}`);
-          Logger.debug(`[Progress] ${title} — ${message}`);
-          progress.report({ message });
-        }),
+      async (progress) => task(stageReporter(title, progress)),
     );
   } finally {
     record(`end:${title}`);

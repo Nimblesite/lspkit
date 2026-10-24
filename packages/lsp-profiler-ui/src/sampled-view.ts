@@ -40,5 +40,5 @@ export function sampledParts(view: SampledView | undefined): { css: string; body
   if (view === undefined) return { css: "", body: "", script: "" };
   const palette = profilerPalette();
   const model = { ...view.model, frames: paletteFrames(view.model.frames, palette) };
-  return { css: FLAME_CSS, body: flameBody(model, view.summary, "", false), script: FLAME_SCRIPT };
+  return { css: FLAME_CSS, body: flameBody(model, view.summary), script: FLAME_SCRIPT };
 }

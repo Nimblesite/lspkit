@@ -132,10 +132,7 @@ export function parseSpeedscope(text: string): Result<SpeedscopeFile> {
     return raw;
   }
   const doc = raw.value as SpeedscopeFile;
-  if (
-    !Array.isArray(doc?.shared?.frames) ||
-    !doc.shared.frames.every(isFrame)
-  ) {
+  if (!Array.isArray(doc?.shared?.frames) || !doc.shared.frames.every(isFrame)) {
     return { ok: false, error: "speedscope file is missing shared.frames" };
   }
   if (!Array.isArray(doc.profiles) || doc.profiles.length === 0) {
@@ -272,10 +269,7 @@ export function frameColors(frames: SpeedscopeFrame[], isSource = hasSourceFile)
 const maxDepth = (rects: RenderRect[]): number =>
   rects.reduce((deepest, r) => Math.max(deepest, r.depth + 1), 0);
 
-function buildFiber(
-  profile: SpeedscopeProfile,
-  frameCount: number,
-): FiberFlame {
+function buildFiber(profile: SpeedscopeProfile, frameCount: number): FiberFlame {
   const totalWeight = profile.weights.reduce((sum, w) => sum + w, 0);
   const leftHeavy = boundedRects(leftHeavyRects(profile), totalWeight);
   const timeOrder = boundedTimeOrder(profile);

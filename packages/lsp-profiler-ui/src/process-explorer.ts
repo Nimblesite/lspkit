@@ -21,6 +21,8 @@ import { bindProcessesContextKey, bindProcessPolling, bindServerStateContextKey,
 import { bindDebuggeeTracking, bindProcessPanelReactivity } from "./process-reactivity";
 import { subscribeRevision } from "./reactive-refresh";
 import { withViewProgress } from "./progress-ops";
+import { errorText } from "./failure";
+import { executeServerCommand } from "./server-command";
 import type { ProcessPanelState } from "./processes-state";
 import {
   GROUP_LABEL,
@@ -107,22 +109,20 @@ export class ProcessesProvider implements vscode.TreeDataProvider<TreeItem>, vsc
       // not just in the flat list ([PROF-UI-PROCESSES]).
       return sortProcesses([...element.members], state).map((proc) => this.processRow(proc));
     }
-    if (
-      element instanceof ProcessTreeItem ||
-      element instanceof MessageTreeItem ||
-      element instanceof LaunchActionItem
-    ) {
+    // Every other row is a leaf. With no processes at all, [] lets the
+    // empty/loading/error `viewsWelcome` (which carries the big launch buttons)
+    // render honestly.
+    if (element !== undefined || state.list.length === 0) {
       return [];
     }
+    return this.topLevelRows(state);
+  }
 
-    // With no processes at all, return [] so the empty/loading/error
-    // `viewsWelcome` (which carries the big launch buttons) renders honestly.
-    if (state.list.length === 0) {
-      return [];
-    }
-
-    // Processes exist → the welcome can't show, so pin the current-file launches
-    // to the top as rows ([PROF-UI-PROCESSES]).
+  /**
+   * Processes exist, so the welcome can't show: the current-file launches are
+   * pinned to the top as rows ([PROF-UI-PROCESSES]), then the processes.
+   */
+  private topLevelRows(state: ProcessPanelState): TreeItem[] {
     const actions = this.launchActionRows();
     const visible = sortProcesses(applyFilter(state), state);
     if (visible.length === 0) {
@@ -283,16 +283,32 @@ export function registerProcessesView(
   store: Store,
 ): { provider: ProcessesProvider; disposables: vscode.Disposable[] } {
   const provider = new ProcessesProvider(store);
-
-  const treeView = vscode.window.createTreeView(viewId(), {
-    treeDataProvider: provider,
-  });
+  const treeView = vscode.window.createTreeView(viewId(), { treeDataProvider: provider });
   context.subscriptions.push(treeView, provider);
+  bindPanel(store, treeView, provider);
+  return { provider, disposables: [...registerLaunchCommands(store, treeView), ...registerViewCommands(store, provider)] };
+}
 
-  // The panel is a pure projection of centralised state (#148): the store-side
-  // poll feeds `store.processes` while the view is visible, the revision
-  // subscription repaints on every store change, and the context-key mirror
-  // keeps the welcome's loading/error/empty copy honest (#147).
+/** The view's toolbar commands and the per-row actions. */
+function registerViewCommands(store: Store, provider: ProcessesProvider): vscode.Disposable[] {
+  return [
+    // Manual refresh runs under the view's progress bar so the click visibly
+    // does something; returns the promise so callers/tests can await it.
+    vscode.commands.registerCommand(cmd("refreshProcesses"), async () =>
+      withViewProgress(viewId(), "Refresh processes", async () => provider.refreshNow())),
+    vscode.commands.registerCommand(cmd("sortProcesses"), () => { provider.cycleSortMode(); }),
+    vscode.commands.registerCommand(cmd("groupProcesses"), () => { provider.cycleGroupMode(); }),
+    ...registerRowCommands(store, provider),
+  ];
+}
+
+/**
+ * The panel is a pure projection of centralised state (#148): the store-side
+ * poll feeds `store.processes` while the view is visible, the revision
+ * subscription repaints on every store change, and the context-key mirror
+ * keeps the welcome's loading/error/empty copy honest (#147).
+ */
+function bindPanel(store: Store, treeView: vscode.TreeView<TreeItem>, provider: ProcessesProvider): void {
   provider.disposables.push(bindProcessPolling(store, treeView), bindProcessesContextKey(store), bindServerStateContextKey(store));
   subscribeRevision(store.processesRevision, provider);
   // React to the store's profiling state: live chrome, button-gating context
@@ -304,23 +320,13 @@ export function registerProcessesView(
   // Colour workspace rows green and non-debuggable rows grey ([PROF-UI-PROCESSES]).
   const decorations = new ProcessDecorationProvider(provider);
   provider.disposables.push(decorations, vscode.window.registerFileDecorationProvider(decorations));
+}
 
-  const disposables = [
-    ...registerLaunchCommands(store, treeView),
-    // Manual refresh runs under the view's progress bar so the click visibly
-    // does something; returns the promise so callers/tests can await it.
-    vscode.commands.registerCommand(cmd("refreshProcesses"), async () =>
-      withViewProgress(viewId(), "Refresh processes", async () =>
-        provider.refreshNow(),
-      ),
-    ),
-    vscode.commands.registerCommand(cmd("sortProcesses"), () => { provider.cycleSortMode(); }),
-    vscode.commands.registerCommand(cmd("groupProcesses"), () => { provider.cycleGroupMode(); }),
+/** The filter and the per-row actions: kill, copy PID, reveal the entry script. */
+function registerRowCommands(store: Store, provider: ProcessesProvider): vscode.Disposable[] {
+  return [
     vscode.commands.registerCommand(cmd("filterProcesses"), async () => {
-      const input = await vscode.window.showInputBox({
-        prompt: "Filter processes by name, script, or PID",
-        placeHolder: "e.g. uvicorn",
-      });
+      const input = await vscode.window.showInputBox({ prompt: "Filter processes by name, script, or PID", placeHolder: "e.g. uvicorn" });
       provider.setFilter(input ?? "");
     }),
     vscode.commands.registerCommand(cmd("killProcess"), async (item?: ProcessTreeItem) => killProcess(store, item)),
@@ -330,17 +336,17 @@ export function registerProcessesView(
         vscode.window.showInformationMessage(`Copied PID ${item.process.pid}`);
       }
     }),
-    vscode.commands.registerCommand(cmd("revealProcessScript"), (item?: ProcessTreeItem) => {
-      const scriptPath = item?.process.script;
-      if (typeof scriptPath === "string" && store.sourceEntries(item?.process.runtime ?? "")) {
-        void vscode.window.showTextDocument(vscode.Uri.file(scriptPath));
-      } else {
-        vscode.window.showInformationMessage(`${brand()}: This process has no resolvable script file.`);
-      }
-    }),
+    vscode.commands.registerCommand(cmd("revealProcessScript"), (item?: ProcessTreeItem) => { revealProcessScript(store, item); }),
   ];
+}
 
-  return { provider, disposables };
+function revealProcessScript(store: Store, item?: ProcessTreeItem): void {
+  const scriptPath = item?.process.script;
+  if (typeof scriptPath === "string" && store.sourceEntries(item?.process.runtime ?? "")) {
+    void vscode.window.showTextDocument(vscode.Uri.file(scriptPath));
+  } else {
+    vscode.window.showInformationMessage(`${brand()}: This process has no resolvable script file.`);
+  }
 }
 
 /**
@@ -352,19 +358,15 @@ async function killProcess(store: Store, item?: ProcessTreeItem): Promise<void> 
   if (item === undefined || client?.isRunning() !== true) {
     return;
   }
-  const choice = await vscode.window.showWarningMessage(
-    `${brand()}: Kill process ${item.process.name} (PID ${item.process.pid})? It will be terminated immediately.`,
-    { modal: true },
-    "Kill",
-  );
-  if (choice !== "Kill") {
+  const question = `${brand()}: Kill process ${item.process.name} (PID ${item.process.pid})? It will be terminated immediately.`;
+  if ((await vscode.window.showWarningMessage(question, { modal: true }, "Kill")) !== "Kill") {
     return;
   }
   try {
-    await client.sendRequest("workspace/executeCommand", { command: lsp("kill"), arguments: [{ pid: item.process.pid }] });
+    await executeServerCommand<unknown>(client, lsp("kill"), { pid: item.process.pid });
     vscode.window.showInformationMessage(`${brand()}: Killed PID ${item.process.pid}.`);
     await fetchProcessesIntoStore(store);
   } catch (err: unknown) {
-    vscode.window.showErrorMessage(`${brand()}: ${err instanceof Error ? err.message : String(err)}`);
+    vscode.window.showErrorMessage(`${brand()}: ${errorText(err)}`);
   }
 }

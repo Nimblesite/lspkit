@@ -47,32 +47,20 @@ export function toProfileResult(report: ProfileReport): ProfileResult {
     ...(artifacts.flamegraph_path !== undefined ? { flamegraphPath: artifacts.flamegraph_path } : {}),
     ...(artifacts.export_error !== undefined ? { exportError: artifacts.export_error } : {}),
     hotFunctions: report.hot_functions.map((fn) => ({
-      name: fn.name,
-      ...located(fn),
-      samples: fn.samples,
-      percentage: fn.percentage,
-      selfPercentage: fn.self_percentage,
+      name: fn.name, ...located(fn), samples: fn.samples, percentage: fn.percentage, selfPercentage: fn.self_percentage,
     })),
-    hotLines: report.hot_lines.map((line) => ({
-      file: line.file,
-      line: line.line,
-      samples: line.samples,
-      percentage: line.percentage,
-    })),
+    hotLines: report.hot_lines.map((line) => ({ file: line.file, line: line.line, samples: line.samples, percentage: line.percentage })),
   };
 }
 
 export function toUiProcess(process: WireProcess): ProcessInfo {
   return {
-    pid: process.pid,
-    ppid: process.ppid ?? 0,
-    name: process.name,
-    runtime: process.runtime,
+    pid: process.pid, ppid: process.ppid ?? 0,
+    name: process.name, runtime: process.runtime,
     interpreterPath: process.executable ?? null,
     script: process.entry ?? null,
     runtimeVersion: process.runtime_version ?? null,
-    cpuPercent: process.cpu_percent,
-    memoryBytes: process.memory_bytes,
+    cpuPercent: process.cpu_percent, memoryBytes: process.memory_bytes,
     runtimeSecs: process.runtime_secs,
     user: process.user ?? null,
     requiresElevation: process.requires_elevation,
@@ -168,15 +156,19 @@ function outcomeFields(outcome: MemoryOutcome): MemoryIngestResult {
     case "Refs":
       return { kind: "refs", graph: toRefGraph(outcome.graph) };
     case "Objects":
-      return {
-        kind: "objects",
-        typeName: outcome.objects.type_name,
-        totalCount: outcome.objects.total_count,
-        totalBytes: outcome.objects.total_bytes,
-        objects: outcome.objects.objects.map((o) => ({ id: o.id, type: o.type_name, size: o.size_bytes, repr: o.label })),
-        typeSummary: outcome.objects.type_summary.map((t) => ({ type: t.type_name, count: t.count, size: t.size_bytes })),
-      };
+      return { kind: "objects", ...objectsFields(outcome.objects) };
   }
+}
+
+/** One type's live objects and the per-type totals beside them. */
+function objectsFields(objects: Extract<MemoryOutcome, { kind: "Objects" }>["objects"]): Omit<MemoryIngestResult, "kind"> {
+  return {
+    typeName: objects.type_name,
+    totalCount: objects.total_count,
+    totalBytes: objects.total_bytes,
+    objects: objects.objects.map((o) => ({ id: o.id, type: o.type_name, size: o.size_bytes, repr: o.label })),
+    typeSummary: objects.type_summary.map((t) => ({ type: t.type_name, count: t.count, size: t.size_bytes })),
+  };
 }
 
 /** A completed memory step as the dashboard, decorations and autopilot consume it. */

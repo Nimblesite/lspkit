@@ -16,6 +16,8 @@ import { lspTable, configSection } from "./ids";
 import { effect } from "@preact/signals-core";
 import { State, type LanguageClient } from "vscode-languageclient/node";
 import { Logger } from "./logger";
+import { errorText } from "./failure";
+import { executeServerCommand } from "./server-command";
 import type { ProfilerStore as Store } from "./store";
 import { toUiProcess } from "./wire-adapters";
 import type { ProcessList } from "./wire-generated";
@@ -23,12 +25,8 @@ import type { ProcessList } from "./wire-generated";
 /** LSP command name ([PROF-WIRE-METHODS]). */
 const LSP_CMD = lspTable({ processes: "processes" });
 
-/** Wire shape of the LSP process listing. */
-
 /** Default poll interval (ms) when the setting is absent. */
 const DEFAULT_REFRESH_MS = 2000;
-
-/** Context key gating the Processes welcome states (#147). */
 
 /**
  * Fetch the process table from the LSP into the store's `processes` Signal.
@@ -44,13 +42,10 @@ export async function fetchProcessesIntoStore(store: Store): Promise<void> {
   }
   try {
     const roots = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
-    const result = await client.sendRequest<ProcessList | null>(
-      "workspace/executeCommand",
-      { command: LSP_CMD.processes, arguments: [{ workspace_roots: roots }] },
-    );
+    const result = await executeServerCommand<ProcessList>(client, LSP_CMD.processes, { workspace_roots: roots });
     store.processesLoaded((result?.processes ?? []).map(toUiProcess));
   } catch (err: unknown) {
-    Logger.error(`Processes fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+    Logger.error(`Processes fetch failed: ${errorText(err)}`);
     store.processesFetchFailed();
   }
 }
@@ -64,39 +59,30 @@ export function bindProcessPolling(
   store: Store,
   treeView: Pick<vscode.TreeView<unknown>, "visible" | "onDidChangeVisibility">,
 ): vscode.Disposable {
-  let timer: ReturnType<typeof setInterval> | undefined;
-
-  function start(): void {
-    if (timer !== undefined) { return; }
-    const intervalMs = vscode.workspace
-      .getConfiguration(configSection())
-      .get<number>("profiler.processRefreshMs", DEFAULT_REFRESH_MS);
-    void fetchProcessesIntoStore(store);
-    timer = setInterval(() => { void fetchProcessesIntoStore(store); }, intervalMs);
-  }
-  function stop(): void {
-    if (timer !== undefined) { clearInterval(timer); timer = undefined; }
-  }
-
+  const poll = processPoll(store);
   const subscription = treeView.onDidChangeVisibility((e) => {
-    if (e.visible) { start(); } else { stop(); }
+    if (e.visible) { poll.start(); } else { poll.stop(); }
   });
-  if (treeView.visible) { start(); }
+  if (treeView.visible) { poll.start(); }
+  return { dispose(): void { subscription.dispose(); poll.stop(); } };
+}
 
+/** A fetch now and then every configured interval, until stopped. */
+function processPoll(store: Store): { start(): void; stop(): void } {
+  let timer: ReturnType<typeof setInterval> | undefined;
   return {
-    dispose(): void {
-      subscription.dispose();
-      stop();
+    start(): void {
+      if (timer !== undefined) { return; }
+      const intervalMs = vscode.workspace.getConfiguration(configSection()).get<number>("profiler.processRefreshMs", DEFAULT_REFRESH_MS);
+      void fetchProcessesIntoStore(store);
+      timer = setInterval(() => { void fetchProcessesIntoStore(store); }, intervalMs);
+    },
+    stop(): void {
+      if (timer !== undefined) { clearInterval(timer); timer = undefined; }
     },
   };
 }
 
-/**
- * Mirror the store's fetch state to the `<prefix>.profiler.processesState` context key
- * that gates the welcome's loading/error/empty copy (#147). Reactive: the
- * effect re-fires whenever the store's process state changes, including the
- * initial "loading" seed.
- */
 /** Mirror the language client's state to `<prefix>.profiler.serverState` so the welcome copy is honest. */
 export function bindServerStateContextKey(store: Store): vscode.Disposable {
   let subscription: vscode.Disposable | undefined;
@@ -113,6 +99,12 @@ export function bindServerStateContextKey(store: Store): vscode.Disposable {
   return { dispose(): void { disposeEffect(); subscription?.dispose(); } };
 }
 
+/**
+ * Mirror the store's fetch state to the `<prefix>.profiler.processesState` context key
+ * that gates the welcome's loading/error/empty copy (#147). Reactive: the
+ * effect re-fires whenever the store's process state changes, including the
+ * initial "loading" seed.
+ */
 export function bindProcessesContextKey(store: Store): vscode.Disposable {
   const dispose = effect(() => {
     setContextKey("processesState", store.processes.value.fetch);

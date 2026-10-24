@@ -625,7 +625,7 @@ Palettes follow [PROF-UI-PALETTE], over editor theme surfaces and text.
 
 ### [PROF-UI-PALETTE] Host palettes
 
-A host supplies CPU critical/hot/warm, memory critical/hot, leak and success colors. The user can override these through `<host>.profiler.palette`; only six-digit hex colors are accepted. The fallback keeps the original orange/purple palette. SharpLsp supplies green; Osprey supplies olive/brown-green. Panels, sampled frames and editor heat consume the same resolved palette. Runtime frames retain their host-supplied source classification. Frame identity determines color rank, independently of input ordering. Scientific totals render immediately; a counter animation must never temporarily misstate a measurement. Short captures display milliseconds.
+A host supplies CPU critical/hot/warm, memory critical/hot (optionally warm/cool), leak and success colors. The user can override these through `<host>.profiler.palette`; only six-digit hex colors are accepted. The fallback keeps the original orange/purple palette. SharpLsp supplies green; Osprey supplies olive/brown-green. Panels, sampled frames and editor heat consume the same resolved palette: no view draws an accent of its own, and a label names its metric, never a colour. A palette without a memory ramp ramps from its own memory colour. Text drawn on an accent, a flame-graph label or an active toggle, takes the ink readable on that accent, so a dark host palette keeps light text. Runtime frames retain their host-supplied source classification. Frame identity determines color rank, independently of input ordering. Scientific totals render immediately; a counter animation must never temporarily misstate a measurement. Short captures display milliseconds.
 
 ### [PROF-UI-SAMPLED] Interactive sampled profiles
 
@@ -637,7 +637,7 @@ Watch/Variables actions carry the adapter's expression, type, value and session 
 
 ### [PROF-UI-CONTRACT] Shared VSIX contracts
 
-The same `testing/webview-contract` module runs inside both SharpLsp and Osprey. It covers CSP, hostile payloads, memory/retention presentation, singleton handlers, theme support and debugger selection boundaries. `testing/cpu-capture-contract` drives each host's real runtime capture and checks attribution, Speedscope/V8 exports, interactive controls and source navigation. Runtime-specific capture and debugger tests remain alongside these contracts; sharing UI tests is not proof of backend parity.
+The same `testing/webview-contract` module runs inside both SharpLsp and Osprey. It covers CSP, hostile payloads, memory/retention presentation, singleton handlers, theme support, host palettes and debugger selection boundaries. `testing/cpu-capture-contract` drives each host's real runtime capture and checks attribution, Speedscope/V8 exports, interactive controls and source navigation. Runtime-specific capture and debugger tests remain alongside these contracts; sharing UI tests is not proof of backend parity.
 
 ## [PROF-DOTNET] .NET runtime
 

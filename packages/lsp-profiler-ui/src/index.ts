@@ -54,18 +54,17 @@ export function registerProfilerUi(context: vscode.ExtensionContext, host: Profi
     ...view.disposables,
   ];
   context.subscriptions.push(...disposables);
-  return {
-    store,
-    processes: view.provider,
-    dispose() {
-      for (const disposable of disposables) {
-        disposable.dispose();
-      }
-      disposeProfiler();
-      disposeMemoryProfiler();
-      store.reset();
-    },
-  };
+  return { store, processes: view.provider, dispose: () => { disposeProfilerUi(store, disposables); } };
+}
+
+/** Tear down everything `registerProfilerUi` registered, and the store's state. */
+function disposeProfilerUi(store: ProfilerStore, disposables: readonly vscode.Disposable[]): void {
+  for (const disposable of disposables) {
+    disposable.dispose();
+  }
+  disposeProfiler();
+  disposeMemoryProfiler();
+  store.reset();
 }
 
 // Observation seams for host test suites: what the UI last rendered.

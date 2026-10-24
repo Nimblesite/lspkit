@@ -79,16 +79,7 @@ export function decodeRefGraph(value: unknown): ReferenceGraphResult["graph"] {
     return undefined;
   }
   return {
-    nodes: recordArrayField(value, "nodes").map((node) => ({
-      id: numberField(node, "id") ?? 0,
-      type: stringField(node, "type") ?? "",
-      size: numberField(node, "size") ?? 0,
-      repr: stringField(node, "repr") ?? "",
-      depth: numberField(node, "depth") ?? 0,
-      isTarget: booleanField(node, "isTarget") ?? false,
-      isRoot: booleanField(node, "isRoot") ?? false,
-      rootKind: stringField(node, "rootKind"),
-    })),
+    nodes: recordArrayField(value, "nodes").map(toRefNode),
     edges: recordArrayField(value, "edges").map((edge) => ({
       from: numberField(edge, "from") ?? 0,
       to: numberField(edge, "to") ?? 0,
@@ -101,17 +92,30 @@ export function decodeRefGraph(value: unknown): ReferenceGraphResult["graph"] {
   };
 }
 
+function toRefNode(node: Record<string, unknown>): RefGraphNode {
+  return {
+    id: numberField(node, "id") ?? 0,
+    type: stringField(node, "type") ?? "",
+    size: numberField(node, "size") ?? 0,
+    repr: stringField(node, "repr") ?? "",
+    depth: numberField(node, "depth") ?? 0,
+    isTarget: booleanField(node, "isTarget") ?? false,
+    isRoot: booleanField(node, "isRoot") ?? false,
+    rootKind: stringField(node, "rootKind"),
+  };
+}
+
 const refGraphPanel = new SingletonWebviewPanel(() => cmd("refGraph"), (msg) => {
   handleSourceNavigation(msg);
 });
 
-/** Open (or reveal) the retention-graph webview for a parsed reference graph. */
 /** The open retention graph's view type, title and HTML (e2e seam). */
 export function refGraphState(): { readonly viewType: string; readonly title: string; readonly html: string } | undefined {
   const described = refGraphPanel.describe();
   return described === undefined ? undefined : { ...described, html: refGraphPanel.html() ?? "" };
 }
 
+/** Open (or reveal) the retention-graph webview for a parsed reference graph. */
 export function openRefGraphWebview(result: ReferenceGraphResult): void {
   refGraphPanel.show(`Retention Graph — ${result.targetType}`, buildRefGraphHtml(result));
 }
@@ -121,8 +125,7 @@ export function disposeRefGraph(): void {
   refGraphPanel.dispose();
 }
 
-function buildRefGraphCss(): string {
-  return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}
+const REF_GRAPH_CSS = `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}
     body { padding: 16px; }
     h1 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
     h1 .accent { color: var(--prof-mem-critical); }
@@ -153,7 +156,6 @@ function buildRefGraphCss(): string {
     .legend-item { display: flex; align-items: center; gap: 4px; }
     .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
     .no-data { text-align: center; padding: 60px; color: var(--prof-text-secondary); }`;
-}
 
 function buildRetentionPathHtml(retentionPath: string[]): string {
   if (retentionPath.length === 0) { return ""; }
@@ -166,12 +168,17 @@ function buildRetentionPathHtml(retentionPath: string[]): string {
   </div>`;
 }
 
-function buildRefGraphScriptInit(nodesJson: string, edgesJson: string, cyclesJson: string): string {
+/** The graph as script constants. */
+function refGraphDataScript(nodesJson: string, edgesJson: string, cyclesJson: string): string {
   return `
     const nodes = ${nodesJson};
     const edges = ${edgesJson};
     const cycles = ${cyclesJson};
+`;
+}
 
+/** An honest empty state, or each node laid out in a layer by its distance from the targets. */
+const REF_GRAPH_LAYOUT_SCRIPT = `
     if (nodes.length === 0) {
       document.getElementById('graph').style.display = 'none';
       const noData = document.createElement('div');
@@ -203,16 +210,14 @@ function buildRefGraphScriptInit(nodesJson: string, edgesJson: string, cyclesJso
           radius: Math.min(crowded ? gap / 2.5 : 30, Math.max(8, Math.log2(Math.max(n.size, 1)) * 2)),
         }));
       }`;
-}
 
-function buildRefGraphScriptDraw(): string {
-  return `
-      const edgeColor = 'rgba(136, 146, 164, 0.3)';
+/** Edges, a cycle's in the leak colour. */
+const REF_GRAPH_EDGES_SCRIPT = `
       for (const edge of edges) {
         const a = nodeMap.get(edge.from), b = nodeMap.get(edge.to);
         if (!a || !b) continue;
         const isCycleEdge = cycleNodeIds.has(edge.from) && cycleNodeIds.has(edge.to);
-        ctx.strokeStyle = isCycleEdge ? cssVar('--prof-mem-leak') : edgeColor;
+        ctx.strokeStyle = isCycleEdge ? cssVar('--prof-mem-leak') : cssVar('--prof-border');
         ctx.lineWidth = isCycleEdge ? 2 : 1;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -224,20 +229,18 @@ function buildRefGraphScriptDraw(): string {
           ctx.textAlign = 'left';
           ctx.fillText(edge.label, (a.x + b.x) / 2 + 4, (a.y + b.y) / 2 - 4);
         }
-      }
-      ${buildRefGraphScriptNodes()}
-    }`;
-}
+      }`;
 
-/** Nodes: targets, roots and cycles in their own colours; a root named by its label above its type. */
-function buildRefGraphScriptNodes(): string {
-  return `
+/** Nodes: targets, roots and cycles in the legend's colours; a root named by its label above its type. */
+const REF_GRAPH_NODES_SCRIPT = `
       for (const n of nodeMap.values()) {
-        const color = n.isTarget ? cssVar('--prof-mem-critical') : n.isRoot ? '#60a5fa' : cycleNodeIds.has(n.id) ? cssVar('--prof-mem-leak') : '#8892a4';
+        const color = cssVar(n.isTarget ? '--prof-mem-critical' : n.isRoot ? '--prof-info' : cycleNodeIds.has(n.id) ? '--prof-mem-leak' : '--prof-text-secondary');
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-        ctx.fillStyle = color + '33';
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.2;
         ctx.fill();
+        ctx.globalAlpha = 1;
         ctx.strokeStyle = color;
         ctx.lineWidth = n.isTarget || n.isRoot ? 3 : 1.5;
         ctx.stroke();
@@ -254,7 +257,10 @@ function buildRefGraphScriptNodes(): string {
         ctx.fillStyle = cssVar('--prof-text-secondary');
         ctx.font = '9px monospace';
         ctx.fillText(formatBytes(n.size), n.x, n.y + n.radius + 26);
-      }
+      }`;
+
+/** A crowded layer names its type once, with a count, and the drawing branch closes. */
+const REF_GRAPH_LAYER_LABELS_SCRIPT = `
       for (const [depth, members] of layers) {
         const first = nodeMap.get(members[0].id);
         if (!first.crowded) continue;
@@ -263,39 +269,39 @@ function buildRefGraphScriptNodes(): string {
         ctx.font = '11px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(members.length + ' × ' + (types.size === 1 ? members[0].type : 'objects'), W / 2, first.y + first.radius + 18);
-      }`;
-}
+      }
+    }`;
 
-function buildRefGraphScript(nodesJson: string, edgesJson: string, cyclesJson: string): string {
-  return PROFILER_JS_UTILS +
-    buildRefGraphScriptInit(nodesJson, edgesJson, cyclesJson) +
-    buildRefGraphScriptDraw();
-}
-
-/** Build the complete retention-graph HTML (exported as an e2e seam). */
-export function buildRefGraphHtml(result: ReferenceGraphResult): string {
-  // Node types/reprs and edge labels are profiled-program data — embed them so
-  // they can never close the inline <script> ([PROF-UI-WEBVIEW]).
-  const nodesJson = embedJson(result.graph?.nodes ?? []);
-  const edgesJson = embedJson(result.graph?.edges ?? []);
-  const cyclesJson = embedJson(result.graph?.cycles ?? []);
-  const retentionPath = result.graph?.retentionPath ?? [];
-  const escapedType = escapeHtml(result.targetType);
-
-  return buildWebviewDocument({
-    title: `Retention Graph — ${escapedType}`,
-    css: buildRefGraphCss(),
-    body: `
-  <h1><span class="accent">◉</span> Retention Graph — <span class="accent">${escapedType}</span></h1>
-  ${buildRetentionPathHtml(retentionPath)}
-  <canvas id="graph" width="800" height="500"></canvas>
+/** The legend, in the colours the canvas draws. */
+const REF_GRAPH_LEGEND_HTML = `
   <div class="legend">
     <div class="legend-item"><div class="legend-dot" style="background: var(--prof-mem-critical)"></div> Target object</div>
     <div class="legend-item"><div class="legend-dot" style="background: var(--prof-info)"></div> GC root</div>
     <div class="legend-item"><div class="legend-dot" style="background: var(--prof-text-secondary)"></div> Intermediate</div>
     <div class="legend-item"><div class="legend-dot" style="background: var(--prof-mem-leak)"></div> Cycle member</div>
-  </div>`,
-    script: buildRefGraphScript(nodesJson, edgesJson, cyclesJson),
+  </div>`;
+
+/** Build the complete retention-graph HTML (exported as an e2e seam). */
+export function buildRefGraphHtml(result: ReferenceGraphResult): string {
+  const escapedType = escapeHtml(result.targetType);
+  return buildWebviewDocument({
+    title: `Retention Graph — ${escapedType}`,
+    css: REF_GRAPH_CSS,
+    body: `
+  <h1><span class="accent">◉</span> Retention Graph — <span class="accent">${escapedType}</span></h1>
+  ${buildRetentionPathHtml(result.graph?.retentionPath ?? [])}
+  <canvas id="graph" width="800" height="500"></canvas>${REF_GRAPH_LEGEND_HTML}`,
+    script: buildRefGraphScript(result),
   });
 }
 
+/**
+ * The drawing script. Node types/reprs and edge labels are profiled-program
+ * data, embedded so they can never close the inline <script> ([PROF-UI-WEBVIEW]).
+ */
+function buildRefGraphScript(result: ReferenceGraphResult): string {
+  const graph = result.graph;
+  return PROFILER_JS_UTILS +
+    refGraphDataScript(embedJson(graph?.nodes ?? []), embedJson(graph?.edges ?? []), embedJson(graph?.cycles ?? [])) +
+    REF_GRAPH_LAYOUT_SCRIPT + REF_GRAPH_EDGES_SCRIPT + REF_GRAPH_NODES_SCRIPT + REF_GRAPH_LAYER_LABELS_SCRIPT;
+}

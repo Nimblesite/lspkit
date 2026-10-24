@@ -9,11 +9,11 @@
 // function sources (type-checked + unit-tested TS, embedded verbatim via
 // toString); the rest is one literal with no backticks or dollar-brace sequences.
 
-import { byFrameKeyThenIndex, framePaletteColor, frameRanks, hasSourceFile, paletteFrames } from "./palette";
+import { byFrameKeyThenIndex, framePaletteColor, frameRanks, hasSourceFile, inkFor, paletteFrames } from "./palette";
 import { clampViewRange, coveredSpan, fitLabelText, searchMatches } from "./flame-script-helpers";
 
 /** The type-checked, unit-tested functions the webview runs, as source. */
-const EMBEDDED = [hasSourceFile, byFrameKeyThenIndex, frameRanks, framePaletteColor, paletteFrames,
+const EMBEDDED = [hasSourceFile, byFrameKeyThenIndex, frameRanks, framePaletteColor, paletteFrames, inkFor,
   fitLabelText, searchMatches, coveredSpan, clampViewRange].map((fn) => fn.toString()).join("\n");
 
 export const FLAME_SCRIPT = `(function () {
@@ -114,7 +114,7 @@ export const FLAME_SCRIPT = `(function () {
     var vis0 = Math.max(px0, 0);
     var avail = Math.min(px1 - 1, width) - vis0 - 2 * LABEL_PAD;
     if (avail > measure("\\u2026") + 2) {
-      ctx.fillStyle = "rgba(15, 15, 15, 0.9)";
+      ctx.fillStyle = inkFor(model.frames[r.frameIdx].color);
       ctx.fillText(fitLabel(model.frames[r.frameIdx].name, avail), vis0 + LABEL_PAD, y + ROW_H / 2);
     }
     ctx.globalAlpha = 1;
@@ -319,16 +319,6 @@ export const FLAME_SCRIPT = `(function () {
     chip.addEventListener("click", function () { setFiber(Number(chip.getAttribute("data-fiber"))); });
   });
   document.getElementById("btn-reset").addEventListener("click", resetZoom);
-
-  document.querySelectorAll("tr[data-file]").forEach(function (row) {
-    row.addEventListener("click", function () {
-      vscode.postMessage({
-        type: "select",
-        file: row.getAttribute("data-file"),
-        line: Number(row.getAttribute("data-line")),
-      });
-    });
-  });
 
   window.addEventListener("message", function (event) {
     if (event.data.type === "profilerPalette") {

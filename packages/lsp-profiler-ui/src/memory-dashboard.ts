@@ -7,7 +7,7 @@
  * - Timeline chart: memory usage over time (Canvas 2D line chart)
  * - Top allocations table: file, line, size, count — click to navigate
  * - Leak confidence badges: Definite, High, Medium, Low
- * - Dual heat map mode toggle: CPU (orange) + Memory (purple)
+ * - Dual heat map mode toggle: CPU or memory heat, in the host palette
  *
  * All data comes from the LSP via memory snapshot/diff commands.
  * This module handles only the client-side visualization.
@@ -17,7 +17,7 @@ import * as vscode from "vscode";
 import { cmd, brand } from "./ids";
 import { Logger } from "./logger";
 import type { MemoryAllocation } from "./memory-decorations";
-import { openNativeTraceViewer, openSpeedscopeImport } from "./profiler-flamegraph-html";
+import { openNativeTraceViewer, openSpeedscopeImport } from "./trace-actions";
 import { formatBytes as formatBytesShared } from "./profiler-styles";
 import { buildMemoryDashboardHtml } from "./memory-dashboard-html";
 export { buildMemoryDashboardHtml } from "./memory-dashboard-html";
@@ -103,24 +103,21 @@ function dashboardActionCommand(type: string): string | undefined {
  * the dashboard's actions (source-navigation clicks fall through).
  */
 export function handleMemoryDashboardMessage(msg: WebviewMessage): boolean {
-  if (msg.type === "openHeapProfile" && msg.file !== undefined && msg.file !== "") {
-    // The dashboard is the landing view; the raw V8 `.heapprofile` opens in
-    // VS Code's built-in viewer on demand ([PROF-CPU-START]).
-    void openNativeTraceViewer(msg.file, msg.file);
+  const file = msg.file ?? "";
+  // The dashboard is the landing view; the raw V8 `.heapprofile` opens on demand
+  // in VS Code's built-in viewer ([PROF-CPU-START]), or in speedscope, which
+  // imports it too, over the CPU panel's loopback deep link ([PROF-UI-WEBVIEW]).
+  if (msg.type === "openHeapProfile" && file !== "") {
+    void openNativeTraceViewer(file, file);
     return true;
   }
-  if (msg.type === "openSpeedscope" && msg.file !== undefined && msg.file !== "") {
-    // speedscope imports V8 `.heapprofile` too — same loopback-served deep
-    // link as the CPU panel ([PROF-UI-WEBVIEW]).
-    void openSpeedscopeImport(msg.file);
+  if (msg.type === "openSpeedscope" && file !== "") {
+    void openSpeedscopeImport(file);
     return true;
   }
   const command = dashboardActionCommand(msg.type);
-  if (command === undefined) {
-    return false;
-  }
-  void vscode.commands.executeCommand(command);
-  return true;
+  if (command !== undefined) { void vscode.commands.executeCommand(command); }
+  return command !== undefined;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────

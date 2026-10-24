@@ -41,26 +41,26 @@ export function bindProcessPanelReactivity(
   provider: ProcessesProvider,
 ): vscode.Disposable {
   boundView = treeView;
-  let lastGate = "";
+  const regate = onGateChange(provider);
   const disposeEffect = effect(() => {
     const session = store.profiler.value;
     // Cheap, every change: the live readout above the tree.
     treeView.message = panelMessage(session);
     treeView.badge = panelBadge(session);
-
-    // Expensive (context keys + tree rebuild): only on gating transitions.
-    const gate = `${session.cpu}|${session.cpuPid ?? ""}|${session.memory}`;
-    if (gate !== lastGate) {
-      lastGate = gate;
-      applyContextKeys(session);
-      provider.refresh();
-    }
+    regate(session);
   });
-  return {
-    dispose() {
-      disposeEffect();
-      boundView = undefined;
-    },
+  return { dispose() { disposeEffect(); boundView = undefined; } };
+}
+
+/** The expensive leg (context keys + tree rebuild), run only on gating transitions. */
+function onGateChange(provider: ProcessesProvider): (session: ProfilerSession) => void {
+  let lastGate = "";
+  return (session) => {
+    const gate = `${session.cpu}|${session.cpuPid ?? ""}|${session.memory}`;
+    if (gate === lastGate) { return; }
+    lastGate = gate;
+    applyContextKeys(session);
+    provider.refresh();
   };
 }
 
@@ -89,12 +89,7 @@ export function bindDebuggeeTracking(store: Store): vscode.Disposable {
     vscode.debug.onDidStartDebugSession(update),
     vscode.debug.onDidTerminateDebugSession(update),
   ];
-  return {
-    dispose() {
-      disposeEffect();
-      for (const sub of subscriptions) { sub.dispose(); }
-    },
-  };
+  return { dispose() { disposeEffect(); for (const sub of subscriptions) { sub.dispose(); } } };
 }
 
 /** Push the gating context keys every profiling `when` clause keys off. */

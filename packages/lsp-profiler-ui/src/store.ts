@@ -81,11 +81,16 @@ function bindHostPalette(host: ProfilerHost): void {
     vscode.workspace.getConfiguration(host.configSection).get("profiler.palette")));
 }
 
-/** Create the profiler's reactive state bound to `host`. Factory, never a singleton. */
-export function createProfilerStore(host: ProfilerHost): ProfilerStore {
+/** Install `host`'s ids, palette and logger for every module that reads them. */
+function bindHost(host: ProfilerHost): void {
   installIds(host);
   bindHostPalette(host);
   bindLogger(() => host.logger);
+}
+
+/** Create the profiler's reactive state bound to `host`. Factory, never a singleton. */
+export function createProfilerStore(host: ProfilerHost): ProfilerStore {
+  bindHost(host);
   const profiler: Signal<ProfilerSession> = signal(IDLE_PROFILER_SESSION);
   const processes: Signal<ProcessPanelState> = signal(IDLE_PROCESS_PANEL);
   const capabilities = computed(() => advertisedCapabilities(host.client.value));
@@ -95,18 +100,23 @@ export function createProfilerStore(host: ProfilerHost): ProfilerStore {
     host,
     client: host.client,
     sessionIdToPid: host.sessionIdToPid,
+    getDebuggeeProcessId: (sessionId) => host.sessionIdToPid.value.get(sessionId),
+    ...sessionState(profiler),
+    processes,
+    processesRevision: computed(() => processes.value.revision),
+    ...createProcessPanelActions(processes),
+    reset() { profiler.value = IDLE_PROFILER_SESSION; processes.value = IDLE_PROCESS_PANEL; },
+  };
+}
+
+/** The session signal, what it says about each leg, and the only way to change it. */
+function sessionState(profiler: Signal<ProfilerSession>):
+  Pick<ProfilerStore, "profiler" | "profilerBusy" | "cpuBusy" | "memoryBusy"> & ReturnType<typeof createProfilerActions> {
+  return {
     profiler,
     profilerBusy: computed(() => isProfilerBusy(profiler.value)),
     cpuBusy: computed(() => isCpuBusy(profiler.value)),
     memoryBusy: computed(() => isMemoryBusy(profiler.value)),
-    processes,
-    processesRevision: computed(() => processes.value.revision),
-    getDebuggeeProcessId: (sessionId) => host.sessionIdToPid.value.get(sessionId),
     ...createProfilerActions(profiler),
-    ...createProcessPanelActions(processes),
-    reset() {
-      profiler.value = IDLE_PROFILER_SESSION;
-      processes.value = IDLE_PROCESS_PANEL;
-    },
   };
 }

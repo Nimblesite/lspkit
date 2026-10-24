@@ -1,6 +1,5 @@
 // Implements [PROF-UI-DEBUG-LINK]. Shared watch context in CPU, memory and retention panels.
 import { selectedProfileVariable } from "./debug-selection";
-import { PALETTE_CSS_VARS } from "./palette";
 export const DEBUG_LINK_BODY = `<section id="debug-variable" hidden aria-label="Debugger variable">
   <strong id="debug-variable-name"></strong><span id="debug-variable-type"></span>
   <pre id="debug-variable-value"></pre><button id="debug-variable-watch">Add to Watch</button>
@@ -15,9 +14,8 @@ export const DEBUG_LINK_CSS = `#debug-variable { border: 1px solid var(--prof-ho
   #debug-variable small { display: block; margin-top: 8px; opacity: .7; }`;
 
 /** Repaint an open panel when the host palette changes; canvases redraw on resize. */
-const PALETTE_REPAINT = `function repaint(palette) {
-      Object.entries(${JSON.stringify(PALETTE_CSS_VARS)}).forEach(([key, name]) =>
-        document.documentElement.style.setProperty(name, palette[key]));
+const PALETTE_REPAINT = `function repaint(vars) {
+      Object.entries(vars).forEach(([name, value]) => document.documentElement.style.setProperty(name, value));
       window.dispatchEvent(new Event('resize'));
     }`;
 
@@ -41,7 +39,7 @@ export function debugLinkScript(): string {
     render(${initial});
     window.addEventListener('message', event => {
       if (event.data.type === 'profilerVariable') render(event.data.variable);
-      if (event.data.type === 'profilerPalette') repaint(event.data.palette);
+      if (event.data.type === 'profilerPalette') repaint(event.data.vars);
     });
     document.getElementById('debug-variable-watch').onclick = () => api().postMessage({type:'profileWatch'});
     document.getElementById('debug-variable-retainers').onclick = () => api().postMessage({type:'profileRetainers'});

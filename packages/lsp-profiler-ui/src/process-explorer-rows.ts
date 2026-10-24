@@ -187,50 +187,59 @@ export class ProcessTreeItem extends vscode.TreeItem {
     activeDebuggeePid?: number,
     runtime: RowRuntime = { directMemory: false, name: process.runtime, sourceEntries: false },
   ) {
-    const scriptName = process.script !== null ? basename(process.script) : undefined;
-    const base = scriptName !== undefined ? `${process.name} — ${scriptName}` : process.name;
-    super(
-      process.debuggable ? base : `${BLOCKED_MARK}${base}`,
-      vscode.TreeItemCollapsibleState.None,
-    );
-
-    // Stable identity across the panel's 2s auto-refresh: without it VS Code
-    // can fail to map an inline-button click back to a (recreated) element and
-    // invokes the command with no argument (#79).
+    super(rowLabel(process), vscode.TreeItemCollapsibleState.None);
+    // Stable identity across the 2s auto-refresh, or VS Code can fail to map an
+    // inline-button click to a recreated element and pass no argument (#79).
     this.id = `process:${process.pid}`;
-
-    // The row currently being CPU-profiled gets a distinct look + contextValue
-    // so package.json swaps its inline Profile button for a Stop button
-    // ([PROF-UI-PROCESSES]).
-    const profilingThis = activeProfilingPid !== undefined && activeProfilingPid === process.pid;
-    // A courier runtime can only track the active debuggee (its heap is read
-    // through the DAP courier — [PROF-UI-MEMORY]); a direct runtime reads any
-    // attachable heap ([PROF-UI-CAPABILITIES]). Trackable rows get the
-    // contextValue that reveals the inline Track Memory action, hidden
-    // everywhere else so the action is never offered where it would refuse.
-    const tracksMemory = runtime.memory !== false;
-    const memoryTrackable = tracksMemory && ((activeDebuggeePid !== undefined && activeDebuggeePid === process.pid) || (runtime.directMemory && process.debuggable));
+    const { profilingThis, tracksMemory, memoryTrackable } = rowState(process, runtime, activeProfilingPid, activeDebuggeePid);
     this.description = rowDescription(process, profilingThis);
     this.tooltip = rowTooltip(process, runtime.name, profilingThis, tracksMemory && !memoryTrackable);
     this.iconPath = processIcon(process, profilingThis);
     this.contextValue = rowContextValue(process, profilingThis, memoryTrackable);
-    // The FileDecorationProvider keys off this synthetic URI to colour the whole
-    // label green (workspace) or grey (non-debuggable) — [PROF-UI-PROCESSES].
+    // The decoration provider colours the label from this URI ([PROF-UI-PROCESSES]).
     this.resourceUri = processResourceUri(process);
-
-    // Clicking opens the entry only when the runtime says it is source the
-    // editor can show — never a native binary or an assembly ([PROF-UI-CAPABILITIES]).
-    if (process.script !== null && runtime.sourceEntries) {
-      this.command = {
-        command: "vscode.open",
-        title: "Reveal Script",
-        arguments: [vscode.Uri.file(process.script)],
-      };
-    }
+    this.command = entryCommand(process, runtime);
   }
 }
 
-/** Scheme of the synthetic per-row URI the decoration provider colours. */
+/** The row's label: name and entry script, 🚫-prefixed when it cannot be profiled. */
+function rowLabel(process: ProcessInfo): string {
+  const base = process.script !== null ? `${process.name} — ${basename(process.script)}` : process.name;
+  return process.debuggable ? base : `${BLOCKED_MARK}${base}`;
+}
+
+/** What a row is doing and offers. */
+interface RowState {
+  /** Being CPU-profiled: package.json swaps its inline Profile button for Stop ([PROF-UI-PROCESSES]). */
+  readonly profilingThis: boolean;
+  readonly tracksMemory: boolean;
+  readonly memoryTrackable: boolean;
+}
+
+/**
+ * A courier runtime can only track the active debuggee (its heap is read
+ * through the DAP courier — [PROF-UI-MEMORY]); a direct runtime reads any
+ * attachable heap ([PROF-UI-CAPABILITIES]). Only a trackable row reveals the
+ * inline Track Memory action, so the action is never offered where it would refuse.
+ */
+function rowState(process: ProcessInfo, runtime: RowRuntime, activeProfilingPid?: number, activeDebuggeePid?: number): RowState {
+  const tracksMemory = runtime.memory !== false;
+  const debuggee = activeDebuggeePid !== undefined && activeDebuggeePid === process.pid;
+  return {
+    profilingThis: activeProfilingPid !== undefined && activeProfilingPid === process.pid,
+    tracksMemory,
+    memoryTrackable: tracksMemory && (debuggee || (runtime.directMemory && process.debuggable)),
+  };
+}
+
+/**
+ * Clicking opens the entry only when the runtime says it is source the editor
+ * can show — never a native binary or an assembly ([PROF-UI-CAPABILITIES]).
+ */
+function entryCommand(process: ProcessInfo, runtime: RowRuntime): vscode.Command | undefined {
+  if (process.script === null || !runtime.sourceEntries) { return undefined; }
+  return { command: "vscode.open", title: "Reveal Script", arguments: [vscode.Uri.file(process.script)] };
+}
 
 /** A synthetic URI encoding the row's workspace + debuggability for decoration. */
 function processResourceUri(process: ProcessInfo): vscode.Uri {
@@ -269,6 +278,12 @@ function rowContextValue(process: ProcessInfo, profilingThis: boolean, memoryTra
 
 /** Multi-line hover tooltip surfacing every resolved detail for a process row. */
 function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: boolean, memoryNeedsLaunch: boolean): string {
+  return [...rowFacts(process, runtimeName), ...rowNotices(process, profilingThis, memoryNeedsLaunch)]
+    .filter(Boolean).join("\n");
+}
+
+/** The process as resolved: identity, runtime, load and owner. */
+function rowFacts(process: ProcessInfo, runtimeName: string): string[] {
   return [
     `${process.name} (PID ${process.pid})`,
     process.interpreterPath !== null ? `Executable: ${process.interpreterPath}` : "",
@@ -278,22 +293,26 @@ function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: bo
     `Runtime: ${formatRuntime(process.runtimeSecs)}`,
     process.user !== null ? `User: ${process.user}` : "",
     process.launcher !== null ? `Launcher: ${process.launcher}` : "",
+  ];
+}
+
+/**
+ * What the profiler can do with the process. An external process is profilable
+ * only with elevation. A courier runtime tracks memory only on a process the
+ * host launched ([PROF-UI-MEMORY]), so elsewhere the row points at the
+ * current-file launch; a runtime with no memory backend suggests nothing
+ * ([PROF-UI-CAPABILITIES]).
+ */
+function rowNotices(process: ProcessInfo, profilingThis: boolean, memoryNeedsLaunch: boolean): string[] {
+  return [
     process.inWorkspace ? "📁 Workspace process" : "",
     profilingThis ? `🔥 ${brand()} is profiling this process — click Stop to finish` : "",
-    !process.debuggable && process.undebuggableReason !== null
-      ? `🚫 Can't profile — ${process.undebuggableReason}`
-      : "",
-    // An external process is profilable only with elevation.
-    process.debuggable && process.requiresElevation
-      ? "🔒 Profiling this process will prompt for elevation"
-      : "",
-    // A courier runtime tracks memory only on a process the host launched
-    // ([PROF-UI-MEMORY]); elsewhere point at the current-file launch. A runtime
-    // with no memory backend suggests nothing ([PROF-UI-CAPABILITIES]).
+    !process.debuggable && process.undebuggableReason !== null ? `🚫 Can't profile — ${process.undebuggableReason}` : "",
+    process.debuggable && process.requiresElevation ? "🔒 Profiling this process will prompt for elevation" : "",
     process.debuggable && memoryNeedsLaunch
       ? `🧠 Memory tracking needs the process under ${brand()} — use “Run & Track Memory (Current File)”`
       : "",
-  ].filter(Boolean).join("\n");
+  ];
 }
 
 /**

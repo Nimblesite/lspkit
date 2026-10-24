@@ -24,26 +24,34 @@ function buildDashboardHeadCss(): string {
   return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}
     body { padding: 16px; overflow-y: auto; }
     h1 .accent { color: var(--prof-mem-critical); }
-    .card .value.purple { color: var(--prof-mem-critical); }
-    ${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}${buildDashboardCss()}`;
+    .card .value.mem { color: var(--prof-mem-critical); }
+    ${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}${DASHBOARD_LAYOUT_CSS}${DASHBOARD_ACCENT_CSS}`;
 }
 
-function buildDashboardBodyHtml(hasHeapProfile: boolean): string {
-  // The dashboard is the landing view; the raw V8 `.heapprofile` opens on
-  // demand rather than by default ([PROF-CPU-START]) — in the built-in viewer
-  // or in speedscope.app ([PROF-UI-WEBVIEW]).
-  const heapProfileButtons = hasHeapProfile
+/**
+ * The raw V8 `.heapprofile` opens on demand rather than by default
+ * ([PROF-CPU-START]): in the built-in viewer or in speedscope.app ([PROF-UI-WEBVIEW]).
+ */
+function heapProfileButtonsHtml(hasHeapProfile: boolean): string {
+  return hasHeapProfile
     ? `
     <button class="toggle-btn" id="btn-open-heapprofile" title="Open the raw .heapprofile in the built-in trace viewer">Open Heap Profile in VS Code Viewer</button>
     <button class="toggle-btn" id="btn-open-speedscope" title="Open speedscope.app with the heap profile loaded automatically">Open in Speedscope (external)</button>`
     : "";
+}
+
+function buildDashboardBodyHtml(hasHeapProfile: boolean): string {
   return `
   ${brandHeading(brand(), "MEMORY")}
   <div class="toggle-row">
     <button class="toggle-btn" id="btn-take-snapshot">Take Snapshot</button>
-    <button class="toggle-btn" id="btn-compare">Compare Snapshots</button>${heapProfileButtons}
+    <button class="toggle-btn" id="btn-compare">Compare Snapshots</button>${heapProfileButtonsHtml(hasHeapProfile)}
   </div>
-  ${buildSummaryCardsHtml()}
+  ${SUMMARY_CARDS_HTML}${DASHBOARD_SECTIONS_HTML}`;
+}
+
+/** The timeline, the heat mode toggle, the allocation table and the leak list. */
+const DASHBOARD_SECTIONS_HTML = `
   <h2>Memory Timeline</h2>
   <div class="timeline-container">
     <canvas class="timeline-canvas" id="timeline-canvas"></canvas>
@@ -51,8 +59,8 @@ function buildDashboardBodyHtml(hasHeapProfile: boolean): string {
   </div>
   <h2>Heat Map Mode</h2>
   <div class="toggle-row">
-    <button class="toggle-btn active-mem" id="btn-mem">Memory (purple)</button>
-    <button class="toggle-btn" id="btn-cpu">CPU (orange)</button>
+    <button class="toggle-btn active-mem" id="btn-mem">Memory</button>
+    <button class="toggle-btn" id="btn-cpu">CPU</button>
   </div>
   <h2>Top Allocations</h2>
   <table class="data-table">
@@ -63,45 +71,47 @@ function buildDashboardBodyHtml(hasHeapProfile: boolean): string {
     <h2>Suspected Leaks</h2>
     <div id="leak-list"></div>
   </div>`;
-}
 
 function buildDashboardScriptTag(
   snapshot: MemoryDashboardSnapshot,
   diff?: MemoryDiffData,
 ): string {
-  // Allocation paths and leak reasons come from the profiled program — embed
-  // them so they can never close the inline <script> ([PROF-UI-WEBVIEW]).
-  const allocJson = embedJson(snapshot.topAllocations);
-  const timelineJson = embedJson(snapshot.timeline);
-  const leaksJson = embedJson(diff?.suspectedLeaks ?? []);
-  const gcCountsJson = embedJson(snapshot.gcCounts);
-  const heapProfileJson = embedJson(snapshot.heapProfilePath);
   return `
     const vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
-    const allocations = ${allocJson};
-    const timeline = ${timelineJson};
-    const leaks = ${leaksJson};
-    const gcCounts = ${gcCountsJson};
-    const generationSizes = ${embedJson(snapshot.generationSizes ?? [])};
-    const heapProfileFile = ${heapProfileJson};
-    const currentMemory = ${embedJson(snapshot.currentMemory)};
-    const peakMemory = ${embedJson(snapshot.peakMemory)};
-    const gcObjects = ${embedJson(snapshot.gcObjects)};
+    ${dashboardDataScript(snapshot, diff)}
     ${PROFILER_JS_UTILS}
-    ${buildSummaryScript()}
-    ${buildTimelineScript()}
-    ${buildToggleScript()}
-    ${buildActionsScript()}
-    ${buildAllocScript()}
-    ${buildLeakScript()}
+    ${SUMMARY_SCRIPT}
+    ${TIMELINE_SCRIPT}
+    ${TOGGLE_SCRIPT}
+    ${ACTIONS_SCRIPT}
+    ${ALLOC_SCRIPT}
+    ${LEAK_SCRIPT}
     renderTimeline(); renderAllocs(); renderLeaks();
     window.addEventListener('resize',()=>{renderTimeline();});`;
 }
 
+/**
+ * The snapshot and diff as script constants. Allocation paths and leak reasons
+ * come from the profiled program, so they are embedded such that they can never
+ * close the inline <script> ([PROF-UI-WEBVIEW]).
+ */
+function dashboardDataScript(snapshot: MemoryDashboardSnapshot, diff?: MemoryDiffData): string {
+  return `
+    const allocations = ${embedJson(snapshot.topAllocations)};
+    const timeline = ${embedJson(snapshot.timeline)};
+    const leaks = ${embedJson(diff?.suspectedLeaks ?? [])};
+    const gcCounts = ${embedJson(snapshot.gcCounts)};
+    const generationSizes = ${embedJson(snapshot.generationSizes ?? [])};
+    const heapProfileFile = ${embedJson(snapshot.heapProfilePath)};
+    const currentMemory = ${embedJson(snapshot.currentMemory)};
+    const peakMemory = ${embedJson(snapshot.peakMemory)};
+    const gcObjects = ${embedJson(snapshot.gcObjects)};`;
+}
+
 // ── CSS fragments ─────────────────────────────────────────────────────────
 
-function buildDashboardCss(): string {
-  return `
+/** The dashboard's layout: timeline, toggles, the allocation table and leak rows. */
+const DASHBOARD_LAYOUT_CSS = `
     .timeline-container { background:var(--prof-surface); border:1px solid var(--prof-border);
       border-radius:8px; padding:12px; margin-bottom:20px; position:relative; }
     .timeline-canvas { width:100%; height:200px; display:block; }
@@ -116,6 +126,8 @@ function buildDashboardCss(): string {
     .data-table th:nth-child(3) { width:80px; }
     .data-table th:last-child { width:160px; }
     .data-table td:nth-child(2), .data-table td:nth-child(3) { white-space:nowrap; }
+    .data-table td.alloc-site { color:var(--prof-text-secondary); font-size:12px; }
+    .data-table td.alloc-size { font-weight:500; }
     @media (max-width:600px) {
       .data-table th:last-child, .data-table td:last-child { display:none; }
     }
@@ -124,45 +136,46 @@ function buildDashboardCss(): string {
       border-radius:6px; padding:6px 14px; color:var(--prof-text); font-size:12px;
       font-family:'Space Grotesk',-apple-system,sans-serif; cursor:pointer;
       transition:border-color 120ms ease, color 120ms ease; }
-    .toggle-btn:hover { border-color:var(--prof-mem-hot); color:var(--prof-mem-hot); }
-    .toggle-btn.active-mem { border-color:var(--prof-mem-critical); color:var(--prof-mem-critical); }
-    .toggle-btn.active-cpu { border-color:var(--prof-critical); color:var(--prof-critical); }
-    .bar.mem-critical { background:var(--prof-mem-critical); }
-    .bar.mem-hot { background:var(--prof-mem-hot); }
-    .bar.mem-warm { background:#8b5cf6; }
-    .bar.mem-base { background:#7c3aed; }
-    .bar.critical { background:var(--prof-critical); }
-    .bar.hot { background:var(--prof-hot); }
-    .bar.warm { background:var(--prof-warm); }
-    .bar.cool { background:var(--prof-cool); }
     .leak-section { margin-top:20px; }
     .leak-row { display:flex; align-items:center; gap:10px; padding:10px 12px;
       background:var(--prof-surface); border:1px solid var(--prof-border);
       border-radius:6px; margin-bottom:8px; cursor:pointer;
       transition:border-color 120ms ease; }
+    .leak-info { flex:1; font-size:13px; font-family:'JetBrains Mono',monospace; }
+    .leak-info .leak-file { color:var(--prof-text-secondary); font-size:12px; }
+    .leak-info .leak-reason { font-family:'Space Grotesk',-apple-system,sans-serif;
+      font-size:11px; color:var(--prof-text-secondary); margin-top:2px; }
+    .empty-state { color:var(--prof-text-secondary); font-size:13px;
+      padding:16px; text-align:center; }`;
+
+/** Every accent the dashboard draws, from the host palette ([PROF-UI-PALETTE]). */
+const DASHBOARD_ACCENT_CSS = `
+    .toggle-btn:hover { border-color:var(--prof-mem-hot); color:var(--prof-mem-hot); }
+    .toggle-btn.active-mem { border-color:var(--prof-mem-critical); color:var(--prof-mem-critical); }
+    .toggle-btn.active-cpu { border-color:var(--prof-critical); color:var(--prof-critical); }
+    .bar.mem-critical { background:var(--prof-mem-critical); }
+    .bar.mem-hot { background:var(--prof-mem-hot); }
+    .bar.mem-warm { background:var(--prof-mem-warm); }
+    .bar.mem-base { background:var(--prof-mem-cool); }
+    .bar.critical { background:var(--prof-critical); }
+    .bar.hot { background:var(--prof-hot); }
+    .bar.warm { background:var(--prof-warm); }
+    .bar.cool { background:var(--prof-cool); }
     .leak-row:hover { border-color:var(--prof-mem-leak); }
     .badge { font-size:10px; font-weight:600; text-transform:uppercase;
       letter-spacing:0.06em; padding:2px 8px; border-radius:4px; flex-shrink:0; }
     .badge.definite { background:color-mix(in srgb, var(--prof-mem-leak) 20%, transparent); color:var(--prof-mem-leak); border:1px solid var(--prof-mem-leak); }
     .badge.high { background:color-mix(in srgb, var(--prof-mem-leak) 10%, transparent); color:var(--prof-mem-leak); border:1px dashed var(--prof-mem-leak); }
     .badge.medium { background:color-mix(in srgb, var(--prof-warm) 15%, transparent); color:var(--prof-warm); border:1px solid var(--prof-warm); }
-    .badge.low { background:rgba(136,146,164,0.15); color:#8892a4; border:1px solid #8892a4; }
-    .leak-info { flex:1; font-size:13px; font-family:'JetBrains Mono',monospace; }
-    .leak-info .leak-file { color:var(--prof-text-secondary); font-size:12px; }
-    .leak-info .leak-growth { color:var(--prof-mem-leak); font-weight:500; }
-    .leak-info .leak-reason { font-family:'Space Grotesk',-apple-system,sans-serif;
-      font-size:11px; color:var(--prof-text-secondary); margin-top:2px; }
-    .empty-state { color:var(--prof-text-secondary); font-size:13px;
-      padding:16px; text-align:center; }`;
-}
+    .badge.low { background:color-mix(in srgb, var(--prof-text-secondary) 15%, transparent); color:var(--prof-text-secondary); border:1px solid var(--prof-text-secondary); }
+    .leak-info .leak-growth { color:var(--prof-mem-leak); font-weight:500; }`;
 
-function buildSummaryCardsHtml(): string {
-  return `
+const SUMMARY_CARDS_HTML = `
   <div class="summary-cards">
     <div class="card"><div class="label">Current Memory</div>
-      <div class="value purple" id="current-mem">0</div></div>
+      <div class="value mem" id="current-mem">0</div></div>
     <div class="card"><div class="label">Peak Memory</div>
-      <div class="value purple" id="peak-mem">0</div></div>
+      <div class="value mem" id="peak-mem">0</div></div>
     <div class="card"><div class="label">GC Objects</div>
       <div class="value" id="gc-objects">0</div></div>
     <div class="card"><div class="label">GC Counts</div>
@@ -170,26 +183,19 @@ function buildSummaryCardsHtml(): string {
     <div class="card" id="generation-card" hidden><div class="label">Generation sizes</div>
       <div class="value" id="generation-sizes"></div></div>
   </div>`;
-}
 
 // ── Dashboard script fragments ────────────────────────────────────────────
 
-function buildSummaryScript(): string {
-  return `
+const SUMMARY_SCRIPT = `
     document.getElementById('current-mem').textContent = formatBytes(currentMemory);
     document.getElementById('peak-mem').textContent = formatBytes(peakMemory);
     document.getElementById('gc-objects').textContent = gcObjects>=1000?(gcObjects/1000).toFixed(1)+'K':String(gcObjects);
     document.getElementById('generation-card').hidden = generationSizes.length === 0;
     document.getElementById('generation-sizes').textContent = generationSizes.map(region => region.name + ': ' + formatBytes(region.size)).join('\\n');
     document.getElementById('gc-counts').textContent = gcCounts.length>0?gcCounts.join(' / '):'\\u2014';`;
-}
 
-function buildTimelineScript(): string {
-  return [buildTimelineSetupScript(), buildTimelineDrawScript(), buildTimelineCrosshairScript()].join("\n");
-}
 
-function buildTimelineSetupScript(): string {
-  return `
+const TIMELINE_SETUP_SCRIPT = `
     const tlCanvas = document.getElementById('timeline-canvas');
     const tlCtx = tlCanvas.getContext('2d');
     const chLabel = document.getElementById('crosshair-label');
@@ -201,10 +207,8 @@ function buildTimelineSetupScript(): string {
         tlCtx.bezierCurveTo((px+cx)/2,py,(px+cx)/2,cy,cx,cy);
       }
     }`;
-}
 
-function buildTimelineDrawScript(): string {
-  return `
+const TIMELINE_DRAW_SCRIPT = `
     function renderTimeline() {
       const ctr=tlCanvas.parentElement, w=ctr.clientWidth-24, h=200;
       tlCanvas.width=w*devicePixelRatio; tlCanvas.height=h*devicePixelRatio;
@@ -262,10 +266,8 @@ function buildTimelineDrawScript(): string {
       if(gc>=timeline.length-1){tlCtx.fillStyle=cssVar('--prof-mem-leak');tlCtx.font='600 11px "Space Grotesk",-apple-system,sans-serif';
         tlCtx.textAlign='right';tlCtx.textBaseline='top';tlCtx.fillText('STEADY GROWTH \\u2014 possible leak',pL+pW,pT+4);}
     }`;
-}
 
-function buildTimelineCrosshairScript(): string {
-  return `
+const TIMELINE_CROSSHAIR_SCRIPT = `
     tlCanvas.addEventListener('mousemove',(e)=>{
       const g=tlCanvas._geo;if(!g||timeline.length<2)return;
       const r=tlCanvas.getBoundingClientRect(),mx=e.clientX-r.left;
@@ -276,10 +278,8 @@ function buildTimelineCrosshairScript(): string {
       chLabel.textContent=formatBytes(p.currentMemory)+' (peak: '+formatBytes(p.peakMemory)+')';
     });
     tlCanvas.addEventListener('mouseleave',()=>{chLabel.style.display='none';});`;
-}
 
-function buildToggleScript(): string {
-  return `
+const TOGGLE_SCRIPT = `
     let heatMode='memory';
     document.getElementById('btn-mem').addEventListener('click',()=>{
       heatMode='memory';
@@ -293,15 +293,13 @@ function buildToggleScript(): string {
       document.getElementById('btn-mem').className='toggle-btn';
       renderAllocs();
     });`;
-}
 
 /**
  * The action buttons post their command back to the extension — the empty
  * states say "take more snapshots", so the dashboard must let the user do it
  * right there ([PROF-UI-MEMORY], #263).
  */
-function buildActionsScript(): string {
-  return `
+const ACTIONS_SCRIPT = `
     document.getElementById('btn-take-snapshot').addEventListener('click',()=>{
       vscode.postMessage({type:'takeSnapshot'});
     });
@@ -316,10 +314,8 @@ function buildActionsScript(): string {
     if(speedscopeBtn){speedscopeBtn.addEventListener('click',()=>{
       vscode.postMessage({type:'openSpeedscope',file:heapProfileFile});
     });}`;
-}
 
-function buildAllocScript(): string {
-  return `
+const ALLOC_SCRIPT = `
     function memBarCls(sz,mx){const r=sz/Math.max(mx,1);if(r>=.5)return'mem-critical';if(r>=.2)return'mem-hot';if(r>=.05)return'mem-warm';return'mem-base';}
     function cpuBarCls(i,t){const r=(t-i)/t;if(r>=.8)return'critical';if(r>=.5)return'hot';if(r>=.2)return'warm';return'cool';}
     function siteLabel(a){const at=a.file?escapeHtml(basename(a.file))+':'+a.line:'';return a.typeName?escapeHtml(a.typeName)+(at?' · '+at:''):at;}
@@ -332,16 +328,14 @@ function buildAllocScript(): string {
         tr.onclick=()=>vscode.postMessage({type:'navigateToSource',file:a.file,line:a.line});
         const bw=Math.max(4,(a.size/mx)*140);
         const bc=heatMode==='memory'?memBarCls(a.size,mx):cpuBarCls(i,allocations.length);
-        tr.innerHTML='<td style="color:#8892a4;font-size:12px">'+siteLabel(a)+'</td>'
-          +'<td style="font-weight:500">'+formatBytes(a.size)+'</td><td>'+a.count+'</td>'
+        tr.innerHTML='<td class="alloc-site">'+siteLabel(a)+'</td>'
+          +'<td class="alloc-size">'+formatBytes(a.size)+'</td><td>'+a.count+'</td>'
           +'<td class="bar-cell"><div class="bar '+bc+'" style="width:'+bw+'px"></div></td>';
         body.appendChild(tr);
       }
     }`;
-}
 
-function buildLeakScript(): string {
-  return `
+const LEAK_SCRIPT = `
     function renderLeaks(){
       const list=document.getElementById('leak-list');
       if(!leaks.length){list.innerHTML='<div class="empty-state">No suspected leaks detected. Take more snapshots to enable diff analysis.</div>';return;}
@@ -356,4 +350,5 @@ function buildLeakScript(): string {
         list.appendChild(row);
       }
     }`;
-}
+
+const TIMELINE_SCRIPT = [TIMELINE_SETUP_SCRIPT, TIMELINE_DRAW_SCRIPT, TIMELINE_CROSSHAIR_SCRIPT].join("\n");

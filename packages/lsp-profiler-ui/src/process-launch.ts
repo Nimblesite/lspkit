@@ -12,9 +12,10 @@
 import { numberField, rawField } from "./unknown-shape";
 import { cmd, debugType, configSection, brand } from "./ids";
 import * as vscode from "vscode";
-import { startProfilingForPid } from "./profiler";
+import { startProfilingForPid } from "./profiler-attach";
 import { type ProfilerStore as Store } from "./store";
 import { type ProcessInfo } from "./process-explorer";
+import type { LaunchMetric } from "./host";
 
 // ── Per-row actions (#79) ────────────────────────────────────────────────
 
@@ -118,15 +119,16 @@ async function memoryTrackProcess(
     await deps.runCommand(cmd("memoryStart"), pid);
     return;
   }
+  offerMemoryLaunch(pid, deps);
+}
+
+/** A courier runtime tracks only its debuggee: offer the launch that makes `pid`'s program one. */
+function offerMemoryLaunch(pid: number, deps: ProcessRowDeps): void {
   const launch = "Run & Track Memory (Current File)";
-  void vscode.window
-    .showWarningMessage(
-      `${brand()}: Memory tracking needs the target running under the ${brand()} debugger — PID ${pid} is not the active debuggee. Launch the current file with memory tracking instead?`,
-      launch,
-    )
-    .then((choice) => {
-      if (choice === launch) { void deps.runCommand(cmd("trackMemoryCurrentFile")); }
-    });
+  const offer = `${brand()}: Memory tracking needs the target running under the ${brand()} debugger — PID ${pid} is not the active debuggee. Launch the current file with memory tracking instead?`;
+  void vscode.window.showWarningMessage(offer, launch).then((choice) => {
+    if (choice === launch) { void deps.runCommand(cmd("trackMemoryCurrentFile")); }
+  });
 }
 
 /**
@@ -154,7 +156,6 @@ export function createProcessRowActions(
 // See docs/specs/LSP-PROFILER-SPEC.md
 
 /** Which metric a metric-explicit "Run & …" launch tracks (#82). */
-import type { LaunchMetric } from "./host";
 export type { LaunchMetric } from "./host";
 
 /**
@@ -167,34 +168,41 @@ export type { LaunchMetric } from "./host";
  * entry pause and then resumes the program.
  */
 async function profileCurrentFile(store: Store, metric: LaunchMetric): Promise<void> {
-  // While the matching metric is starting or running the launch button is hidden
-  // ([PROF-UI-PROCESSES]); guard the command per metric too so the
-  // palette path can't spawn a second SAME-metric session on top of the active
-  // one — yet a CPU run while memory tracking is live (and vice versa) is fine.
-  const metricBusy = metric === "cpu" ? store.cpuBusy.value : store.memoryBusy.value;
-  if (metricBusy) {
-    const label = metric === "cpu" ? "CPU profile" : "memory tracking session";
-    vscode.window.showWarningMessage(
-      `${brand()}: A ${label} is already active. Stop it before running another.`,
-    );
-    return;
-  }
-  const editor = vscode.window.activeTextEditor;
-  if (editor === undefined || !store.host.languageIds.includes(editor.document.languageId)) {
-    vscode.window.showWarningMessage(`${brand()}: Open a ${store.host.languageIds.join("/")} file to run and profile.`);
-    return;
-  }
-  const file = editor.document.uri;
-  const folder = vscode.workspace.getWorkspaceFolder(file);
+  const file = metricBusy(store, metric) ? undefined : profilableFile(store);
+  if (file === undefined) { return; }
   const configuration = store.host.launchConfig(metric, file.fsPath);
   if (configuration === undefined) {
     vscode.window.showWarningMessage(`${brand()}: Running the current file for profiling is not supported here.`);
     return;
   }
-  const started = await vscode.debug.startDebugging(folder, configuration);
-  if (!started) {
+  if (!(await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(file), configuration))) {
     vscode.window.showErrorMessage(`${brand()}: Could not launch the current file for profiling.`);
   }
+}
+
+/**
+ * While the matching metric is starting or running the launch button is hidden
+ * ([PROF-UI-PROCESSES]); the command is guarded per metric too, so the palette
+ * path can't spawn a second SAME-metric session on top of the active one — yet a
+ * CPU run while memory tracking is live (and vice versa) is fine.
+ */
+function metricBusy(store: Store, metric: LaunchMetric): boolean {
+  const busy = metric === "cpu" ? store.cpuBusy.value : store.memoryBusy.value;
+  if (busy) {
+    const label = metric === "cpu" ? "CPU profile" : "memory tracking session";
+    vscode.window.showWarningMessage(`${brand()}: A ${label} is already active. Stop it before running another.`);
+  }
+  return busy;
+}
+
+/** The active editor's file when it is in one of the host's languages; otherwise say what to open. */
+function profilableFile(store: Store): vscode.Uri | undefined {
+  const editor = vscode.window.activeTextEditor;
+  if (editor === undefined || !store.host.languageIds.includes(editor.document.languageId)) {
+    vscode.window.showWarningMessage(`${brand()}: Open a ${store.host.languageIds.join("/")} file to run and profile.`);
+    return undefined;
+  }
+  return editor.document.uri;
 }
 
 // ── Registration ─────────────────────────────────────────────────────────

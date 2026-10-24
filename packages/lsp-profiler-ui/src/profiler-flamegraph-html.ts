@@ -198,8 +198,8 @@ async function offerProfileResultActions(result: ProfileResult): Promise<void> {
 
 // ── Webview panel ─────────────────────────────────────────────────────────
 
-/** Route a message posted from the results webview. */
-function handleFlamegraphMessage(msg: WebviewMessage): void {
+/** Route a message posted from the results webview; a host that keeps its own results panel routes through it too. */
+export function handleFlamegraphMessage(msg: WebviewMessage): void {
   if (handleSourceNavigation(msg.type === "select" ? { ...msg, type: "navigateToSource" } : msg)) {
     return;
   }

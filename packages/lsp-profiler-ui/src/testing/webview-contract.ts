@@ -375,6 +375,26 @@ suite('Profiler webviews — singleton panel message handler', () => {
         }
         assert.ok(!panel.isOpen(), 'dispose must settle the panel closed');
     });
+
+    test('a posted message that is not a well-formed profiler message never reaches the handler', async function () {
+        this.timeout(30_000);
+        const received: unknown[] = [];
+        const panel = new SingletonWebviewPanel(() => 'lspui.test.malformed', (msg) => {
+            received.push(msg);
+        });
+        const malformed = `[null, 7, 'ready', [], {}, { type: 5 }, { type: 'ready', file: 5 }, { type: 'ready', line: '3' }]`;
+        try {
+            // A webview delivers its posts in order, so once the last one is
+            // in, every malformed post before it has been delivered or dropped.
+            panel.show('probe', buildWebviewDocument({ title: 'malformed probe', css: '', body: '',
+                script: `const api = acquireVsCodeApi(); ${malformed}.forEach((m) => api.postMessage(m));` +
+                    ` api.postMessage({ type: 'ready', file: 'last', line: 3 });` }));
+            await pollUntilResult(async () => received.length, (count) => count >= 1);
+            assert.deepStrictEqual(received, [{ type: 'ready', file: 'last', line: 3 }]);
+        } finally {
+            panel.dispose();
+        }
+    });
 });
 
 // Implements [PROF-UI-DEBUG-LINK]. The same session boundary is tested in each VSIX.

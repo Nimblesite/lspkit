@@ -17,6 +17,7 @@ import { bindPanelPalette } from "./palette-vscode";
 import { bindDebugSelection } from "./debug-selection";
 import { cmd } from "./ids";
 import { paletteCss } from "./palette";
+import { isRecord } from "./unknown-shape";
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
@@ -76,6 +77,13 @@ export interface WebviewMessage {
   readonly type: string;
   readonly file?: string;
   readonly line?: number;
+}
+
+/** A posted value as a profiler message: an object with a string `type`, a string `file` and a numeric `line` when present. */
+export function webviewMessage(raw: unknown): WebviewMessage | undefined {
+  if (!isRecord(raw) || typeof raw.type !== "string") return undefined;
+  const fieldsOk = (raw.file === undefined || typeof raw.file === "string") && (raw.line === undefined || typeof raw.line === "number");
+  return fieldsOk ? (raw as unknown as WebviewMessage) : undefined;
 }
 
 /** Lifecycle options for a singleton editor-area webview. */
@@ -139,37 +147,40 @@ export class SingletonWebviewPanel {
     if (this.panel !== undefined) {
       this.panel.title = title;
       this.panel.reveal(this.options.viewColumn ?? vscode.ViewColumn.Beside);
-    } else {
-      this.panel = vscode.window.createWebviewPanel(
-        this.viewType(),
-        title,
-        this.options.viewColumn ?? vscode.ViewColumn.Beside,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: this.options.retainContextWhenHidden ?? true,
-          enableFindWidget: this.options.enableFindWidget ?? false,
-          localResourceRoots: [],
-        },
-      );
-      bindDebugSelection(this.panel);
-      bindPanelPalette(this.panel);
-      this.panel.onDidDispose(() => {
-        this.panel = undefined;
-        this.visible = false;
-        this.options.onDidDispose?.();
-      });
-      this.visible = this.panel.visible;
-      // Bound once per panel instance — the whole reason this class exists.
-      this.panel.webview.onDidReceiveMessage(this.onMessage);
-      this.panel.onDidChangeViewState((event) => {
-        const becameVisible = event.webviewPanel.visible && !this.visible;
-        this.visible = event.webviewPanel.visible;
-        if (becameVisible) {
-          this.options.onDidReveal?.();
-        }
-      });
     }
-    this.panel.webview.html = html;
+    (this.panel ??= this.create(title)).webview.html = html;
+  }
+
+  private create(title: string): vscode.WebviewPanel {
+    const panel = vscode.window.createWebviewPanel(this.viewType(), title, this.options.viewColumn ?? vscode.ViewColumn.Beside, {
+      enableScripts: true,
+      retainContextWhenHidden: this.options.retainContextWhenHidden ?? true,
+      enableFindWidget: this.options.enableFindWidget ?? false,
+      localResourceRoots: [],
+    });
+    bindDebugSelection(panel);
+    bindPanelPalette(panel);
+    this.visible = panel.visible;
+    this.bindLifecycle(panel);
+    return panel;
+  }
+
+  private bindLifecycle(panel: vscode.WebviewPanel): void {
+    panel.onDidDispose(() => {
+      this.panel = undefined;
+      this.visible = false;
+      this.options.onDidDispose?.();
+    });
+    // Bound once per panel instance — the whole reason this class exists.
+    panel.webview.onDidReceiveMessage((raw: unknown) => {
+      const msg = webviewMessage(raw);
+      if (msg !== undefined) this.onMessage(msg);
+    });
+    panel.onDidChangeViewState((event) => {
+      const becameVisible = event.webviewPanel.visible && !this.visible;
+      this.visible = event.webviewPanel.visible;
+      if (becameVisible) this.options.onDidReveal?.();
+    });
   }
 
   /** Post data to the open panel; false when no panel exists. */

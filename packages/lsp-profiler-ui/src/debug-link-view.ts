@@ -1,5 +1,6 @@
 // Implements [PROF-UI-DEBUG-LINK]. Shared watch context in CPU, memory and retention panels.
 import { selectedProfileVariable } from "./debug-selection";
+import { PALETTE_CSS_VARS } from "./palette";
 export const DEBUG_LINK_BODY = `<section id="debug-variable" hidden aria-label="Debugger variable">
   <strong id="debug-variable-name"></strong><span id="debug-variable-type"></span>
   <pre id="debug-variable-value"></pre><button id="debug-variable-watch">Add to Watch</button>
@@ -13,27 +14,34 @@ export const DEBUG_LINK_CSS = `#debug-variable { border: 1px solid var(--prof-ho
     padding: 6px 10px; border-radius: 4px; margin-right: 8px; cursor: pointer; }
   #debug-variable small { display: block; margin-top: 8px; opacity: .7; }`;
 
+/** Repaint an open panel when the host palette changes; canvases redraw on resize. */
+const PALETTE_REPAINT = `function repaint(palette) {
+      Object.entries(${JSON.stringify(PALETTE_CSS_VARS)}).forEach(([key, name]) =>
+        document.documentElement.style.setProperty(name, palette[key]));
+      window.dispatchEvent(new Event('resize'));
+    }`;
+
+/** Show the selected debugger variable, or hide the section when there is none. */
+const VARIABLE_RENDER = `const text = (id, value) => { document.getElementById(id).textContent = value; };
+    function render(variable) {
+      document.getElementById('debug-variable').hidden = !variable;
+      if (!variable) return;
+      text('debug-variable-name', variable.expression); text('debug-variable-type', variable.type);
+      text('debug-variable-value', variable.value);
+      document.getElementById('debug-variable-retainers').hidden = !variable.canInspectType;
+    }`;
+
+/** The debug-link section's script, starting from the current selection. */
 export function debugLinkScript(): string {
   const initial = JSON.stringify(selectedProfileVariable.value ?? null).split("<").join("\\u003c");
   return `(function () {
     const api = () => globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
-    function render(variable) {
-      document.getElementById('debug-variable').hidden = !variable;
-      if (!variable) return;
-      document.getElementById('debug-variable-name').textContent = variable.expression;
-      document.getElementById('debug-variable-type').textContent = variable.type;
-      document.getElementById('debug-variable-value').textContent = variable.value;
-      document.getElementById('debug-variable-retainers').hidden = !variable.canInspectType;
-    }
+    ${VARIABLE_RENDER}
+    ${PALETTE_REPAINT}
     render(${initial});
     window.addEventListener('message', event => {
       if (event.data.type === 'profilerVariable') render(event.data.variable);
-      if (event.data.type === 'profilerPalette') {
-        const keys = { critical: 'critical', hot: 'hot', warm: 'warm', memory: 'mem-critical',
-          memoryHot: 'mem-hot', leak: 'mem-leak', success: 'success' };
-        Object.entries(keys).forEach(([key, name]) => document.documentElement.style.setProperty('--prof-' + name, event.data.palette[key]));
-        window.dispatchEvent(new Event('resize'));
-      }
+      if (event.data.type === 'profilerPalette') repaint(event.data.palette);
     });
     document.getElementById('debug-variable-watch').onclick = () => api().postMessage({type:'profileWatch'});
     document.getElementById('debug-variable-retainers').onclick = () => api().postMessage({type:'profileRetainers'});

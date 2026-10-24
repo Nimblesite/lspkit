@@ -8,8 +8,12 @@
 // testable and JSON-serializable for embedding in the webview.
 
 import { boundedRects, boundedTimeOrder } from "./flame-time-order";
+import { isRecord } from "./unknown-shape";
+import { frameRanks, hasSourceFile } from "./palette";
 
 export { timeOrderRects } from "./flame-time-order";
+export { byFrameKeyThenIndex, type FrameRank } from "./palette";
+export { searchMatches } from "./flame-script-helpers";
 
 export interface SpeedscopeFrame {
   name: string;
@@ -90,27 +94,26 @@ function isFrame(value: unknown): value is SpeedscopeFrame {
   );
 }
 
-function profileError(
-  p: SpeedscopeProfile,
-  frameCount: number,
-): string | undefined {
-  if (p.type !== "sampled") {
-    return `profile "${p.name}" has unsupported type "${p.type}"`;
-  }
-  if (!Array.isArray(p.samples) || !Array.isArray(p.weights)) {
-    return `profile "${p.name}" is missing samples/weights`;
-  }
-  if (p.samples.length !== p.weights.length) {
-    return `profile "${p.name}" has ${p.samples.length} samples but ${p.weights.length} weights`;
-  }
-  const badStack = p.samples.find(
-    (s) =>
-      !Array.isArray(s) ||
-      s.some((f) => !Number.isInteger(f) || f < 0 || f >= frameCount),
-  );
-  return badStack === undefined
-    ? undefined
-    : `profile "${p.name}" references a frame outside shared.frames`;
+const isWeight = (weight: unknown): boolean =>
+  typeof weight === "number" && Number.isFinite(weight) && weight >= 0;
+
+const isStack = (stack: unknown, frameCount: number): boolean =>
+  Array.isArray(stack) && stack.every((f) => Number.isInteger(f) && f >= 0 && f < frameCount);
+
+/** What is wrong with the profile's type and array shapes, if anything. */
+function shapeError(p: SpeedscopeProfile): string | undefined {
+  if (p.type !== "sampled") return `profile "${p.name}" has unsupported type "${p.type}"`;
+  if (!Array.isArray(p.samples) || !Array.isArray(p.weights)) return `profile "${p.name}" is missing samples/weights`;
+  return p.samples.length === p.weights.length ? undefined
+    : `profile "${p.name}" has ${p.samples.length} samples but ${p.weights.length} weights`;
+}
+
+function profileError(raw: unknown, frameCount: number): string | undefined {
+  if (!isRecord(raw)) return "speedscope file has a profile that is not an object";
+  const p = raw as unknown as SpeedscopeProfile;
+  return shapeError(p)
+    ?? (p.weights.every(isWeight) ? undefined : `profile "${p.name}" has a weight that is not a non-negative number`)
+    ?? (p.samples.every((s) => isStack(s, frameCount)) ? undefined : `profile "${p.name}" references a frame outside shared.frames`);
 }
 
 /** JSON.parse into a Result — shared by both profiler artifact parsers. */
@@ -195,14 +198,8 @@ function emitAggNodes(
 ): void {
   let x = x0;
   for (const node of nodes) {
-    out.push({
-      x0: x * scale,
-      x1: (x + node.total) * scale,
-      depth,
-      frameIdx: node.frameIdx,
-      selfWeight: node.self,
-      totalWeight: node.total,
-    });
+    out.push({ x0: x * scale, x1: (x + node.total) * scale, depth, frameIdx: node.frameIdx,
+      selfWeight: node.self, totalWeight: node.total });
     emitAggNodes(sortedByWeight(node.children), x, depth + 1, scale, out);
     x += node.total;
   }
@@ -230,11 +227,8 @@ export function frameStats(
   profile: SpeedscopeProfile,
   frameCount: number,
 ): FrameStats {
-  const stats: FrameStats = {
-    self: new Array<number>(frameCount).fill(0),
-    total: new Array<number>(frameCount).fill(0),
-    count: new Array<number>(frameCount).fill(0),
-  };
+  const zeros = (): number[] => new Array<number>(frameCount).fill(0);
+  const stats: FrameStats = { self: zeros(), total: zeros(), count: zeros() };
   profile.samples.forEach((stack, i) => {
     const weight = profile.weights[i];
     for (const frameIdx of new Set(stack)) {
@@ -257,7 +251,7 @@ export const triangle = (v: number): number =>
 const RUNTIME_HUE = 215;
 
 /** Deterministic speedscope-style color for the frame ranked `rank` of `n`. */
-export function colorForRank(file: string, rank: number, n: number, isSource = (file: string) => file !== ""): string {
+export function colorForRank(file: string, rank: number, n: number, isSource = hasSourceFile): string {
   const bucket = Math.floor((255 * rank) / Math.max(n, 1));
   const t = bucket / 255;
   const x = triangle(30 * t);
@@ -267,55 +261,10 @@ export function colorForRank(file: string, rank: number, n: number, isSource = (
   return `hsl(${(324 * t).toFixed(1)}, ${(25 + 20 * x).toFixed(1)}%, ${(65 - 15 * x).toFixed(1)}%)`;
 }
 
-/** A frame reduced to what decides its rank: its key, and where it came from. */
-export type FrameRank = { key: string; i: number };
-
-/**
- * The frame ordering policy: by key, then by original index.
- *
- * The index term is not decoration. Two frames can share a file AND a name --
- * one function inlined at two sites, or two runtime frames with no file at all
- * -- and a comparator that answers 0 for those hands their order to whatever
- * the engine does with elements it was told are equal. Rank is what picks a
- * frame's colour, so an order the engine decides is a colour the engine
- * decides, and the same profile stops looking the same twice.
- *
- * Exported because a sort's OUTPUT cannot tell this apart from a comparator
- * with no tie-break at all: `Array.prototype.sort` is required to be stable,
- * so equal elements come back in input order either way. The policy has to be
- * asserted directly or it is not pinned.
- */
-export function byFrameKeyThenIndex(a: FrameRank, b: FrameRank): number {
-  return a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i;
-}
-
 /** Stable per-frame colors: frames ranked by (file+name), ramped over hue. */
-export function frameColors(frames: SpeedscopeFrame[], isSource = (file: string) => file !== ""): string[] {
-  const order = frames
-    .map((frame, i) => ({ key: `${frame.file ?? ""}\u0000${frame.name}`, i }))
-    .sort(byFrameKeyThenIndex);
-  const colors = new Array<string>(frames.length);
-  order.forEach(({ i }, rank) => {
-    colors[i] = colorForRank(frames[i].file ?? "", rank, frames.length, isSource);
-  });
-  return colors;
-}
-
-// --- search ------------------------------------------------------------------------
-
-/** Case-insensitive substring match over frame names → set of frameIdx. */
-export function searchMatches(
-  frames: SpeedscopeFrame[],
-  query: string,
-): Set<number> {
-  const needle = query.trim().toLowerCase();
-  if (needle === "") {
-    return new Set();
-  }
-  const hits = frames.flatMap((frame, i) =>
-    frame.name.toLowerCase().includes(needle) ? [i] : [],
-  );
-  return new Set(hits);
+export function frameColors(frames: SpeedscopeFrame[], isSource = hasSourceFile): string[] {
+  const ranks = frameRanks(frames);
+  return frames.map((frame, i) => colorForRank(frame.file ?? "", ranks[i] ?? i, frames.length, isSource));
 }
 
 // --- assembly ------------------------------------------------------------------------
@@ -345,7 +294,7 @@ function buildFiber(
 }
 
 /** The complete serializable model for one speedscope document. */
-export function buildFlameModel(doc: SpeedscopeFile, isSource = (file: string) => file !== ""): FlameModel {
+export function buildFlameModel(doc: SpeedscopeFile, isSource = hasSourceFile): FlameModel {
   const colors = frameColors(doc.shared.frames, isSource);
   return {
     frames: doc.shared.frames.map((frame, i) => ({

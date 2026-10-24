@@ -2,13 +2,14 @@
 /**
  * Shared CSS and utility functions for profiler webviews.
  *
- * Centralises the brand palette, typography, and common UI component
+ * Centralises the theme variables, typography, and common UI component
  * styles used by the flamegraph, reference graph, and memory dashboard.
  */
 
-// ── Brand palette CSS custom properties ──────────────────────────────────
+// ── Theme CSS custom properties ──────────────────────────────────────────
 //
-// Heat/leak accents are brand-fixed (they read on light and dark), but every
+// Heat, memory, leak and success accents are the host palette, which every
+// document gets from paletteCss ([PROF-UI-PALETTE], profiler-webview.ts). Every
 // surface/text color follows the active VS Code theme via the `--vscode-*`
 // variables the webview host injects — a light-theme user gets a light panel,
 // not a jarring hardcoded dark one. The hex fallbacks (the original brand dark
@@ -16,15 +17,8 @@
 
 export const PROFILER_CSS_VARS = `
     :root {
-      --prof-critical: #e8500a;
-      --prof-hot: #f97316;
-      --prof-warm: #fbbf24;
       --prof-cool: var(--vscode-descriptionForeground, #4a5468);
       --prof-idle: var(--vscode-editorWidget-border, #1a1f2e);
-      --prof-mem-critical: #c084fc;
-      --prof-mem-hot: #a78bfa;
-      --prof-mem-leak: #f87171;
-      --prof-success: #34d399;
       --prof-info: #60a5fa;
       --prof-bg: var(--vscode-editor-background, #0a0c12);
       --prof-surface: var(--vscode-editorWidget-background, #141820);

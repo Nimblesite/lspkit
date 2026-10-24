@@ -18,7 +18,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "build": "npm run compile",
-    "lint": "eslint src/",
+    "lint": "tsc -p ./ --noEmit",
     "test": "vscode-test",
     "test:paths": "mocha --ui tdd out/src/test/suite/editor-path-key.test.js"
   },

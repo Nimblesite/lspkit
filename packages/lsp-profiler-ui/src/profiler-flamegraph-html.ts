@@ -44,12 +44,6 @@ import {
 const OPEN_NATIVE_TRACE = "Open Trace in VS Code Viewer";
 const REVEAL_TRACE = "Reveal Trace File";
 
-/**
- * Largest flame graph SVG embedded inline as a data URI (bytes). Anything
- * bigger still opens externally via the panel button; it is just not inlined.
- */
-
-
 // Implements [PROF-CPU-START]. See docs/specs/LSP-PROFILER-SPEC.md
 /**
  * Whether a completed profile has nothing worth showing — no hot functions and
@@ -303,9 +297,8 @@ export function disposeFlamegraphPanel(): void {
 
 // ── Document assembly ─────────────────────────────────────────────────────
 
-/** Flamegraph-specific CSS on top of the shared profiler design system. */
-function flamegraphCss(): string {
-  return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}
+/** The results panel's layout: fixed-width tables, the sampled view's accents, narrow panels and reduced motion. */
+const FLAMEGRAPH_LAYOUT_CSS = `
     body { padding: 20px; }
     .summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 720px; }
     .card { min-width: 0; padding: 12px; }
@@ -325,7 +318,11 @@ function flamegraphCss(): string {
       .data-table th { padding: 6px 4px; font-size: 10px; }
       .data-table th:last-child, .data-table .bar-cell { display: none; }
     }
-    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }`;
+
+/** Flamegraph-specific CSS on top of the shared profiler design system. */
+function flamegraphCss(): string {
+  return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}${FLAMEGRAPH_LAYOUT_CSS}
     h1 .accent { color: var(--prof-critical); }
     .data-table .pct { font-weight: 500; min-width: 56px; text-align: right; }
     .bar.critical { background: var(--prof-critical); }

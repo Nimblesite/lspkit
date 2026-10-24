@@ -1,4 +1,7 @@
 // Implements [PROF-UI-PALETTE]. Pure, validated host palette shared by every surface.
+// framePaletteColor, paletteFrames and everything they call are embedded in
+// the flame webview by Function.prototype.toString (flame-script.ts), so they
+// stay self-contained declarations that call only each other.
 export interface ProfilerPalette {
   readonly critical: string;
   readonly hot: string;
@@ -15,6 +18,13 @@ export const DEFAULT_PALETTE: ProfilerPalette = {
   critical: "#e8500a", hot: "#f97316", warm: "#fbbf24",
   memory: "#c084fc", memoryHot: "#a78bfa", memoryWarm: "#8b5cf6", memoryCool: "#7c3aed", leak: "#f87171", success: "#34d399",
 };
+
+/** The CSS variable each palette colour sets, in every profiler view and on every live repaint. */
+export const PALETTE_CSS_VARS = {
+  critical: "--prof-critical", hot: "--prof-hot", warm: "--prof-warm", memory: "--prof-mem-critical",
+  memoryHot: "--prof-mem-hot", leak: "--prof-mem-leak", success: "--prof-success",
+} as const;
+
 let readPalette: () => ProfilerPalette = () => DEFAULT_PALETTE;
 
 /** Bind host configuration; each render reads the current palette. */
@@ -30,13 +40,46 @@ export function resolvePalette(base: ProfilerPalette, overrides: unknown): Profi
   })) as unknown as ProfilerPalette;
 }
 
-/** CSS variables have the same names in every profiler view. */
+/** The palette as CSS variables, with the same names in every profiler view. */
 export function paletteCss(palette: ProfilerPalette = profilerPalette()): string {
   const valid = resolvePalette(DEFAULT_PALETTE, palette);
-  return `:root { --prof-critical: ${valid.critical}; --prof-hot: ${valid.hot};
-    --prof-warm: ${valid.warm}; --prof-mem-critical: ${valid.memory};
-    --prof-mem-hot: ${valid.memoryHot}; --prof-mem-leak: ${valid.leak};
-    --prof-success: ${valid.success}; }`;
+  return `:root { ${Object.entries(PALETTE_CSS_VARS).map(([key, name]) => `${name}: ${Reflect.get(valid, key)};`).join(" ")} }`;
+}
+
+/** The source classification a host that supplies none gets: a frame with a file is source. */
+export function hasSourceFile(file: string): boolean {
+  return file !== "";
+}
+
+/** A frame reduced to what decides its rank: its key, and where it came from. */
+export type FrameRank = { key: string; i: number };
+
+/**
+ * The frame ordering policy: by key, then by original index.
+ *
+ * The index term is not decoration. Two frames can share a file AND a name --
+ * one function inlined at two sites, or two runtime frames with no file at all
+ * -- and a comparator that answers 0 for those hands their order to whatever
+ * the engine does with elements it was told are equal. Rank is what picks a
+ * frame's colour, so an order the engine decides is a colour the engine
+ * decides, and the same profile stops looking the same twice.
+ *
+ * Exported because a sort's OUTPUT cannot tell this apart from a comparator
+ * with no tie-break at all: `Array.prototype.sort` is required to be stable,
+ * so equal elements come back in input order either way. The policy has to be
+ * asserted directly or it is not pinned.
+ */
+export function byFrameKeyThenIndex(a: FrameRank, b: FrameRank): number {
+  return a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i;
+}
+
+/** Each frame's rank by (file, name): frame identity, never array order, picks its colour. */
+export function frameRanks(frames: readonly { file?: string; name: string }[]): number[] {
+  const ranks = new Array<number>(frames.length).fill(0);
+  frames.map((frame, i) => ({ key: (frame.file ?? "") + "\u0000" + frame.name, i }))
+    .sort(byFrameKeyThenIndex)
+    .forEach(({ i }, rank) => { ranks[i] = rank; });
+  return ranks;
 }
 
 /** Stable frame ranks choose from the host ramp; unknown frames stay neutral. */
@@ -49,12 +92,9 @@ export function cpuHeatColor(pct: number, palette = profilerPalette()): string {
   return pct >= 20 ? palette.critical : pct >= 10 ? palette.hot : pct >= 5 ? palette.warm : "#88888899";
 }
 
-/** Frame identity determines color, independently of array ordering. */
+/** Every frame coloured from the host ramp by its rank. */
 export function paletteFrames<T extends { file: string; name: string; color: string; source?: boolean }>(frames: T[], palette: ProfilerPalette): T[] {
-  const order = frames.map((frame, index) => ({ frame, index })).sort((a, b) =>
-    a.frame.file < b.frame.file ? -1 : a.frame.file > b.frame.file ? 1 :
-    a.frame.name < b.frame.name ? -1 : a.frame.name > b.frame.name ? 1 : a.index - b.index);
-  const ranks = new Map(order.map(({ index }, rank) => [index, rank]));
+  const ranks = frameRanks(frames);
   return frames.map((frame, index) => ({ ...frame,
-    color: framePaletteColor(ranks.get(index) ?? index, frame.source ?? frame.file !== "", palette) }));
+    color: framePaletteColor(ranks[index] ?? index, frame.source ?? hasSourceFile(frame.file), palette) }));
 }

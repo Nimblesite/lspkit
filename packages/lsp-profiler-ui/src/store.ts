@@ -44,7 +44,7 @@ export interface ProfilerStore extends ProfilerActions, ProcessPanelActions {
   memoryIsDirect(runtime: string): boolean;
   /** False once the server advertised its runtimes and none tracks memory, so no memory action is offered. */
   memoryOffered(): boolean;
-  /** False once the server advertised `runtime` without a memory backend. */
+  /** False once the server advertised its runtimes and `runtime` is not one with a memory backend. */
   tracksMemory(runtime: string): boolean;
   /** The runtime's advertised `display_name`, or its wire id when the server named none. */
   runtimeName(runtime: string): string;
@@ -61,29 +61,37 @@ function advertisedCapabilities(client: LanguageClient | undefined): ProfilerCap
   return isRecord(block) && Array.isArray(block.runtimes) ? (block as unknown as ProfilerCapabilities) : undefined;
 }
 
+type RuntimeQueries = Pick<ProfilerStore, "memoryIsDirect" | "memoryOffered" | "tracksMemory" | "runtimeName" | "sourceEntries">;
+
+/** What the advertised runtimes can do; before the server advertises, nothing is ruled out. */
+function runtimeQueries(capabilities: ReadonlySignal<ProfilerCapabilities | undefined>): RuntimeQueries {
+  const find = (runtime: string) => capabilities.value?.runtimes.find((info) => info.id === runtime);
+  return {
+    memoryIsDirect: (runtime) => find(runtime)?.memory?.mode.kind === "Direct",
+    memoryOffered: () => capabilities.value?.runtimes.some((info) => info.memory !== undefined) ?? true,
+    tracksMemory: (runtime) => capabilities.value === undefined || find(runtime)?.memory !== undefined,
+    runtimeName: (runtime) => find(runtime)?.display_name ?? runtime,
+    sourceEntries: (runtime) => find(runtime)?.source_entries === true,
+  };
+}
+
+/** The host palette under the user's `profiler.palette` overrides, read on every render. */
+function bindHostPalette(host: ProfilerHost): void {
+  configurePalette(() => resolvePalette(host.palette ?? DEFAULT_PALETTE,
+    vscode.workspace.getConfiguration(host.configSection).get("profiler.palette")));
+}
+
 /** Create the profiler's reactive state bound to `host`. Factory, never a singleton. */
 export function createProfilerStore(host: ProfilerHost): ProfilerStore {
   installIds(host);
-  configurePalette(() => resolvePalette(host.palette ?? DEFAULT_PALETTE,
-    vscode.workspace.getConfiguration(host.configSection).get("profiler.palette")));
+  bindHostPalette(host);
   bindLogger(() => host.logger);
   const profiler: Signal<ProfilerSession> = signal(IDLE_PROFILER_SESSION);
   const processes: Signal<ProcessPanelState> = signal(IDLE_PROCESS_PANEL);
   const capabilities = computed(() => advertisedCapabilities(host.client.value));
   return {
     capabilities,
-    memoryIsDirect: (runtime) =>
-      capabilities.value?.runtimes.find((info) => info.id === runtime)?.memory?.mode.kind === "Direct",
-    memoryOffered: () =>
-      capabilities.value?.runtimes.some((info) => info.memory !== undefined) ?? true,
-    tracksMemory: (runtime) => {
-      const known = capabilities.value?.runtimes.find((info) => info.id === runtime);
-      return capabilities.value === undefined || known?.memory !== undefined;
-    },
-    runtimeName: (runtime) =>
-      capabilities.value?.runtimes.find((info) => info.id === runtime)?.display_name ?? runtime,
-    sourceEntries: (runtime) =>
-      capabilities.value?.runtimes.find((info) => info.id === runtime)?.source_entries === true,
+    ...runtimeQueries(capabilities),
     host,
     client: host.client,
     sessionIdToPid: host.sessionIdToPid,

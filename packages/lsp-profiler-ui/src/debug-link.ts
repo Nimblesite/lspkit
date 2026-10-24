@@ -2,8 +2,7 @@
 import * as vscode from "vscode";
 import { cmd } from "./ids";
 import { profileVariable, selectedProfileVariable } from "./debug-selection";
-import { buildWebviewDocument, SingletonWebviewPanel } from "./profiler-webview";
-import { handleSourceNavigation } from "./profiler-webview";
+import { buildWebviewDocument, handleSourceNavigation, SingletonWebviewPanel } from "./profiler-webview";
 import { PROFILER_CSS_VARS, PROFILER_CSS_RESET } from "./profiler-styles";
 import { isRecord } from "./unknown-shape";
 

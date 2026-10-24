@@ -4,12 +4,12 @@
  *
  * After profiling completes, hot lines get colored decorations in the
  * editor gutter and after-line text showing CPU percentage and sample
- * count. Uses the profiler palette:
+ * count. Uses the host palette ([PROF-UI-PALETTE]):
  *
- *   Critical (>20%): #e8500a  — orange
- *   Hot (10-20%):    #f97316  — lighter orange
- *   Warm (5-10%):    #fbbf24  — amber
- *   Cool (1-5%):     #4a5468  — muted slate
+ *   Critical (>20%): critical
+ *   Hot (10-20%):    hot
+ *   Warm (5-10%):    warm
+ *   Cool (1-5%):     #4a5468  — muted slate, in every host
  */
 
 import { profilerPalette } from "./palette";
@@ -110,7 +110,7 @@ export interface AppliedDecoration {
   readonly file: string;
   /** 1-based line the decoration landed on. */
   readonly line: number;
-  /** Palette color used (e.g. `#e8500a` for critical). */
+  /** Palette color used (the host palette's `critical` for a critical line). */
   readonly color: string;
   /** The after-line text shown to the user (bar + % + samples). */
   readonly contentText: string;

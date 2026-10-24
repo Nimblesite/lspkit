@@ -323,6 +323,33 @@ mod tests {
         );
     }
 
+    fn hot(name: &str, samples: i64, self_samples: i64) -> HotFunction {
+        HotFunction {
+            name: name.to_owned(),
+            file: None,
+            line: None,
+            samples,
+            percentage: 0.0,
+            self_samples,
+            self_percentage: 0.0,
+        }
+    }
+
+    // [PROF-CPU-PROGRESS] The live top function is where the time is spent,
+    // never the root every whole stack shares.
+    #[test]
+    fn progress_names_the_function_with_the_most_self_samples() {
+        let functions = [hot("main", 10, 0), hot("spin", 9, 9), hot("helper", 9, 1)];
+        assert_eq!(hottest_by_self(&functions).as_deref(), Some("spin"));
+    }
+
+    #[test]
+    fn progress_breaks_equal_self_samples_by_name() {
+        let functions = [hot("zeta", 4, 4), hot("alpha", 4, 4)];
+        assert_eq!(hottest_by_self(&functions).as_deref(), Some("alpha"));
+        assert_eq!(hottest_by_self(&[]), None);
+    }
+
     #[test]
     fn minted_ids_are_unique_and_prefixed() {
         let ids: std::collections::HashSet<String> =

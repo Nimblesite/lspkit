@@ -143,9 +143,9 @@ function buildDashboardCss(): string {
     .leak-row:hover { border-color:var(--prof-mem-leak); }
     .badge { font-size:10px; font-weight:600; text-transform:uppercase;
       letter-spacing:0.06em; padding:2px 8px; border-radius:4px; flex-shrink:0; }
-    .badge.definite { background:rgba(248,113,113,0.2); color:#f87171; border:1px solid #f87171; }
-    .badge.high { background:rgba(248,113,113,0.1); color:#f87171; border:1px dashed #f87171; }
-    .badge.medium { background:rgba(251,191,36,0.15); color:#fbbf24; border:1px solid #fbbf24; }
+    .badge.definite { background:color-mix(in srgb, var(--prof-mem-leak) 20%, transparent); color:var(--prof-mem-leak); border:1px solid var(--prof-mem-leak); }
+    .badge.high { background:color-mix(in srgb, var(--prof-mem-leak) 10%, transparent); color:var(--prof-mem-leak); border:1px dashed var(--prof-mem-leak); }
+    .badge.medium { background:color-mix(in srgb, var(--prof-warm) 15%, transparent); color:var(--prof-warm); border:1px solid var(--prof-warm); }
     .badge.low { background:rgba(136,146,164,0.15); color:#8892a4; border:1px solid #8892a4; }
     .leak-info { flex:1; font-size:13px; font-family:'JetBrains Mono',monospace; }
     .leak-info .leak-file { color:var(--prof-text-secondary); font-size:12px; }
@@ -243,23 +243,23 @@ function buildTimelineDrawScript(): string {
       tlCtx.lineTo(xOf(timeline[timeline.length-1].timestamp),pT+pH);
       tlCtx.lineTo(xOf(timeline[0].timestamp),pT+pH);tlCtx.closePath();
       const grad=tlCtx.createLinearGradient(0,pT,0,pT+pH);
-      grad.addColorStop(0,'#c084fc30');grad.addColorStop(1,'#c084fc05');
+      const mem=cssVar('--prof-mem-critical');grad.addColorStop(0,mem+'30');grad.addColorStop(1,mem+'05');
       tlCtx.fillStyle=grad;tlCtx.fill();
     }
     function drawTimelineLines(xOf,yOf){
       drawBezierLine(timeline,xOf,yOf,'currentMemory');
-      tlCtx.strokeStyle='#c084fc';tlCtx.lineWidth=2;tlCtx.stroke();
+      tlCtx.strokeStyle=cssVar('--prof-mem-critical');tlCtx.lineWidth=2;tlCtx.stroke();
       tlCtx.beginPath();tlCtx.setLineDash([4,4]);
       for(let i=0;i<timeline.length;i++) tlCtx.lineTo(xOf(timeline[i].timestamp),yOf(timeline[i].peakMemory));
-      tlCtx.strokeStyle='#a78bfa60';tlCtx.lineWidth=1;tlCtx.stroke();tlCtx.setLineDash([]);
+      tlCtx.strokeStyle=cssVar('--prof-mem-hot')+'60';tlCtx.lineWidth=1;tlCtx.stroke();tlCtx.setLineDash([]);
     }
     function drawTimelinePoints(xOf,yOf){
-      for(const p of timeline){tlCtx.beginPath();tlCtx.arc(xOf(p.timestamp),yOf(p.currentMemory),3,0,Math.PI*2);tlCtx.fillStyle='#c084fc';tlCtx.fill();}
+      for(const p of timeline){tlCtx.beginPath();tlCtx.arc(xOf(p.timestamp),yOf(p.currentMemory),3,0,Math.PI*2);tlCtx.fillStyle=cssVar('--prof-mem-critical');tlCtx.fill();}
     }
     function detectLeakGrowth(pL,pW,pT){
       if(timeline.length<3) return;
       let gc=0;for(let i=1;i<timeline.length;i++)if(timeline[i].currentMemory>timeline[i-1].currentMemory)gc++;
-      if(gc>=timeline.length-1){tlCtx.fillStyle='#f87171';tlCtx.font='600 11px "Space Grotesk",-apple-system,sans-serif';
+      if(gc>=timeline.length-1){tlCtx.fillStyle=cssVar('--prof-mem-leak');tlCtx.font='600 11px "Space Grotesk",-apple-system,sans-serif';
         tlCtx.textAlign='right';tlCtx.textBaseline='top';tlCtx.fillText('STEADY GROWTH \\u2014 possible leak',pL+pW,pT+4);}
     }`;
 }

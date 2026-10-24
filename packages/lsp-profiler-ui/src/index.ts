@@ -33,16 +33,21 @@ export interface ProfilerUi {
   dispose(): void;
 }
 
+/** A debugger variable's type retainers, from the memory session tracking that same debug session. */
+function typeRetainers(store: ProfilerStore): (type: string, sessionId: string) => Promise<void> {
+  return async (type, sessionId) => {
+    if (store.profiler.value.memoryDebugSessionId !== sessionId) throw new Error("Track this debug session before inspecting type retainers.");
+    await walkReferences(store, type);
+  };
+}
+
 /** Register the complete profiler UI for `host`. */
 export function registerProfilerUi(context: vscode.ExtensionContext, host: ProfilerHost): ProfilerUi {
   const store = createProfilerStore(host);
   const view = registerProcessesView(context, store);
   const disposables: vscode.Disposable[] = [
     ...registerDebuggeePauseTracking(),
-    ...registerDebugProfilerLink({ debugType: host.debugType, inspectType: async (type, sessionId) => {
-      if (store.profiler.value.memoryDebugSessionId !== sessionId) throw new Error("Track this debug session before inspecting type retainers.");
-      await walkReferences(store, type);
-    } }),
+    ...registerDebugProfilerLink({ debugType: host.debugType, inspectType: typeRetainers(store) }),
     ...registerProfiler(store),
     ...registerMemoryProfiler(store),
     ...registerMemoryAutopilot(store),

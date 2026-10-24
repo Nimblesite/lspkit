@@ -6,13 +6,13 @@ import type { ReadonlySignal } from "@preact/signals-core";
 import type * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 import type { LogSink } from "./logger";
+import type { ProfilerPalette } from "./palette";
 
 /** Which metric a "run the current file" launch collects. */
 export type LaunchMetric = "cpu" | "memory";
 
-import type { ProfilerPalette } from "./palette";
-
 export interface ProfilerHost {
+  /** The host's colours ([PROF-UI-PALETTE]); the original orange/purple when omitted. */
   readonly palette?: ProfilerPalette;
   /** Command/context/view prefix, e.g. `sharplsp`. */
   readonly idPrefix: string;

@@ -4,7 +4,8 @@
 // per frame per sample, which a ten-minute session turned into millions of
 // slabs and a panel that failed with "Invalid string length".
 import * as assert from "node:assert/strict";
-import { buildFlameModel, type RenderRect, type SpeedscopeFile } from "../../flame-model";
+import { buildFlameModel, parseSpeedscope, type RenderRect, type SpeedscopeFile } from "../../flame-model";
+import { coveredSpan } from "../../flame-script-helpers";
 import { FLAME_RECT_BUDGET } from "../../flame-time-order";
 
 /** How many samples level `level` (1-based below the root) holds one frame for: shallow calls last, deep ones change every sample. */
@@ -72,5 +73,42 @@ suite("Flame model — bounded time order [PROF-UI-SAMPLED]", () => {
     assert.equal(fiber.timeOrder.length, slabCount(100, 5), "every slab is kept");
     assert.equal(fiber.timeOrderHidden, 0);
     assert.equal(fiber.leftHeavyHidden, 0, "the aggregated view is small and kept whole");
+  });
+});
+
+/** A one-profile speedscope document whose profile is `profile`, as JSON text. */
+const documentWith = (profile: unknown): string =>
+  JSON.stringify({ shared: { frames: [{ name: "main" }] }, profiles: [profile] });
+
+const PROFILE = { type: "sampled", name: "main", unit: "seconds", startValue: 0, endValue: 1, samples: [[0]] };
+
+suite("Flame model — a malformed export is a classified error [PROF-UI-SAMPLED]", () => {
+  test("a profile that is not an object is refused, never thrown", () => {
+    for (const profile of [null, 7, "sampled"]) {
+      const parsed = parseSpeedscope(documentWith(profile));
+      assert.equal(parsed.ok, false, `${JSON.stringify(profile)} is refused`);
+    }
+  });
+
+  test("a weight that is not a finite, non-negative number is refused", () => {
+    for (const weight of [null, -1, "2", {}]) {
+      const parsed = parseSpeedscope(documentWith({ ...PROFILE, weights: [weight] }));
+      assert.deepEqual(parsed, { ok: false, error: 'profile "main" has a weight that is not a non-negative number' });
+    }
+  });
+
+  test("a well-formed profile still parses", () => {
+    assert.equal(parseSpeedscope(documentWith({ ...PROFILE, weights: [0.5] })).ok, true);
+  });
+});
+
+suite("Flame search — the matched share counts nested matches once [PROF-UI-SAMPLED]", () => {
+  test("a match inside a matched slab adds nothing; disjoint matches add up", () => {
+    assert.equal(coveredSpan([[0, 0.5], [0.125, 0.25], [0.625, 0.875], [0.75, 0.8125]]), 0.75);
+  });
+
+  test("the share is the same whatever order the slabs arrive in", () => {
+    assert.equal(coveredSpan([[0.75, 0.8125], [0.625, 0.875], [0.125, 0.25], [0, 0.5]]), 0.75);
+    assert.equal(coveredSpan([]), 0);
   });
 });

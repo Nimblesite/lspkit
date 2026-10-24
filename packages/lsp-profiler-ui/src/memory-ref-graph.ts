@@ -212,7 +212,7 @@ function buildRefGraphScriptDraw(): string {
         const a = nodeMap.get(edge.from), b = nodeMap.get(edge.to);
         if (!a || !b) continue;
         const isCycleEdge = cycleNodeIds.has(edge.from) && cycleNodeIds.has(edge.to);
-        ctx.strokeStyle = isCycleEdge ? '#f87171' : edgeColor;
+        ctx.strokeStyle = isCycleEdge ? cssVar('--prof-mem-leak') : edgeColor;
         ctx.lineWidth = isCycleEdge ? 2 : 1;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -233,7 +233,7 @@ function buildRefGraphScriptDraw(): string {
 function buildRefGraphScriptNodes(): string {
   return `
       for (const n of nodeMap.values()) {
-        const color = n.isTarget ? '#c084fc' : n.isRoot ? '#60a5fa' : cycleNodeIds.has(n.id) ? '#f87171' : '#8892a4';
+        const color = n.isTarget ? cssVar('--prof-mem-critical') : n.isRoot ? '#60a5fa' : cycleNodeIds.has(n.id) ? cssVar('--prof-mem-leak') : '#8892a4';
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
         ctx.fillStyle = color + '33';

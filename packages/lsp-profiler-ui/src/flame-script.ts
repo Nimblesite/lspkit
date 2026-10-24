@@ -5,19 +5,20 @@
 // the cursor, drag = pan, hover = tooltip + highlight, click = select +
 // postMessage to open the source, double-click = zoom to frame, search dims
 // non-matching frames, Esc clears the search, 0 resets zoom.
-// NOTE: the only interpolations are the flame-script-helpers function sources
-// (type-checked + unit-tested TS, embedded verbatim via toString); the rest
-// is one literal with no backticks or dollar-brace sequences inside.
+// NOTE: the only interpolation is EMBEDDED, the palette and flame-script-helpers
+// function sources (type-checked + unit-tested TS, embedded verbatim via
+// toString); the rest is one literal with no backticks or dollar-brace sequences.
 
-import { framePaletteColor, paletteFrames } from "./palette";
-import { clampViewRange, fitLabelText } from "./flame-script-helpers";
+import { byFrameKeyThenIndex, framePaletteColor, frameRanks, hasSourceFile, paletteFrames } from "./palette";
+import { clampViewRange, coveredSpan, fitLabelText, searchMatches } from "./flame-script-helpers";
+
+/** The type-checked, unit-tested functions the webview runs, as source. */
+const EMBEDDED = [hasSourceFile, byFrameKeyThenIndex, frameRanks, framePaletteColor, paletteFrames,
+  fitLabelText, searchMatches, coveredSpan, clampViewRange].map((fn) => fn.toString()).join("\n");
 
 export const FLAME_SCRIPT = `(function () {
   "use strict";
-  ${framePaletteColor.toString()}
-  ${paletteFrames.toString()}
-  ${fitLabelText.toString()}
-  ${clampViewRange.toString()}
+  ${EMBEDDED}
   var vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi =
     typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : { postMessage: function () {} });
   var data = JSON.parse(document.getElementById("flame-data").textContent);
@@ -88,9 +89,12 @@ export const FLAME_SCRIPT = `(function () {
     return measures[text];
   }
 
+  // Labels are cached per 8px of width and fitted to the narrowest width they
+  // are cached for, so a cached label never overflows its slab.
   function fitLabel(name, avail) {
-    var key = name + "|" + Math.floor(avail / 8);
-    if (!(key in labelCache)) { labelCache[key] = fitLabelText(name, avail, measure); }
+    var bucket = Math.floor(avail / 8);
+    var key = name + "|" + bucket;
+    if (!(key in labelCache)) { labelCache[key] = fitLabelText(name, bucket * 8, measure); }
     return labelCache[key];
   }
 
@@ -260,39 +264,19 @@ export const FLAME_SCRIPT = `(function () {
     render();
   });
 
-  // The matched share of the profile: matched slabs whose ancestors did not
-  // already match, so overlapping frames never double-count (speedscope-style).
+  // The matched share of the profile, each instant counted once however many
+  // nested matches cover it (speedscope-style).
   function matchedTotalPct() {
-    var counted = [];
-    var sum = 0;
-    rowsByDepth().forEach(function (row) {
-      row.forEach(function (r) {
-        if (!matchSet.has(r.frameIdx)) { return; }
-        var mid = (r.x0 + r.x1) / 2;
-        var inside = counted.some(function (c) { return mid >= c[0] && mid <= c[1]; });
-        if (!inside) {
-          counted.push([r.x0, r.x1]);
-          sum += r.x1 - r.x0;
-        }
-      });
-    });
-    return 100 * sum;
+    var slabs = rects().filter(function (r) { return matchSet.has(r.frameIdx); })
+      .map(function (r) { return [r.x0, r.x1]; });
+    return 100 * coveredSpan(slabs);
   }
 
   function applySearch(query) {
-    var needle = query.trim().toLowerCase();
-    if (needle === "") {
-      matchSet = null;
-      matchLabel.textContent = "";
-      render();
-      return;
-    }
-    matchSet = new Set();
-    model.frames.forEach(function (f, i) {
-      if (f.name.toLowerCase().indexOf(needle) !== -1) { matchSet.add(i); }
-    });
-    matchLabel.textContent =
-      matchSet.size + " frames \\u00b7 " + matchedTotalPct().toFixed(1) + "% of total";
+    var hits = searchMatches(model.frames, query);
+    matchSet = query.trim() === "" ? null : hits;
+    matchLabel.textContent = matchSet === null ? ""
+      : matchSet.size + " frames \\u00b7 " + matchedTotalPct().toFixed(1) + "% of total";
     render();
   }
 

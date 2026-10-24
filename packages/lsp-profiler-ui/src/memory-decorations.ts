@@ -2,14 +2,10 @@
 /**
  * Inline memory allocation decorations for memory profiling.
  *
- * After a memory snapshot, hot allocation lines get purple-palette
- * decorations showing allocation size and count. Uses the
- * memory profiler brand palette:
- *
- *   Critical: #c084fc  — purple (high allocation)
- *   Hot:      #a78bfa  — lighter purple
- *   Leak:     #f87171  — red (suspected leak)
- *   Freed:    #34d399  — green (memory freed)
+ * After a memory snapshot, hot allocation lines get decorations showing
+ * allocation size and count, in the host palette's memory ramp (memory,
+ * memoryHot, memoryWarm, memoryCool by size) and its leak colour for a
+ * high-confidence leak ([PROF-UI-PALETTE]).
  */
 
 import { profilerPalette } from "./palette";
@@ -209,18 +205,19 @@ function formatBytes(bytes: number): string {
 }
 
 function memColor(size: number): string {
-  if (size >= MEM_CRITICAL_THRESHOLD) { return profilerPalette().memory; }
-  if (size >= MEM_HOT_THRESHOLD) { return profilerPalette().memoryHot; }
-  if (size >= MEM_WARM_THRESHOLD) { return profilerPalette().memoryWarm ?? profilerPalette().memoryHot; }
-  return profilerPalette().memoryCool ?? profilerPalette().memoryHot;
+  const palette = profilerPalette();
+  if (size >= MEM_CRITICAL_THRESHOLD) { return palette.memory; }
+  if (size >= MEM_HOT_THRESHOLD) { return palette.memoryHot; }
+  if (size >= MEM_WARM_THRESHOLD) { return palette.memoryWarm ?? palette.memoryHot; }
+  return palette.memoryCool ?? palette.memoryHot;
 }
 
 function leakColor(confidence: LeakConfidence): string {
   switch (confidence) {
     case "DEFINITE": return "#ef4444"; // red-500 — definite leak
-    case "HIGH":     return "#f87171"; // red-400 — high confidence
+    case "HIGH":     return profilerPalette().leak; // the host's leak colour — high confidence
     case "MEDIUM":   return "#fb923c"; // orange-400 — medium confidence
-    case "LOW":      return profilerPalette().memoryHot; // purple — low confidence (warmup)
+    case "LOW":      return profilerPalette().memoryHot; // the host's memory colour — low confidence (warmup)
   }
 }
 

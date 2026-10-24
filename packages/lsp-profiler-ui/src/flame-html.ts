@@ -1,5 +1,3 @@
-import { escapeHtml } from './profiler-styles';
-export { escapeHtml } from './profiler-styles';
 // Pure builder for the flame-graph webview document ([PROF-UI-SAMPLED]).
 // Produces the COMPLETE self-contained HTML string: strict CSP with a nonce
 // (no external resources), theme-aware chrome via --vscode-* variables, the
@@ -9,9 +7,11 @@ export { escapeHtml } from './profiler-styles';
 
 import type { FlameModel } from "./flame-model";
 import { FLAME_SCRIPT } from "./flame-script";
+import { paletteCss, paletteFrames, type ProfilerPalette } from "./palette";
+import { escapeHtml } from "./profiler-styles";
 import { formatSummaryHeader, onCpuPct, type ProfileSummary } from "./sample-summary";
 
-import { paletteCss, paletteFrames, type ProfilerPalette } from "./palette";
+export { escapeHtml } from "./profiler-styles";
 
 export interface FlameHtmlInput {
   palette?: ProfilerPalette;

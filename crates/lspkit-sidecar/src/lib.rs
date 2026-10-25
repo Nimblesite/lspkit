@@ -9,6 +9,7 @@
 //! - [`correlator`] — request-ID → response-future routing.
 //! - [`lifecycle`] — spawn / health-ping / exponential-backoff restart.
 
+pub mod cancellation;
 pub mod correlator;
 pub mod inbound;
 pub mod lifecycle;

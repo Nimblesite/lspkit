@@ -41,36 +41,43 @@ pub struct Fixture {
     lines: BufReader<ChildStdout>,
 }
 
+/// Parse the native apphost's existing readiness handshake.
+pub fn ready_pid(lines: &mut BufReader<ChildStdout>) -> u32 {
+    let mut line = String::new();
+    let _ = lines.read_line(&mut line).expect("READY line");
+    line.trim()
+        .strip_prefix("READY ")
+        .expect("READY <pid>")
+        .parse()
+        .expect("pid")
+}
+
+/// The same real built fixture executable serves interactive and short-lived sessions.
+pub fn fixture_executable(name: &str) -> PathBuf {
+    built(
+        &format!("dotnet/fixtures/{name}/bin/Release/net8.0/{name}"),
+        "make dotnet",
+    )
+}
+
 impl Fixture {
     /// Start the fixture `name` and wait for its `READY <pid>` line.
     pub fn start(name: &str) -> Self {
-        let exe = built(
-            &format!("dotnet/fixtures/{name}/bin/Release/net8.0/{name}"),
-            "make dotnet",
-        );
-        let mut child = Command::new(format!("./{name}"))
+        let exe = fixture_executable(name);
+        let mut child = Command::new(&exe)
             .current_dir(exe.parent().expect("fixture directory"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
             .unwrap_or_else(|error| panic!("spawn {name}: {error}"));
-        let stdin = child.stdin.take().expect("fixture stdin");
-        let stdout = child.stdout.take().expect("fixture stdout");
-        let mut lines = BufReader::new(stdout);
-        let mut line = String::new();
-        let _ = lines.read_line(&mut line).expect("READY line");
-        let pid: u32 = line
-            .trim()
-            .strip_prefix("READY ")
-            .expect("READY <pid>")
-            .parse()
-            .expect("pid");
+        let mut lines = BufReader::new(child.stdout.take().expect("fixture stdout"));
+        let pid = ready_pid(&mut lines);
         Self {
-            child,
             pid,
-            stdin: Some(stdin),
+            stdin: Some(child.stdin.take().expect("fixture stdin")),
             lines,
+            child,
         }
     }
 

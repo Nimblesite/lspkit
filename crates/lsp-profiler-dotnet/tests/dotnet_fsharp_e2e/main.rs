@@ -25,6 +25,8 @@
 #[path = "../support/mod.rs"]
 mod support;
 
+#[cfg(target_os = "linux")]
+mod attachment;
 mod cpu;
 mod harness;
 mod memory;

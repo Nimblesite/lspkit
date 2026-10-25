@@ -14,7 +14,7 @@ use tracing::{debug, info};
 use crate::aggregate::{saturating_i64, HotspotConfig, ProfileData};
 use crate::error::ProfilerError;
 use crate::runtime::Runtime;
-use crate::sampler::SamplerHandle;
+use crate::sampler::{SampleBatch, SamplerHandle, SamplerStop};
 use crate::wire::{ProfileProgress, ProfileSessionInfo, StartProfileResult};
 
 /// One active CPU session.
@@ -32,6 +32,38 @@ struct CpuSession {
 }
 
 impl CpuSession {
+    /// Initial recording state for one attached runtime sampler.
+    fn new(
+        runtime: Arc<dyn Runtime>,
+        sampler: SamplerHandle,
+        sample_rate: u64,
+        limit: Option<Duration>,
+    ) -> Self {
+        Self {
+            session_id: mint_id("prof", 0),
+            runtime,
+            started_at: Instant::now(),
+            started_at_iso: rfc3339_now(),
+            data: ProfileData::default(),
+            sampler,
+            sample_rate,
+            include_idle: false,
+            limit,
+        }
+    }
+
+    /// The public start identity, derived from the same session metadata as listings.
+    fn started(&self) -> StartProfileResult {
+        let info = self.info();
+        StartProfileResult {
+            session_id: info.session_id,
+            pid: info.pid,
+            runtime: info.runtime,
+            runtime_version: info.runtime_version,
+            started_at: info.started_at,
+        }
+    }
+
     /// Seconds recorded: the time since start, capped at the requested
     /// duration once the session has ended by itself ([PROF-CPU-SESSIONS]).
     fn recorded_secs(&self) -> f64 {
@@ -51,6 +83,22 @@ impl CpuSession {
     /// Seconds one batch represents when the backend gives no weight.
     fn weight(&self) -> f64 {
         1.0 / f64::from(u32::try_from(self.sample_rate).unwrap_or(u32::MAX).max(1))
+    }
+
+    /// Share the same batch weighting and frame filtering at every sampler barrier.
+    fn collector(&mut self) -> (&mut SamplerHandle, impl FnMut(SampleBatch) + '_) {
+        let (weight, include_idle) = (self.weight(), self.include_idle);
+        let (data, runtime) = (&mut self.data, &self.runtime);
+        (&mut self.sampler, move |batch| {
+            data.ingest(&batch, weight, include_idle, runtime.frame_filter());
+        })
+    }
+
+    /// Finish the producer and ingest every final batch before reporting a stop.
+    async fn finish(&mut self) {
+        let (sampler, collect) = self.collector();
+        sampler.stop(collect).await;
+        self.drain();
     }
 
     /// Drain every pending batch into the aggregate.
@@ -93,6 +141,22 @@ impl CpuSession {
             data: self.data.clone(),
         }
     }
+
+    /// Current progress from this recording's own aggregate.
+    fn progress(&mut self, hotspots: &HotspotConfig) -> ProfileProgress {
+        self.drain();
+        let info = self.info();
+        ProfileProgress {
+            session_id: info.session_id,
+            sample_count: info.sample_count,
+            duration_secs: info.duration_secs,
+            top_function: self
+                .data
+                .hot_functions(hotspots)
+                .first()
+                .map(|hot| hot.name.clone()),
+        }
+    }
 }
 
 /// Everything recorded by a session, ready for reporting.
@@ -116,7 +180,14 @@ pub struct RecordedProfile {
 /// clone can drive the live-progress task.
 #[derive(Clone, Default)]
 pub struct CpuSessionManager {
-    sessions: Arc<Mutex<HashMap<String, CpuSession>>>,
+    sessions: Arc<Mutex<HashMap<String, Arc<SessionEntry>>>>,
+}
+
+/// Stable identity and stop control, independent of the recording's async lock.
+struct SessionEntry {
+    pid: u32,
+    stop: SamplerStop,
+    state: Mutex<Option<CpuSession>>,
 }
 
 impl std::fmt::Debug for CpuSessionManager {
@@ -133,10 +204,10 @@ impl CpuSessionManager {
     /// Returns [`ProfilerError::AlreadyProfiling`].
     pub async fn ensure_free(&self, pid: u32) -> Result<(), ProfilerError> {
         let sessions = self.sessions.lock().await;
-        match sessions.values().find(|s| s.sampler.pid == pid) {
-            Some(existing) => Err(ProfilerError::AlreadyProfiling {
+        match sessions.iter().find(|(_, entry)| entry.pid == pid) {
+            Some((session_id, _)) => Err(ProfilerError::AlreadyProfiling {
                 pid,
-                session_id: existing.session_id.clone(),
+                session_id: session_id.clone(),
             }),
             None => Ok(()),
         }
@@ -155,31 +226,22 @@ impl CpuSessionManager {
         limit: Option<Duration>,
     ) -> Result<StartProfileResult, ProfilerError> {
         self.ensure_free(sampler.pid).await?;
-        let session = CpuSession {
-            session_id: mint_id("prof", 0),
-            runtime,
-            started_at: Instant::now(),
-            started_at_iso: rfc3339_now(),
-            data: ProfileData::default(),
-            sampler,
-            sample_rate,
-            include_idle: false,
-            limit,
-        };
-        let info = session.info();
-        info!(session_id = %info.session_id, pid = info.pid, runtime = %info.runtime, sample_rate, "profiling session started");
-        let _ = self
-            .sessions
-            .lock()
-            .await
-            .insert(info.session_id.clone(), session);
-        Ok(StartProfileResult {
-            session_id: info.session_id,
-            pid: info.pid,
-            runtime: info.runtime,
-            runtime_version: info.runtime_version,
-            started_at: info.started_at,
-        })
+        let session = CpuSession::new(runtime, sampler, sample_rate, limit);
+        let started = session.started();
+        self.register(session).await;
+        info!(session_id = %started.session_id, pid = started.pid, runtime = %started.runtime, sample_rate, "profiling session started");
+        Ok(started)
+    }
+
+    /// Insert the stable identity without holding the registry across recording work.
+    async fn register(&self, session: CpuSession) {
+        let session_id = session.session_id.clone();
+        let entry = Arc::new(SessionEntry {
+            pid: session.sampler.pid,
+            stop: session.sampler.stop_control(),
+            state: Mutex::new(Some(session)),
+        });
+        let _ = self.sessions.lock().await.insert(session_id, entry);
     }
 
     /// Stop a session, wait for its producer's last batch, and return the recording.
@@ -188,23 +250,20 @@ impl CpuSessionManager {
     ///
     /// Returns [`ProfilerError::SessionNotFound`] for an unknown ID.
     pub async fn stop(&self, session_id: &str) -> Result<RecordedProfile, ProfilerError> {
-        let mut session = self
-            .sessions
+        let entry = self.entry(session_id).await?;
+        entry.stop.request();
+        let mut session = entry
+            .state
             .lock()
             .await
-            .remove(session_id)
+            .take()
             .ok_or_else(|| ProfilerError::SessionNotFound(session_id.to_owned()))?;
-        let (weight, include_idle) = (session.weight(), session.include_idle);
-        let (data, runtime) = (&mut session.data, &session.runtime);
-        session
-            .sampler
-            .stop(|batch| data.ingest(&batch, weight, include_idle, runtime.frame_filter()))
-            .await;
-        session.drain();
+        let _ = self.sessions.lock().await.remove(session_id);
+        session.finish().await;
         info!(
             session_id,
             total = session.data.total_samples,
-            "profiling session stopped"
+            "session stopped"
         );
         Ok(session.recorded())
     }
@@ -215,12 +274,25 @@ impl CpuSessionManager {
     ///
     /// Returns [`ProfilerError::SessionNotFound`] for an unknown ID.
     pub async fn snapshot(&self, session_id: &str) -> Result<RecordedProfile, ProfilerError> {
-        let mut sessions = self.sessions.lock().await;
-        let session = sessions
-            .get_mut(session_id)
+        let entry = self.entry(session_id).await?;
+        let mut state = entry.state.lock().await;
+        let session = state
+            .as_mut()
             .ok_or_else(|| ProfilerError::SessionNotFound(session_id.to_owned()))?;
+        let (sampler, collect) = session.collector();
+        sampler.snapshot(collect).await?;
         session.drain();
         Ok(session.recorded())
+    }
+
+    /// Clone under the registry lock, then await only this recording's lock.
+    async fn entry(&self, session_id: &str) -> Result<Arc<SessionEntry>, ProfilerError> {
+        self.sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(Arc::clone)
+            .ok_or_else(|| ProfilerError::SessionNotFound(session_id.to_owned()))
     }
 
     /// Live progress for one session; `None` once it has ended.
@@ -230,45 +302,46 @@ impl CpuSessionManager {
         session_id: &str,
         hotspots: &HotspotConfig,
     ) -> Option<ProfileProgress> {
-        let mut sessions = self.sessions.lock().await;
-        let session = sessions
-            .get_mut(session_id)
-            .filter(|session| !session.ended())?;
-        session.drain();
-        let info = session.info();
-        Some(ProfileProgress {
-            session_id: info.session_id,
-            sample_count: info.sample_count,
-            duration_secs: info.duration_secs,
-            top_function: session
-                .data
-                .hot_functions(hotspots)
-                .first()
-                .map(|hot| hot.name.clone()),
-        })
+        let entry = self.entry(session_id).await.ok()?;
+        let mut state = entry.state.lock().await;
+        let session = state.as_mut().filter(|session| !session.ended())?;
+        Some(session.progress(hotspots))
     }
 
     /// Every active session; one past its duration has ended and is not listed.
     pub async fn list(&self) -> Vec<ProfileSessionInfo> {
-        let mut sessions = self.sessions.lock().await;
-        sessions
-            .values_mut()
-            .filter(|session| !session.ended())
-            .map(|session| {
+        let entries: Vec<_> = self
+            .sessions
+            .lock()
+            .await
+            .values()
+            .map(Arc::clone)
+            .collect();
+        let mut listed = Vec::new();
+        for entry in entries {
+            let mut state = entry.state.lock().await;
+            if let Some(session) = state.as_mut().filter(|session| !session.ended()) {
                 session.drain();
-                session.info()
-            })
-            .collect()
+                listed.push(session.info());
+            }
+        }
+        listed
     }
 
     /// Signal every session to stop. Called on shutdown.
     pub async fn stop_all(&self) {
-        let mut sessions = self.sessions.lock().await;
-        if !sessions.is_empty() {
-            info!(count = sessions.len(), "stopping all profiling sessions");
+        let entries: Vec<_> = self
+            .sessions
+            .lock()
+            .await
+            .drain()
+            .map(|(_, entry)| entry)
+            .collect();
+        if !entries.is_empty() {
+            info!(count = entries.len(), "stopping all profiling sessions");
         }
-        for (_, session) in sessions.drain() {
-            session.sampler.signal_stop();
+        for entry in entries {
+            entry.stop.request();
         }
     }
 }

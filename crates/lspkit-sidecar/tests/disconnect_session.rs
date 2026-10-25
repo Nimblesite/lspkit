@@ -1,118 +1,102 @@
-//! Native framed connections distinguish clean disconnects from truncation.
-//! Implements [LSP-PULL-TRANSPORT] without an in-memory transport or mock backend.
+//! Rendered native disconnect sessions against real compiled programs.
+//! [LSP-PULL-TRANSPORT]: no test invokes the shared reader or a fake backend.
 
-use std::time::Duration;
-
-use lspkit_sidecar::{inbound, DEFAULT_MAX_FRAME};
 use serde_json::{json, Value};
-use tokio::io::AsyncWriteExt;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc::UnboundedReceiver;
 
-/// A real native connection, with independent client and service endpoints.
-async fn native_pair() -> (TcpStream, TcpStream) {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind native service");
-    let address = listener.local_addr().expect("bound service address");
-    let client = TcpStream::connect(address)
-        .await
-        .expect("connect native client");
-    let (service, _) = listener.accept().await.expect("accept native connection");
-    (client, service)
+#[path = "../../../test-support/frame_events.rs"]
+mod frame_events;
+
+/// Inspect an actual captured native stream through the file-input CLI.
+async fn received(bytes: &[u8]) -> Vec<Value> {
+    let fixture = tempfile::TempDir::new().expect("native capture fixture");
+    let path = fixture.path().join("stream.bin");
+    std::fs::write(&path, bytes).expect("write captured native bytes");
+    frame_events::journal(&["--receive", path.to_str().expect("capture path")], &[]).await
 }
 
-/// A real local service writes its wire bytes, then closes its native connection.
-async fn service_stream(bytes: &[u8]) -> inbound::Inbound<Value> {
-    let (client, mut service) = native_pair().await;
-    service
-        .write_all(bytes)
-        .await
-        .expect("write native frame bytes");
-    service
-        .shutdown()
-        .await
-        .expect("close native service output");
-    inbound::spawn(
-        client,
-        DEFAULT_MAX_FRAME,
-        |bytes| decode(&bytes),
-        |envelope| envelope.get("method").is_some(),
+/// A source file parsed by the actual backend produces the wire fixture.
+async fn produced_frame() -> (Vec<u8>, Value) {
+    let fixture = tempfile::TempDir::new().expect("native source fixture");
+    let path = fixture.path().join("valid.json");
+    std::fs::write(&path, b"{\"answer\":42}").expect("real valid source");
+    let request = json!({"id":7,"method":"analyze","params":{"path":path}});
+    let payload = serde_json::to_vec(&request).expect("native request");
+    let length = u32::try_from(payload.len())
+        .expect("small request")
+        .to_le_bytes();
+    let input = [length.as_slice(), payload.as_slice()].concat();
+    let output = frame_events::output(&["--backend"], &input).await;
+    assert!(
+        output.stdout.len() > 5,
+        "actual backend emitted a complete frame"
+    );
+    (
+        output.stdout,
+        json!({"id":7,"result":{"path":path,"diagnostics":[]}}),
     )
 }
 
-/// Decode the actual public wire payload.
-fn decode(bytes: &[u8]) -> Result<Value, String> {
-    serde_json::from_slice(bytes).map_err(|error| error.to_string())
-}
-
-/// Guard a native connection wait without relying on a sleep.
-async fn received<T>(receiver: &mut UnboundedReceiver<T>) -> Option<T> {
-    tokio::time::timeout(Duration::from_secs(5), receiver.recv())
-        .await
-        .expect("native reader settles")
-}
-
-/// A corrupt frame produces one visible failure, then releases both channels.
-async fn assert_truncation(bytes: &[u8]) {
-    let mut stream = service_stream(bytes).await;
-    let failure = received(&mut stream.responses)
-        .await
-        .expect("truncation is an error, not clean EOF");
-    assert!(!failure
-        .expect_err("a partial frame cannot decode successfully")
+/// A corrupt native stream produces one visible error, then releases both streams.
+fn assert_failure(events: &[Value]) {
+    let failures: Vec<_> = events
+        .iter()
+        .filter(|event| event["kind"] == "error")
+        .collect();
+    assert_eq!(failures.len(), 1, "one terminal native read error");
+    assert!(!failures[0]["message"]
+        .as_str()
+        .expect("visible read failure")
         .is_empty());
-    assert_closed(stream).await;
+    frame_events::assert_closed(events, None);
 }
 
-/// Every terminal disconnect releases channels and reader ownership.
-async fn assert_closed(mut stream: inbound::Inbound<Value>) {
+/// A torn prefix or body never becomes a successful response or clean EOF.
+async fn assert_truncation(bytes: &[u8]) {
+    let events = received(bytes).await;
+    assert_failure(&events);
     assert_eq!(
-        received(&mut stream.responses).await,
-        None,
-        "failure is terminal"
+        events.len(),
+        2,
+        "failure followed by terminal ownership release"
     );
-    assert_eq!(
-        received(&mut stream.notifications).await,
-        None,
-        "notification ownership ends"
-    );
-    stream.task.await.expect("reader exits without panicking");
+    assert_eq!(events[0]["kind"], "error");
 }
 
 #[tokio::test]
 async fn native_disconnects_preserve_prefix_and_payload_failures_after_valid_traffic() {
-    let mut clean = service_stream(&[]).await;
-    assert_eq!(
-        received(&mut clean.responses).await,
-        None,
-        "zero-byte EOF is normal"
-    );
-    assert_eq!(received(&mut clean.notifications).await, None);
-    clean.task.await.expect("clean native reader exit");
-    assert_truncation(&[4, 0]).await;
-    assert_truncation(&[4, 0, 0, 0, b'{']).await;
-    valid_then_truncated().await;
+    let empty = frame_events::output(&["--backend"], &[]).await.stdout;
+    assert!(empty.is_empty(), "real backend EOF has no synthetic reply");
+    let clean = received(&empty).await;
+    assert_eq!(clean.len(), 1, "zero-byte EOF is normal");
+    frame_events::assert_closed(&clean, None);
+    let (frame, expected) = produced_frame().await;
+    assert_truncation(frame.get(..2).expect("real torn native prefix")).await;
+    assert_truncation(frame.get(..5).expect("real torn native body")).await;
+    valid_then_truncated(&frame, &expected).await;
 }
 
-/// Earlier valid responses remain ordered even when the following frame is torn.
-async fn valid_then_truncated() {
-    let payload = br#"{"id":7,"result":[]}"#;
-    let length = u32::try_from(payload.len())
-        .expect("small fixture payload")
-        .to_le_bytes();
-    let bytes = [length.as_slice(), payload.as_slice(), &[8, 0, 0, 0, b'{']].concat();
-    let mut stream = service_stream(&bytes).await;
+/// Earlier real responses remain ordered when a following native frame is torn.
+async fn valid_then_truncated(frame: &[u8], expected: &Value) {
+    let bytes = [frame, frame.get(..5).expect("torn second native frame")].concat();
+    let events = received(&bytes).await;
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0]["kind"], "response");
+    assert_eq!(events[0]["envelope"], *expected);
     assert_eq!(
-        received(&mut stream.responses).await,
-        Some(Ok(json!({"id":7,"result":[]})))
+        events[1]["kind"], "error",
+        "valid traffic cannot hide truncation"
     );
-    let failure = received(&mut stream.responses)
-        .await
-        .expect("torn second frame remains visible");
-    assert!(
-        failure.is_err(),
-        "valid traffic cannot hide subsequent truncation"
-    );
-    assert_closed(stream).await;
+    assert_failure(&events);
+}
+
+/// Opening a directory succeeds on Unix, but its first actual read returns EISDIR.
+#[cfg(unix)]
+#[tokio::test]
+async fn native_initial_read_failure_stays_visible() {
+    let directory = tempfile::TempDir::new().expect("real directory input");
+    let source = directory.path().to_str().expect("UTF-8 fixture path");
+    let events = frame_events::journal(&["--receive", source], &[]).await;
+    assert_failure(&events);
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["kind"], "error");
 }

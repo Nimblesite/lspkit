@@ -29,12 +29,11 @@ pub fn uri_to_path(uri: &str) -> Result<PathBuf, UriError> {
         .ok_or_else(|| UriError::UnsupportedScheme(uri.to_owned()))?;
     let trimmed = rest.strip_prefix('/').unwrap_or(rest);
     let decoded = percent_decode(trimmed)?;
-    if cfg!(windows) {
-        let normalized = decoded.replace('/', "\\");
-        Ok(PathBuf::from(normalized))
-    } else {
-        Ok(PathBuf::from(format!("/{decoded}")))
-    }
+    #[cfg(windows)]
+    let native = decoded.replace('/', "\\");
+    #[cfg(not(windows))]
+    let native = format!("/{decoded}");
+    Ok(PathBuf::from(native))
 }
 
 /// Convert a filesystem path to a `file://` URI.
@@ -51,11 +50,15 @@ pub fn path_to_uri(path: &Path) -> Result<String, UriError> {
         .ok_or_else(|| UriError::InvalidPath(path.to_path_buf()))?;
     let normalized = as_str.replace('\\', "/");
     let encoded = percent_encode(&normalized);
-    if normalized.starts_with('/') {
-        Ok(format!("file://{encoded}"))
+    #[cfg(windows)]
+    let prefix = if normalized.starts_with('/') {
+        "file://"
     } else {
-        Ok(format!("file:///{encoded}"))
-    }
+        "file:///"
+    };
+    #[cfg(not(windows))]
+    let prefix = "file://";
+    Ok(format!("{prefix}{encoded}"))
 }
 
 fn percent_decode(input: &str) -> Result<String, UriError> {

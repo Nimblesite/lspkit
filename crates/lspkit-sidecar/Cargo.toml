@@ -26,5 +26,9 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+# The inbound-routing integration drives the real compiled
+# `diagnostic-reference --backend` child over OS stdio, so the test runtime
+# needs process spawning plus framed IO.
+tokio = { workspace = true, features = ["rt", "macros", "process", "io-util"] }
 serde_json.workspace = true
+tempfile = "3"

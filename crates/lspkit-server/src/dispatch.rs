@@ -13,6 +13,14 @@ use tokio_util::sync::CancellationToken;
 
 use crate::jsonrpc::{JsonRpcError, RequestId};
 
+mod cancellation;
+mod interest;
+pub use cancellation::CancellationHandle;
+use interest::RequestControl;
+pub use interest::RequestInterest;
+
+type Cancellations = RwLock<HashMap<RequestId, Arc<RequestControl>>>;
+
 type HandlerFuture = Pin<Box<dyn std::future::Future<Output = HandlerResult> + Send>>;
 type HandlerFn = Arc<dyn Fn(Value, CancellationToken) -> HandlerFuture + Send + Sync>;
 
@@ -45,13 +53,19 @@ pub enum DispatchError {
 /// [LSP-PULL-CANCELLATION]
 struct RegistrationGuard {
     id: RequestId,
-    cancellations: Arc<RwLock<HashMap<RequestId, CancellationToken>>>,
+    control: Arc<RequestControl>,
+    cancellations: Arc<Cancellations>,
 }
 
 impl Drop for RegistrationGuard {
     fn drop(&mut self) {
         if let Ok(mut guard) = self.cancellations.write() {
-            guard.remove(&self.id);
+            if guard
+                .get(&self.id)
+                .is_some_and(|control| Arc::ptr_eq(control, &self.control))
+            {
+                guard.remove(&self.id);
+            }
         }
     }
 }
@@ -60,7 +74,7 @@ impl Drop for RegistrationGuard {
 #[derive(Clone, Default)]
 pub struct Dispatcher {
     handlers: Arc<RwLock<HashMap<String, HandlerFn>>>,
-    cancellations: Arc<RwLock<HashMap<RequestId, CancellationToken>>>,
+    cancellations: Arc<Cancellations>,
 }
 
 impl Dispatcher {
@@ -123,9 +137,10 @@ impl Dispatcher {
         F: FnOnce(CancellationToken) -> Fut + Send + 'static,
         Fut: Future<Output = HandlerResult> + Send + 'static,
     {
-        let (cancel, guard) = self.register_cancellation(id)?;
+        let (control, guard) = self.register_cancellation(id)?;
         Ok(async move {
-            let result = operation(cancel).await;
+            let result = operation(control.cancel.clone()).await;
+            let result = control.result(result);
             drop(guard);
             result
         })
@@ -140,18 +155,18 @@ impl Dispatcher {
     fn register_cancellation(
         &self,
         id: RequestId,
-    ) -> Result<(CancellationToken, RegistrationGuard), DispatchError> {
-        let cancel = CancellationToken::new();
+    ) -> Result<(Arc<RequestControl>, RegistrationGuard), DispatchError> {
         let mut registry = self
             .cancellations
             .write()
             .map_err(|_| DispatchError::RegistrationPoisoned(id.clone()))?;
-        registry.insert(id.clone(), cancel.clone());
+        let control = Arc::clone(registry.entry(id.clone()).or_default());
         let guard = RegistrationGuard {
             id,
+            control: Arc::clone(&control),
             cancellations: Arc::clone(&self.cancellations),
         };
-        Ok((cancel, guard))
+        Ok((control, guard))
     }
 
     /// Dispatch a request. Returns the handler's result.
@@ -185,11 +200,13 @@ impl Dispatcher {
 
     /// Trip the cancellation token for an in-flight request. No-op if unknown.
     pub fn cancel(&self, id: &RequestId) {
-        if let Ok(guard) = self.cancellations.read() {
-            if let Some(token) = guard.get(id) {
-                token.cancel();
-            }
-        }
+        self.cancellation_handle().cancel(id);
+    }
+
+    /// Keep protocol cancellation responsive while foreground handlers are occupied.
+    #[must_use]
+    pub fn cancellation_handle(&self) -> CancellationHandle {
+        CancellationHandle::new(&self.cancellations)
     }
 }
 

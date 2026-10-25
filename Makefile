@@ -49,9 +49,13 @@ build:
 ##       Uses cargo-nextest (stable-compatible fail-fast; default behaviour).
 test:
 	@echo "==> Testing (fail-fast + coverage + threshold)..."
-	rustup component add llvm-tools-preview 2>/dev/null || true
+	rustup component add llvm-tools-preview
 	$(MAKE) _profiler_dotnet
-	cargo llvm-cov nextest --workspace --all-targets --features lspkit-server/pull --locked --lcov --output-path lcov.info
+ifeq ($(OS),Windows_NT)
+	& "$(POSIX_SHELL)" scripts/rust-coverage.sh
+else
+	"$(POSIX_SHELL)" scripts/rust-coverage.sh
+endif
 	$(MAKE) _coverage_check
 # The gate itself must not fail open (missing jq, corrupt JSON, invalid
 # thresholds all have to fail closed). This regression cannot be dropped.
@@ -133,6 +137,10 @@ _profiler_spec_check:
 _coverage_check_test:
 	node scripts/coverage-gate.test.mjs --make "$(MAKE)" --shell "$(POSIX_SHELL)"
 
+# Construct the escaped SF backslash from character codes so Windows argv
+# quoting cannot consume it before awk normalizes native source markers.
+_coverage_check: SHELL := $(POSIX_SHELL)
+_coverage_check: .SHELLFLAGS := -c
 _coverage_check:
 	@if [ ! -f "$(COVERAGE_THRESHOLDS_FILE)" ]; then echo "FAIL: $(COVERAGE_THRESHOLDS_FILE) not found"; exit 1; fi; \
 	if [ ! -f lcov.info ]; then echo "FAIL: lcov.info not found"; exit 1; fi; \
@@ -145,7 +153,7 @@ _coverage_check:
 	for CRATE in $$CRATES; do \
 	  THRESHOLD=$$(jq -r --arg c "$$CRATE" '.per_crate[$$c]' "$(COVERAGE_THRESHOLDS_FILE)" | tr -d '\r') || exit 1; \
 	  if [ -z "$$THRESHOLD" ] || [ "$$THRESHOLD" = "null" ]; then echo "FAIL: $$CRATE — threshold missing in $(COVERAGE_THRESHOLDS_FILE)"; exit 1; fi; \
-	  COV=$$(awk -v crate="$$CRATE" 'BEGIN{lh=0;lf=0;in_block=0} /^SF:/{in_block=(index($$0,"/crates/" crate "/src/")>0)?1:0} in_block&&/^LH:/{sub(/^LH:/,""); lh+=$$0} in_block&&/^LF:/{sub(/^LF:/,""); lf+=$$0} /^end_of_record/{in_block=0} END{printf "%d %d", lh, lf}' lcov.info) || exit 1; \
+	  COV=$$(awk -v crate="$$CRATE" 'BEGIN{lh=0;lf=0;in_block=0} /^SF:/{gsub(sprintf("%c%c",92,92),"/"); sub(/^SF:/,"SF:/"); in_block=(index($$0,"/crates/" crate "/src/")>0)?1:0} in_block&&/^LH:/{sub(/^LH:/,""); lh+=$$0} in_block&&/^LF:/{sub(/^LF:/,""); lf+=$$0} /^end_of_record/{in_block=0} END{printf "%d %d", lh, lf}' lcov.info) || exit 1; \
 	  LH=$${COV% *}; LF=$${COV#* }; \
 	  if [ "$$LF" -eq 0 ]; then echo "FAIL: $$CRATE — no lines in lcov.info"; FAILED=1; continue; fi; \
 	  PCT=$$(awk "BEGIN{printf \"%.2f\", $$LH/$$LF*100}"); \

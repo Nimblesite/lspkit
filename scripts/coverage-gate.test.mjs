@@ -64,10 +64,14 @@ const tempRoot = resolveTempRoot();
 
 // Real LCOV record shape; the SF marker is exactly what the checker's awk
 // accounting matches (`/crates/<crate>/src/`).
-function lcovFor(coverage) {
+function lcovFor(coverage, style = "posix") {
   let text = "";
   for (const [crate, [hit, total]] of coverage) {
-    text += `SF:/lcov-fixture/crates/${crate}/src/lib.rs\nLH:${hit}\nLF:${total}\nend_of_record\n`;
+    const source = style === "windows"
+      ? `E:\\lcov-fixture\\crates\\${crate}\\src\\lib.rs`
+      : style === "relative" ? `crates/${crate}/src/lib.rs`
+      : `/lcov-fixture/crates/${crate}/src/lib.rs`;
+    text += `SF:${source}\nLH:${hit}\nLF:${total}\nend_of_record\n`;
   }
   return text;
 }
@@ -82,7 +86,7 @@ function thresholdsJson(overrides) {
 function runGate(dir, { emptyPath = false } = {}) {
   const env = { ...process.env };
   if (emptyPath) env.PATH = "";
-  const result = spawnSync(makePath, ["-C", dir, "-f", repoMakefile, "_coverage_check", `SHELL=${shellPath}`, ".SHELLFLAGS=-c"], {
+  const result = spawnSync(makePath, ["-C", dir, "-f", repoMakefile, "_coverage_check", `POSIX_SHELL=${shellPath}`], {
     cwd: dir,
     env,
     encoding: "utf8",
@@ -116,11 +120,15 @@ function verdictCrates(output, verdict) {
 const configuredCrates = Object.keys(JSON.parse(readFileSync(join(repoRoot, "coverage-thresholds.json"), "utf8")).per_crate);
 const allAt100 = new Map(configuredCrates.map((crate) => [crate, [2, 2]]));
 
-test("a valid 100% fixture passes and prints every configured crate", () => {
+for (const [name, style] of [
+  ["a valid 100% fixture passes and prints every configured crate", "posix"],
+  ["Windows LCOV paths pass and print every configured crate", "windows"],
+  ["Repo-relative LCOV paths pass and print every configured crate", "relative"],
+]) test(name, () => {
   const gate = withTempGate(
     [
       ["coverage-thresholds.json", thresholdsJson({})],
-      ["lcov.info", lcovFor(allAt100)],
+      ["lcov.info", lcovFor(allAt100, style)],
     ],
     (dir) => runGate(dir),
   );
@@ -172,9 +180,33 @@ test("a missing jq fails closed instead of skipping every crate check", () => {
   assert.doesNotMatch(gate.stdout, /OK:/, "no crate may be reported OK when the gate cannot run");
 });
 
+test("corrupt JSON thresholds fail closed", () => {
+  const gate = withTempGate(
+    [
+      ["coverage-thresholds.json", '{"per_crate":'],
+      ["lcov.info", lcovFor(allAt100)],
+    ],
+    (dir) => runGate(dir),
+  );
+  assert.notEqual(gate.status, 0, `fail-open: exited 0 on corrupt JSON\n${gate.stdout}`);
+  assert.match(gate.stdout, /per_crate must be a nonempty map of integer thresholds 0\.\.100/);
+  assert.doesNotMatch(gate.stdout, /OK:/);
+});
+
+test("an empty per_crate map fails closed", () => {
+  const gate = withTempGate(
+    [
+      ["coverage-thresholds.json", '{"per_crate":{}}'],
+      ["lcov.info", lcovFor(allAt100)],
+    ],
+    (dir) => runGate(dir),
+  );
+  assert.notEqual(gate.status, 0, `fail-open: exited 0 on empty per_crate\n${gate.stdout}`);
+  assert.match(gate.stdout, /per_crate must be a nonempty map of integer thresholds 0\.\.100/);
+  assert.doesNotMatch(gate.stdout, /OK:/);
+});
+
 for (const invalid of [
-  { name: "corrupt JSON", json: '{"per_crate":' },
-  { name: "empty per_crate", json: '{"per_crate":{}}' },
   { name: "nonnumeric", overrides: { lspkit: "high" } },
   { name: "fractional", overrides: { "lspkit-live": 94.5 } },
   { name: "above 100", overrides: { lspkit: 150 } },
@@ -184,7 +216,7 @@ for (const invalid of [
   test(`a ${invalid.name} threshold fails closed as a config error`, () => {
     const gate = withTempGate(
       [
-        ["coverage-thresholds.json", invalid.json ?? thresholdsJson(invalid.overrides)],
+        ["coverage-thresholds.json", thresholdsJson(invalid.overrides)],
         ["lcov.info", lcovFor(allAt100)],
       ],
       (dir) => runGate(dir),

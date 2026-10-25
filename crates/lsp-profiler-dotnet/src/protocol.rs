@@ -135,6 +135,8 @@ pub enum EngineMessage {
         /// The ticks.
         items: Vec<TickRecord>,
     },
+    /// Every tick preceding a snapshot request has been delivered.
+    Flushed,
     /// Sampling finished.
     Stopped {
         /// Ticks delivered in total.

@@ -28,7 +28,9 @@ pub use crate::capabilities::{Capabilities, Feature, TextSync};
 pub use crate::diagnostics::{
     Diagnostic, DiagnosticsBatch, DiagnosticsBus, DiagnosticsSink, Severity,
 };
-pub use crate::dispatch::{DispatchError, Dispatcher, HandlerResult};
+pub use crate::dispatch::{
+    CancellationHandle, DispatchError, Dispatcher, HandlerResult, RequestInterest,
+};
 pub use crate::jsonrpc::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
 pub use crate::progress::{NoopReporter, ProgressReporter, ProgressSink, ProgressUpdate};
 pub use crate::reply::{EmissionError, ReplyGate};

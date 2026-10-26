@@ -12,4 +12,7 @@
     <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.745401" />
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.6" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="LspProfiler.DotNet.Engine.Tests" />
+  </ItemGroup>
 </Project>

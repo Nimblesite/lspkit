@@ -245,8 +245,11 @@ async fn a_pid_that_names_no_process_is_process_not_found_everywhere() {
     service.shutdown().await;
 }
 
-/// A live process no runtime recognises (this test binary) is `UNSUPPORTED_RUNTIME`,
-/// and kill refuses it — kill can never reach a process outside the profiler's reach.
+/// A live process no runtime recognises (this test binary) is `UNSUPPORTED_RUNTIME`
+/// for every PID-taking command, answered well under the engine's connect timeout:
+/// the engine decides "no .NET diagnostics endpoint" up front ([PROF-ERRORS],
+/// [PROF-DOTNET-ENGINE-ENDPOINT]). Kill refuses it — kill can never reach a
+/// process outside the profiler's reach.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -257,10 +260,41 @@ async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() 
         -32002
     );
     assert_eq!(
-        error_code(&service, methods::MEMORY_START, own).await,
+        error_code(&service, methods::MEMORY_START, own.clone()).await,
         -32002
     );
+    let started = tokio::time::Instant::now();
+    assert_eq!(error_code(&service, methods::CPU_START, own).await, -32002);
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "the engine answers without waiting for a connect timeout: {:?}",
+        started.elapsed()
+    );
     service.shutdown().await;
+}
+
+/// The engine itself refuses a live process with no .NET diagnostics endpoint as
+/// `UnsupportedRuntime` immediately, before any connection attempt
+/// ([PROF-DOTNET-ENGINE-ENDPOINT]). Drives the engine binary directly so the
+/// endpoint decision is proven at the engine boundary, not through the service.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_engine_refuses_a_process_without_a_dotnet_endpoint_immediately() {
+    let started = std::time::Instant::now();
+    let output = std::process::Command::new(engine())
+        .args(["cpu", "--pid", &std::process::id().to_string()])
+        .output()
+        .expect("run the engine");
+    let elapsed = started.elapsed();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let last: Value = serde_json::from_str(stdout.lines().last().unwrap_or_default())
+        .unwrap_or_else(|error| panic!("one protocol line expected ({error}): {stdout}"));
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    assert_eq!(last["kind"], "failure", "{last}");
+    assert_eq!(last["error_kind"], "UnsupportedRuntime", "{last}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "the engine answers without waiting for a connect timeout: {elapsed:?}"
+    );
 }
 
 /// `cpu.start` resolves the runtime before anything else ([PROF-CPU-START]

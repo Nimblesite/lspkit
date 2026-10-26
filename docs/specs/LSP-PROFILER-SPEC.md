@@ -483,6 +483,8 @@ Each snapshot writes a V8 `.heapprofile` built from its sites and tracebacks, fo
 
 Every backend maps its tool's failures to these kinds. A tool's raw output is logged at `warn` only when it contains no file contents and no PII. It is never parsed to produce an error kind.
 
+A backend decides `UNSUPPORTED_RUNTIME` for a live process with no diagnostics endpoint before any connection attempt, never by letting a connect timeout surface as `ATTACH_FAILED` ([PROF-DOTNET-ENGINE-ENDPOINT]).
+
 ## [PROF-HOST] Hosting in a language server
 
 A host is any language server that embeds `ProfilerService`.
@@ -687,6 +689,10 @@ Every EventPipe session is stopped from the command's own thread, never from ins
 The exit code is 0 on success. On failure the engine writes exactly one `failure` message and exits 1. Stdout carries only protocol lines. Stderr is for humans and is never parsed.
 
 Explicit PID commands resolve only that target's diagnostics endpoint. They must not enumerate unrelated processes: an unrelated process can exit between discovery and reading its namespace metadata. Real syscall capture must prove that attachment does not read another live runtime's `/proc/<pid>/status`; real process-exit churn must preserve successful target operations and complete heap results. Missing targets, unavailable endpoints and permission failures retain their classified errors.
+
+### [PROF-DOTNET-ENGINE-ENDPOINT] Endpoint decision
+
+An explicit-PID command decides, before constructing a diagnostics client, whether the target advertises its .NET diagnostics endpoint. On Windows the endpoint is the `dotnet-diagnostic-<pid>` named pipe; on Unix it is a `dotnet-diagnostic-<pid>-*-socket` in the platform temp directory, or `/tmp`. A target whose endpoint is absent answers `UnsupportedRuntime` immediately, well under the client's connect timeout — never by waiting for a connection that cannot be made. The decision matches only the target's endpoint name in that namespace and reads no other process's metadata. When the endpoint namespace cannot be enumerated (for example a permission failure), the command fails open and lets the attach itself surface the classified permission or endpoint error.
 
 ### [PROF-DOTNET-ENGINE-LOCATE] Locating the engine
 

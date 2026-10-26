@@ -23,6 +23,14 @@ may be serialized around its Salsa database, but the foreground protocol loop
 continues receiving edits, cancellation and shutdown. A superseded query cannot
 be reported under the newer snapshot's identity or document version.
 
+Supersession revisions and engine generations are independent lock-free inputs.
+Editor, configuration, watched-file and workspace-selection changes advance both:
+they invalidate Salsa and supersede in-flight work. A compiler engine change
+advances only the generation, so an in-flight pull completes with the identity of
+its captured `p:{revision}|d:{version}|g:{generation}` snapshot. The new generation
+invalidates Salsa and gives the next pull a fresh identity; only a revision mismatch
+supersedes the in-flight pull.
+
 ## [LSP-PULL-CANCELLATION] Request Lifetime
 
 The shared dispatcher owns cancellation registration. A request is registered

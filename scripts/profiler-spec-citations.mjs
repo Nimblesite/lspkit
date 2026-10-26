@@ -39,6 +39,7 @@ const PROFILER_PATHS = [
   "crates/lsp-profiler-dotnet",
   "packages/lsp-profiler-ui",
   "dotnet/LspProfiler.DotNet.Engine",
+  "dotnet/LspProfiler.DotNet.Engine.Tests",
   "dotnet/fixtures",
   "docs/models",
   "docs/specs/LSP-PROFILER-SPEC.md",

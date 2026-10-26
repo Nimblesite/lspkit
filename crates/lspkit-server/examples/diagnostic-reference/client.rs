@@ -13,28 +13,39 @@ use crate::client_wire::{self, Closed, Packet};
 /// Startup, transport and task failures cannot masquerade as clean EOF.
 #[derive(Debug, thiserror::Error)]
 pub(super) enum ClientError {
+    /// Native stdin/stdout/process I/O failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    /// The shared framing layer rejected a frame.
     #[error(transparent)]
     Frame(#[from] TransportError),
+    /// A typed envelope or journal event could not be rendered.
     #[error(transparent)]
     Render(#[from] client_wire::WireError),
+    /// A spawned consumer task failed or was cancelled.
     #[error(transparent)]
     Task(#[from] JoinError),
+    /// The optional frame ceiling did not parse as an integer.
     #[error(transparent)]
     Limit(#[from] std::num::ParseIntError),
+    /// The native filesystem watcher failed to start or run.
     #[error(transparent)]
     Watch(#[from] lspkit_live::watcher::WatcherError),
+    /// A required child-process pipe was unavailable.
     #[error("backend {0} pipe was unavailable")]
     Pipe(&'static str),
+    /// The backend child process exited unsuccessfully.
     #[error("backend exited with {0}")]
     Backend(ExitStatus),
 }
 
 /// Process and task ownership is confined to this consumer session.
 struct Session {
+    /// The real backend child process, waited on at session end.
     child: Child,
+    /// The stdin forwarder, cancelled once the reader terminates.
     forwarding: JoinHandle<Result<(), ClientError>>,
+    /// The shared inbound reader with independently closed channels.
     inbound: inbound::Inbound<Packet>,
 }
 

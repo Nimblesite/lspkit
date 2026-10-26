@@ -18,10 +18,15 @@ pub(super) struct EgressClosed;
 /// session tracks outstanding requests so exit never strands a reply.
 #[derive(Clone)]
 pub(super) struct Outbox {
+    /// The queue feeding the writer pump.
     inbox: mpsc::UnboundedSender<Message>,
+    /// Frames queued since the session began.
     sent: Arc<AtomicUsize>,
+    /// Frames the pump has flushed to stdout.
     written: Arc<AtomicUsize>,
+    /// Requests awaiting their terminal reply.
     pending: Arc<AtomicUsize>,
+    /// Wake-up signal for `quiesce` and `flush` waiters.
     idle: Arc<Notify>,
 }
 
@@ -40,7 +45,7 @@ impl Outbox {
     /// Queue `message`; frames leave in exactly this order.
     pub(super) fn send(&self, message: Message) -> Result<(), EgressClosed> {
         let _ = self.sent.fetch_add(1, Ordering::AcqRel);
-        self.inbox.send(message).map_err(|_| EgressClosed)
+        self.inbox.send(message).map_err(|_message| EgressClosed)
     }
 
     /// Mark one spawned request as awaiting its terminal reply.

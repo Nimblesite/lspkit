@@ -40,20 +40,26 @@ const STOP_DRAIN_GRACE: Duration = Duration::from_secs(2);
 /// One thread of one tick: `[thread_id, active, [[file, line, name], ...]]`.
 type TickThread = (i64, bool, Vec<(String, i64, String)>);
 
+/// Outer record that distinguishes the handshake from subsequent tick records.
 #[derive(serde::Deserialize)]
 struct HeaderLine {
+    /// Runtime identity required before samples can enter the shared pipeline.
     header: Header,
 }
 
 /// The first record of a sample file.
 #[derive(serde::Deserialize)]
 struct Header {
+    /// Runtime version reported by the injected sampler for session metadata.
     runtime_version: String,
+    /// Process ID used to associate the cooperative session with its debuggee.
     pid: u32,
 }
 
+/// One newline-delimited record containing every thread observed at a tick.
 #[derive(serde::Deserialize)]
 struct TickLine {
+    /// Compact per-thread stacks decoded into the common sampler wire model.
     ticks: Vec<TickThread>,
 }
 
@@ -260,14 +266,16 @@ mod tests {
     // [PROF-CPU-COOPERATIVE] Header handshake, tick streaming (including a
     // record split across two flushes), drain on stop, and cleanup.
     #[tokio::test(flavor = "multi_thread")]
-    async fn tails_ticks_and_cleans_up() -> Result<(), String> {
+    async fn tails_ticks_and_cleans_up() {
         let path = mint_sample_file();
         write_lines(
             &path,
             &[r#"{"header":{"runtime_version":"9.9.9","pid":4321}}"#],
         )
-        .map_err(|e| e.to_string())?;
-        let mut handle = tail(path.clone()).await.map_err(|e| e.to_string())?;
+        .expect("write cooperative sampler header");
+        let mut handle = tail(path.clone())
+            .await
+            .expect("attach cooperative sampler");
         assert_eq!(
             (handle.pid, handle.runtime_version.as_str()),
             (4321, "9.9.9")
@@ -276,22 +284,23 @@ mod tests {
             &path,
             &[r#"{"ticks":[[7,true,[["/app/x.py",12,"hot"],["/app/x.py",3,"main"]]]]}"#],
         )
-        .map_err(|e| e.to_string())?;
+        .expect("write complete cooperative sampler tick");
         let mut file = std::fs::OpenOptions::new()
             .append(true)
             .open(&path)
-            .map_err(|e| e.to_string())?;
-        write!(file, r#"{{"ticks":[[7,false,[["/app/y.py","#).map_err(|e| e.to_string())?;
-        file.flush().map_err(|e| e.to_string())?;
+            .expect("open sample file for a split tick");
+        write!(file, r#"{{"ticks":[[7,false,[["/app/y.py","#)
+            .expect("write first half of split tick");
+        file.flush().expect("flush first half of split tick");
         tokio::time::sleep(Duration::from_millis(300)).await;
-        writeln!(file, r#"5,"idle"]]]]}}"#).map_err(|e| e.to_string())?;
-        file.flush().map_err(|e| e.to_string())?;
-        let first = handle.receiver.recv().await.ok_or("first tick")?;
+        writeln!(file, r#"5,"idle"]]]]}}"#).expect("write second half of split tick");
+        file.flush().expect("flush second half of split tick");
+        let first = handle.receiver.recv().await.expect("receive first tick");
         let second = handle
             .receiver
             .recv()
             .await
-            .ok_or("second tick (rejoined)")?;
+            .expect("receive rejoined second tick");
         handle.stop(|_batch| {}).await;
         let names: Vec<&str> = first
             .samples
@@ -308,7 +317,6 @@ mod tests {
             !stop_sentinel(&path).exists(),
             "sentinel is removed after stop"
         );
-        Ok(())
     }
 
     #[tokio::test]

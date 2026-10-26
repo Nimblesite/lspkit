@@ -63,8 +63,11 @@ pub enum Feature {
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Capabilities {
+    /// Position unit negotiated for every document location.
     encoding: PositionEncoding,
+    /// Document update granularity advertised during initialization.
     text_sync: TextSync,
+    /// Deduplicated optional methods enabled by the consumer.
     features: BTreeSet<Feature>,
 }
 
@@ -96,7 +99,7 @@ impl Capabilities {
     /// Advertise `feature`.
     #[must_use]
     pub fn enable(mut self, feature: Feature) -> Self {
-        self.features.insert(feature);
+        let _was_new = self.features.insert(feature);
         self
     }
 

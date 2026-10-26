@@ -31,8 +31,7 @@ fn add_appends_folder() {
     assert_eq!(ws.len(), 2);
     assert!(!ws.is_empty());
     let folders = ws.folders();
-    assert_eq!(folders[0].name, "alpha");
-    assert_eq!(folders[1].name, "beta");
+    assert_eq!(folders, vec![folder("/a", "alpha"), folder("/b", "beta")]);
 }
 
 #[test]
@@ -42,8 +41,7 @@ fn set_folders_replaces_existing() {
     ws.set_folders(vec![folder("/new1", "n1"), folder("/new2", "n2")]);
     assert_eq!(ws.len(), 2);
     let folders = ws.folders();
-    assert_eq!(folders[0].root, Path::new("/new1"));
-    assert_eq!(folders[1].root, Path::new("/new2"));
+    assert_eq!(folders, vec![folder("/new1", "n1"), folder("/new2", "n2")]);
 }
 
 #[test]
@@ -101,9 +99,9 @@ fn clone_shares_state() {
 fn workspace_folder_eq_and_hash() {
     use std::collections::HashSet;
     let mut set = HashSet::new();
-    set.insert(folder("/a", "x"));
-    set.insert(folder("/a", "x"));
-    set.insert(folder("/a", "y"));
+    assert!(set.insert(folder("/a", "x")));
+    assert!(!set.insert(folder("/a", "x")));
+    assert!(set.insert(folder("/a", "y")));
     assert_eq!(set.len(), 2);
 }
 

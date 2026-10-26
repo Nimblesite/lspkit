@@ -18,7 +18,9 @@ use serde_json::Value;
 /// One synchronized document snapshot.
 #[derive(Clone)]
 pub(super) struct Document {
+    /// The full document text decoded from the editor's full-sync input.
     pub(super) text: String,
+    /// The editor-assigned version, used as the memoized pull identity.
     pub(super) version: i32,
 }
 
@@ -26,8 +28,11 @@ pub(super) struct Document {
 /// supporting backend work counter. Clones share one session.
 #[derive(Clone, Default)]
 pub(super) struct Sources {
+    /// Opened documents keyed by URI, shared by every session clone.
     pub(super) documents: Arc<Mutex<HashMap<String, Document>>>,
+    /// The watched workspace root, claimed once per session.
     pub(super) root: Arc<Mutex<Option<PathBuf>>>,
+    /// Backend analysis runs performed so far; supporting metadata only.
     analysis_runs: Arc<AtomicUsize>,
 }
 
@@ -174,7 +179,10 @@ pub(super) fn root_path(init: &InitializeParams) -> Option<PathBuf> {
 }
 
 /// The deprecated `rootUri` field, still sent by every current client.
-#[allow(deprecated)]
+#[expect(
+    deprecated,
+    reason = "LSP rootUri is deprecated yet still sent by clients; reading it supports legacy roots"
+)]
 fn root_uri_fallback(init: &InitializeParams) -> Option<String> {
     init.root_uri.as_ref().map(|uri| uri.as_str().to_owned())
 }

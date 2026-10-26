@@ -39,6 +39,7 @@ impl ToolDescription {
 /// Registry of available tools keyed by name.
 #[derive(Debug, Default, Clone)]
 pub struct ToolRegistry {
+    /// Descriptions retained in registration order for deterministic listing.
     tools: Vec<ToolDescription>,
 }
 

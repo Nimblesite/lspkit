@@ -80,3 +80,19 @@ fn install_then_install_returns_init_error() {
         "expected one of the installs to fail with Init: first={first:?} second={second:?}"
     );
 }
+
+#[test]
+fn install_without_explicit_filter_uses_rust_log_then_info_fallback() {
+    // With no explicit directives and no RUST_LOG, the `info` fallback filter
+    // must be selected; a filter error can never surface from this arm.
+    let previous = std::env::var("RUST_LOG").ok();
+    std::env::remove_var("RUST_LOG");
+    let outcome = TracingBuilder::new().install();
+    if let Some(value) = previous {
+        std::env::set_var("RUST_LOG", value);
+    }
+    assert!(
+        matches!(outcome, Ok(())) || matches!(outcome, Err(TracingError::Init(_))),
+        "fallback filter must install or hit an already-installed subscriber: {outcome:?}"
+    );
+}

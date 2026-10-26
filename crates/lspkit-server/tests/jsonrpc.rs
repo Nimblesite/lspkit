@@ -4,22 +4,16 @@ use lspkit_server::{FramingError, JsonRpcError, Message, MessageWriter, RequestI
 use serde_json::{json, Value};
 use tokio::io::BufReader;
 
-/// Decode a single framed message from `raw`. Panics with `label` if framing fails.
-async fn decode_ok(raw: Vec<u8>) -> Message {
+/// Decode a single framed message from `raw`; framing failures carry provenance.
+async fn decode_ok(raw: Vec<u8>) -> Result<Message, FramingError> {
     let cursor = std::io::Cursor::new(raw);
     let mut reader = BufReader::new(cursor);
-    lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect("read ok")
+    lspkit_server::jsonrpc::read_message(&mut reader).await
 }
 
-/// Drive `read_message` on `raw` and return the expected framing error.
-async fn decode_err(raw: Vec<u8>) -> FramingError {
-    let cursor = std::io::Cursor::new(raw);
-    let mut reader = BufReader::new(cursor);
-    lspkit_server::jsonrpc::read_message(&mut reader)
-        .await
-        .expect_err("must reject")
+/// Drive `read_message` on `raw` and return the framing error it must reject.
+async fn decode_err(raw: Vec<u8>) -> Result<Message, FramingError> {
+    decode_ok(raw).await
 }
 
 #[tokio::test]
@@ -31,7 +25,11 @@ async fn write_and_read_round_trip_request() {
         writer.write_message(&original).await.expect("write ok");
     }
 
-    assert!(!buffer.is_empty(), "writer must emit at least the header");
+    assert_ne!(
+        buffer,
+        Vec::<u8>::new(),
+        "writer must emit at least the header"
+    );
     let on_wire = std::str::from_utf8(&buffer).expect("framed message is utf-8");
     assert!(
         on_wire.starts_with("Content-Length: "),
@@ -43,7 +41,7 @@ async fn write_and_read_round_trip_request() {
     );
     assert!(on_wire.contains("\"method\":\"initialize\""));
 
-    let decoded = decode_ok(buffer).await;
+    let decoded = decode_ok(buffer).await.expect("read ok");
     assert_eq!(decoded.jsonrpc, "2.0");
     assert_eq!(decoded.method.as_deref(), Some("initialize"));
     assert_eq!(decoded.id, Some(RequestId::Number(1)));
@@ -72,7 +70,7 @@ async fn write_and_read_notification() {
         "notifications must not serialize an id"
     );
 
-    let decoded = decode_ok(buffer).await;
+    let decoded = decode_ok(buffer).await.expect("read ok");
     assert_eq!(decoded.jsonrpc, "2.0");
     assert!(decoded.id.is_none(), "notifications have no id");
     assert_eq!(decoded.method.as_deref(), Some("textDocument/didChange"));
@@ -105,7 +103,7 @@ async fn write_and_read_response_success() {
         "success response must not carry error"
     );
 
-    let decoded = decode_ok(buffer).await;
+    let decoded = decode_ok(buffer).await.expect("read ok");
     assert_eq!(decoded.jsonrpc, "2.0");
     assert_eq!(decoded.id, Some(RequestId::String("req-1".to_owned())));
     assert_eq!(decoded.result, Some(json!({"ok": true})));
@@ -132,7 +130,7 @@ async fn write_and_read_response_error() {
     assert!(on_wire.contains("\"code\":-32601"));
     assert!(on_wire.contains("Method not found"));
 
-    let decoded = decode_ok(buffer).await;
+    let decoded = decode_ok(buffer).await.expect("read ok");
     assert_eq!(decoded.jsonrpc, "2.0");
     assert_eq!(decoded.id, Some(RequestId::Number(7)));
     assert!(decoded.result.is_none(), "error response carries no result");
@@ -146,14 +144,18 @@ async fn write_and_read_response_error() {
 
 #[tokio::test]
 async fn read_message_rejects_missing_content_length() {
-    let err = decode_err(b"X-Other: 1\r\n\r\n{}".to_vec()).await;
+    let err = decode_err(b"X-Other: 1\r\n\r\n{}".to_vec())
+        .await
+        .expect_err("must reject");
     let rendered = format!("{err}");
     assert!(rendered.contains("Content-Length") || rendered.contains("missing"));
 }
 
 #[tokio::test]
 async fn read_message_rejects_bad_content_length_value() {
-    let err = decode_err(b"Content-Length: not-a-number\r\n\r\n{}".to_vec()).await;
+    let err = decode_err(b"Content-Length: not-a-number\r\n\r\n{}".to_vec())
+        .await
+        .expect_err("must reject");
     assert!(format!("{err}").contains("Content-Length"));
 }
 
@@ -163,13 +165,13 @@ async fn read_message_rejects_invalid_json_body() {
     let header = format!("Content-Length: {}\r\n\r\n", body.len());
     let mut raw = header.into_bytes();
     raw.extend_from_slice(body);
-    let err = decode_err(raw).await;
+    let err = decode_err(raw).await.expect_err("must reject");
     assert!(format!("{err}").contains("JSON"));
 }
 
 #[tokio::test]
 async fn read_message_reports_closed_stream() {
-    let err = decode_err(Vec::<u8>::new()).await;
+    let err = decode_err(Vec::<u8>::new()).await.expect_err("must reject");
     assert!(format!("{err}").contains("closed"));
 }
 
@@ -182,7 +184,7 @@ async fn read_message_tolerates_extra_headers() {
     )
     .into_bytes();
     raw.extend_from_slice(&body);
-    let decoded = decode_ok(raw).await;
+    let decoded = decode_ok(raw).await.expect("read ok");
     assert_eq!(decoded.method.as_deref(), Some("ping"));
     assert_eq!(decoded.jsonrpc, "2.0");
     assert!(decoded.id.is_none());

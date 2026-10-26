@@ -4,9 +4,17 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-#[path = "../../../test-support/native_events.rs"]
-mod native_events;
+use common::at;
 use native_events::NativeEvents;
+
+mod common;
+#[path = "../../../test-support/native_events.rs"]
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "shared test-only module is outside Clippy's test-function detection"
+)]
+mod native_events;
 
 #[cfg(target_os = "linux")]
 #[path = "../../../test-support/native_events_overflow.rs"]
@@ -18,22 +26,31 @@ mod native_overflow;
 
 /// Write one real JSON file into the watched root.
 fn write_sample(dir: &Path, name: &str) {
-    std::fs::write(dir.join(format!("{name}.json")), b"{\"watched\": true}").expect("write sample");
+    let result = std::fs::write(dir.join(format!("{name}.json")), b"{\"watched\": true}");
+    assert!(result.is_ok(), "write sample failed: {:?}", result.err());
 }
 
 /// Preserve nonempty batches and every original native path ownership assertion.
 fn assert_batch(batch: &Value, root: &Path) {
-    assert_eq!(batch["kind"], "batch");
-    let events = batch["events"].as_array().expect("native events");
-    assert_ne!(events, &Vec::<Value>::new());
-    assert!(
-        events
-            .iter()
-            .flat_map(|event| event["paths"].as_array().expect("native paths"))
-            .map(|path| PathBuf::from(path.as_str().expect("native path")))
-            .all(|path| path.starts_with(root)),
-        "batches carry real watched paths"
-    );
+    assert_eq!(at(batch, "/kind"), "batch");
+    let events = at(batch, "/events").as_array();
+    assert!(events.is_some(), "native events must be an array");
+    assert_ne!(events.map_or(0, Vec::len), 0);
+    let paths_are_arrays = events
+        .into_iter()
+        .flatten()
+        .all(|event| at(event, "/paths").is_array());
+    assert!(paths_are_arrays, "native paths must be arrays");
+    let owned_paths = events.into_iter().flatten().all(|event| {
+        at(event, "/paths")
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|path| PathBuf::from(path.as_str().unwrap_or_default()))
+            .all(|path| path.starts_with(root))
+    });
+    assert!(owned_paths, "batches carry real watched paths");
 }
 
 /// Both lifetimes finish with the same actual write, batch assertions and release.
@@ -77,9 +94,9 @@ async fn native_queue_overflow_is_reported_and_fresh_events_still_arrive() {
     let diagnostics = watcher.diagnostics().await;
     assert!(
         diagnostics.iter().any(|event| {
-            event["level"] == "WARN"
-                && event["fields"]["message"] == "Filesystem observation failed"
-                && event["fields"]["affected_paths"] == 0
+            at(event, "/level") == "WARN"
+                && at(event, "/fields/message") == "Filesystem observation failed"
+                && at(event, "/fields/affected_paths") == 0
         }),
         "real observation loss cannot be silent"
     );

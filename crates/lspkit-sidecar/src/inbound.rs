@@ -10,6 +10,7 @@ use tokio::task::JoinHandle;
 use crate::transport::read_frame;
 
 /// A single reader task with distinct notification and response channels.
+#[derive(Debug)]
 pub struct Inbound<E> {
     /// Ordered response stream, including a terminal read/codec failure.
     pub responses: mpsc::UnboundedReceiver<Result<E, String>>,
@@ -46,6 +47,7 @@ where
     }
 }
 
+/// Continuously decodes frames until EOF, failure, or channel closure.
 async fn read_loop<R, E, D, N>(
     mut reader: R,
     max_frame: usize,
@@ -67,12 +69,16 @@ async fn read_loop<R, E, D, N>(
     }
 }
 
+/// Groups the destinations so the read loop has one routing responsibility.
 struct Channels<E> {
+    /// Carries request replies and terminal stream failures in arrival order.
     responses: mpsc::UnboundedSender<Result<E, String>>,
+    /// Carries unsolicited envelopes independently of request activity.
     notifications: mpsc::UnboundedSender<E>,
 }
 
 impl<E> Channels<E> {
+    /// Routes one decoded item and reports whether the reader should continue.
     fn forward(&self, item: Result<Option<E>, String>, notification: &impl Fn(&E) -> bool) -> bool {
         match item {
             Ok(Some(envelope)) if notification(&envelope) => {
@@ -89,6 +95,7 @@ impl<E> Channels<E> {
     }
 }
 
+/// Distinguishes clean EOF from a partial frame without losing the prefix byte.
 async fn next_frame<R: AsyncRead + Unpin>(
     reader: &mut R,
     max_frame: usize,

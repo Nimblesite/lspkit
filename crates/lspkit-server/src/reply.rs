@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 /// A per-request output lifetime; it never stores response values.
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ReplyGate(Arc<Mutex<bool>>);
 
 /// Why a partial or terminal reply could not be emitted.
@@ -44,6 +44,7 @@ impl ReplyGate {
         self.with_open(true, emit)
     }
 
+    /// Serializes emission and optionally closes the stream before a terminal reply.
     fn with_open<E: std::fmt::Debug + std::fmt::Display>(
         &self,
         finish: bool,

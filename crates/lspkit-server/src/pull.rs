@@ -72,15 +72,21 @@ fn uncancelled(cancel: &CancellationToken) -> Result<(), PullError> {
 }
 
 #[salsa::db]
+/// Minimal database surface exposing the consumer's compiler callback.
 trait DiagnosticDb: salsa::Database {
+    /// Runs real analysis for `uri` under the database's request lifetime.
     fn analyze(&self, uri: &str) -> Analysis;
 }
 
 #[salsa::db]
 #[derive(Clone)]
+/// Owns the sole diagnostic memo and its current execution context.
 struct Database {
+    /// Owns Salsa's memo storage; no parallel diagnostic map is retained.
     storage: salsa::Storage<Self>,
+    /// Consumer compiler invoked only when tracked inputs invalidate the memo.
     analyzer: CancellableAnalyzer,
+    /// Lifetime of the currently executing query.
     cancellation: CancellationToken,
 }
 
@@ -119,8 +125,11 @@ fn analyze(db: &dyn DiagnosticDb, document: DocumentInput, workspace: WorkspaceI
 /// accessor; revision changes stay outside so they never queue behind it.
 #[derive(Clone)]
 struct QueryState {
+    /// Single memo database serialized only for diagnostic computation.
     database: Database,
+    /// Workspace-wide revision input for inter-file invalidation.
     workspace: WorkspaceInput,
+    /// Reusable per-document Salsa inputs keyed by canonical URI.
     documents: HashMap<String, DocumentInput>,
 }
 
@@ -132,7 +141,7 @@ impl QueryState {
             .entry(uri.to_owned())
             .or_insert_with(|| DocumentInput::new(&self.database, uri.to_owned(), 0, 0));
         if *document.version(&self.database) != version {
-            document.set_version(&mut self.database).to(version);
+            let _previous_version = document.set_version(&mut self.database).to(version);
         }
         document
     }
@@ -142,7 +151,8 @@ impl QueryState {
     fn sync(&mut self, revision: u64, uri: &str, version: i32) -> DocumentInput {
         let document = self.document(uri, version);
         if *self.workspace.generation(&self.database) != revision {
-            self.workspace
+            let _previous_generation = self
+                .workspace
                 .set_generation(&mut self.database)
                 .to(revision);
         }
@@ -153,7 +163,7 @@ impl QueryState {
     fn retry(&mut self, document: DocumentInput) {
         // This private counter need only change; wrapping cannot reuse the current input value.
         let next = document.retry_revision(&self.database).wrapping_add(1);
-        document.set_retry_revision(&mut self.database).to(next);
+        let _previous_retry = document.set_retry_revision(&mut self.database).to(next);
     }
 
     /// Cancellation belongs to execution context, never a second diagnostic cache.
@@ -182,7 +192,9 @@ impl QueryState {
 /// observes the same snapshot identity for the same connection state.
 #[derive(Clone)]
 pub struct PullStore {
+    /// Serializes memo access while leaving foreground invalidation lock-free.
     query: Arc<Mutex<QueryState>>,
+    /// Shared snapshot identity advanced without waiting for compiler work.
     revision: Arc<AtomicU64>,
 }
 
@@ -217,7 +229,7 @@ impl PullStore {
     /// The pending Salsa generation is applied lazily by the next query, so
     /// invalidation never blocks behind a running computation. [LSP-PULL-CONCURRENCY]
     pub fn invalidate(&self) {
-        self.revision.fetch_add(1, Ordering::AcqRel);
+        let _previous_revision = self.revision.fetch_add(1, Ordering::AcqRel);
     }
 
     /// Current snapshot revision; never touches the query mutex. [LSP-PULL-CONCURRENCY]
@@ -260,7 +272,7 @@ impl PullStore {
         cancel: &CancellationToken,
     ) -> Result<PullReport, PullError> {
         uncancelled(cancel)?;
-        let mut query = self.query.lock().map_err(|_| poisoned())?;
+        let mut query = self.query.lock().map_err(poisoned)?;
         let revision = self.revision();
         let report = query.compute(uri, version, revision, cancel)?;
         if self.revision() != revision {
@@ -271,8 +283,17 @@ impl PullStore {
 }
 
 /// Poisoned query lock: an honest failure, never a panic across the boundary.
-fn poisoned() -> AnalysisError {
-    AnalysisError("diagnostic query lock poisoned".to_owned())
+fn poisoned(source: impl std::fmt::Display) -> AnalysisError {
+    AnalysisError(format!("diagnostic query lock poisoned: {source}"))
+}
+
+impl std::fmt::Debug for PullStore {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PullStore")
+            .field("revision", &self.revision())
+            .finish_non_exhaustive()
+    }
 }
 
 /// Snapshot identity in the wire-stable `p:…|d:…|g:…` form.

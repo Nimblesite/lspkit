@@ -3,7 +3,14 @@
 
 use serde_json::{json, Value};
 
+use common::{at, entry};
+
+mod common;
 #[path = "../../../test-support/frame_events.rs"]
+#[expect(
+    clippy::expect_used,
+    reason = "shared test-only module is outside Clippy's test-function detection"
+)]
 mod frame_events;
 
 /// Send a complete native input stream and collect the CLI's rendered journal.
@@ -16,11 +23,11 @@ async fn client_events(input: &[u8], limit: Option<usize>) -> Vec<Value> {
 }
 
 /// Serialize requests; the consumer, rather than the test, implements framed IPC.
-fn requests(values: &[Value]) -> Vec<u8> {
-    values.iter().fold(Vec::new(), |mut bytes, value| {
-        serde_json::to_writer(&mut bytes, value).expect("request JSON");
+fn requests(values: &[Value]) -> Result<Vec<u8>, serde_json::Error> {
+    values.iter().try_fold(Vec::new(), |mut bytes, value| {
+        serde_json::to_writer(&mut bytes, value)?;
         bytes.push(b'\n');
-        bytes
+        Ok(bytes)
     })
 }
 
@@ -30,33 +37,39 @@ fn assert_closed(events: &[Value]) {
 }
 
 /// The native reader's ordered response stream, independent of notifications.
-fn responses(events: &[Value]) -> Vec<&Value> {
+fn responses(events: &[Value]) -> Vec<Value> {
     events
         .iter()
-        .filter(|event| event["kind"] == "response")
-        .map(|event| &event["envelope"])
+        .filter(|event| at(event, "/kind") == "response")
+        .map(|event| at(event, "/envelope").clone())
         .collect()
 }
 
 /// Exact compiler location, severity, origin and message remain source-owned.
 fn assert_real_parse_error(response: &Value) {
-    let expected = serde_json::from_str::<Value>("{\"unterminated\": ")
-        .expect_err("actual fixture is invalid JSON");
-    let diagnostics = response["result"]["diagnostics"]
-        .as_array()
-        .expect("diagnostics");
-    assert_eq!(diagnostics.len(), 1);
-    assert_eq!(diagnostics[0]["message"], expected.to_string());
+    let expected = match serde_json::from_str::<Value>("{\"unterminated\": ") {
+        Err(error) => error,
+        Ok(actual) => {
+            assert_eq!(actual, Value::Null, "actual fixture is invalid JSON");
+            return;
+        }
+    };
+    let diagnostics = at(response, "/result/diagnostics").as_array();
+    assert_eq!(diagnostics.map_or(0, Vec::len), 1);
+    let diagnostic = diagnostics
+        .and_then(|items| items.first())
+        .unwrap_or(&Value::Null);
     assert_eq!(
-        diagnostics[0]["range"]["start"]["line"],
-        expected.line() - 1
+        at(diagnostic, "/message").as_str().unwrap_or_default(),
+        expected.to_string()
     );
+    assert_eq!(at(diagnostic, "/range/start/line"), expected.line() - 1);
     assert_eq!(
-        diagnostics[0]["range"]["start"]["character"],
+        at(diagnostic, "/range/start/character"),
         expected.column() - 1
     );
-    assert_eq!(diagnostics[0]["severity"], 1);
-    assert_eq!(diagnostics[0]["source"], "serde_json");
+    assert_eq!(at(diagnostic, "/severity"), 1);
+    assert_eq!(at(diagnostic, "/source"), "serde_json");
 }
 
 #[tokio::test]
@@ -68,7 +81,8 @@ async fn idle_notifications_route_independently_of_responses() {
         json!({"id":1,"method":"initialize","params":{}}),
         json!({"id":2,"method":"analyze","params":{"path":broken}}),
         json!({"id":3,"method":"analyze","params":{"path":broken}}),
-    ]);
+    ])
+    .expect("serialize native requests");
     let events = client_events(&input, None).await;
     assert_ready_and_responses(&events);
     assert_closed(&events);
@@ -78,33 +92,38 @@ async fn idle_notifications_route_independently_of_responses() {
 fn assert_ready_and_responses(events: &[Value]) {
     let ready: Vec<_> = events
         .iter()
-        .filter(|event| event["kind"] == "notification")
+        .filter(|event| at(event, "/kind") == "notification")
         .collect();
     assert_eq!(ready.len(), 1);
-    assert_eq!(ready[0]["envelope"]["method"], "ready");
+    let notification = ready.first().copied().unwrap_or(&Value::Null);
+    assert_eq!(at(notification, "/envelope/method"), "ready");
     let replies = responses(events);
     assert_eq!(replies.len(), 3);
-    assert_eq!(replies[0]["id"], 1);
-    assert_eq!(replies[0]["result"]["protocol"], "lspkit-sidecar/1");
-    assert_eq!(replies[1]["id"], 2);
-    assert_real_parse_error(replies[1]);
-    assert_eq!(replies[2]["id"], 3);
-    assert_real_parse_error(replies[2]);
-    assert!(!events.iter().any(|event| event["kind"] == "error"));
+    assert_eq!(at(entry(&replies, 0), "/id"), 1);
+    assert_eq!(
+        at(entry(&replies, 0), "/result/protocol"),
+        "lspkit-sidecar/1"
+    );
+    assert_eq!(at(entry(&replies, 1), "/id"), 2);
+    assert_real_parse_error(entry(&replies, 1));
+    assert_eq!(at(entry(&replies, 2), "/id"), 3);
+    assert_real_parse_error(entry(&replies, 2));
+    assert!(!events.iter().any(|event| at(event, "/kind") == "error"));
 }
 
 #[tokio::test]
 async fn backend_io_failure_stays_an_honest_error() {
     let workspace = tempfile::TempDir::new().expect("tempdir");
     let missing = workspace.path().join("missing.json");
-    let input = requests(&[json!({"id":7,"method":"analyze","params":{"path":missing}})]);
+    let input = requests(&[json!({"id":7,"method":"analyze","params":{"path":missing}})])
+        .expect("serialize native request");
     let events = client_events(&input, None).await;
     let replies = responses(&events);
     assert_eq!(replies.len(), 1);
-    assert_eq!(replies[0]["id"], 7);
-    assert!(replies[0]["error"]
+    assert_eq!(at(entry(&replies, 0), "/id"), 7);
+    assert!(at(entry(&replies, 0), "/error")
         .as_str()
-        .expect("honest backend error")
+        .unwrap_or_default()
         .contains("read failed"));
     assert_closed(&events);
 }
@@ -113,14 +132,13 @@ async fn backend_io_failure_stays_an_honest_error() {
 fn terminal_failure(events: &[Value]) -> &str {
     let errors: Vec<_> = events
         .iter()
-        .filter(|event| event["kind"] == "error")
+        .filter(|event| at(event, "/kind") == "error")
         .collect();
     assert_eq!(errors.len(), 1);
-    let message = errors[0]["message"]
-        .as_str()
-        .expect("visible failure message");
+    let error = errors.first().copied().unwrap_or(&Value::Null);
+    let message = at(error, "/message").as_str().unwrap_or_default();
     assert_ne!(message, "");
-    assert_eq!(responses(events), [] as [&serde_json::Value; 0]);
+    assert_eq!(responses(events), Vec::<Value>::new());
     assert_closed(events);
     message
 }
@@ -143,7 +161,7 @@ async fn oversized_frame_is_refused() {
 async fn stdin_eof_ends_the_backend_cleanly() {
     let events = client_events(&[], None).await;
     assert_eq!(events.len(), 1);
-    assert_eq!(responses(&events), [] as [&serde_json::Value; 0]);
+    assert_eq!(responses(&events), Vec::<Value>::new());
     assert_closed(&events);
 }
 
@@ -159,31 +177,36 @@ async fn weak_ingress_controls_preserve_cancellation_and_release_workspace_owner
     ];
     let events = frame_events::journal(&args, &[]).await;
     assert_lifetime_terminal(&events);
-    assert_lifetime_scope(&events[0], 2, true);
-    assert_lifetime_scope(&events[1], 1, false);
+    assert_lifetime_scope(entry(&events, 0), 2, true);
+    assert_lifetime_scope(entry(&events, 1), 1, false);
 }
 
+/// Cancellation and release remain terminal, ordered, and ownership-aware.
 fn assert_lifetime_terminal(events: &[Value]) {
     assert_eq!(
         events.len(),
         4,
         "two scopes, cancellation and owned release"
     );
-    assert_eq!(events[2]["kind"], "failure");
-    assert_eq!(events[2]["error"]["code"], -32800);
-    assert!(events[2].get("result").is_none());
-    assert_eq!(events[3]["kind"], "released");
-    assert_eq!(events[3]["owner_released"], true);
-    assert_eq!(events[3]["late_inputs_accepted"], true);
+    assert_eq!(at(entry(events, 2), "/kind"), "failure");
+    assert_eq!(at(entry(events, 2), "/error/code"), -32800);
+    assert!(entry(events, 2).get("result").is_none());
+    assert_eq!(at(entry(events, 3), "/kind"), "released");
+    assert_eq!(at(entry(events, 3), "/owner_released"), true);
+    assert_eq!(at(entry(events, 3), "/late_inputs_accepted"), true);
 }
 
+/// Each retained scope exposes exactly the roots it still owns.
 fn assert_lifetime_scope(event: &Value, count: usize, first_owned: bool) {
-    assert_eq!(event["kind"], "snapshot");
+    assert_eq!(at(event, "/kind"), "snapshot");
     assert!(event.get("error").is_none());
-    assert_eq!(event["result"]["count"], count);
-    assert_eq!(event["result"]["first_owned"], first_owned);
-    assert_eq!(event["result"]["second_owned"], true);
-    let names = event["result"]["names"].as_array().expect("actual roots");
+    assert_eq!(at(event, "/result/count"), count);
+    assert_eq!(at(event, "/result/first_owned"), first_owned);
+    assert_eq!(at(event, "/result/second_owned"), true);
+    let names = at(event, "/result/names")
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     assert_eq!(names.len(), count);
     assert!(names.iter().any(|name| name == "second"));
     assert_eq!(names.iter().any(|name| name == "first"), first_owned);

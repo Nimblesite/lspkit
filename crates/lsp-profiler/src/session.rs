@@ -19,13 +19,21 @@ use crate::wire::{HotFunction, ProfileProgress, ProfileSessionInfo, StartProfile
 
 /// One active CPU session.
 struct CpuSession {
+    /// Public identifier used by progress, snapshot, listing, and stop requests.
     session_id: String,
+    /// Runtime supplies frame filtering and export identity for this recording.
     runtime: Arc<dyn Runtime>,
+    /// Monotonic origin used for duration limits and elapsed recording time.
     started_at: Instant,
+    /// Wall-clock start timestamp presented in session metadata.
     started_at_iso: String,
+    /// Incrementally aggregated samples drained from the backend.
     data: ProfileData,
+    /// Backend consumer used to drain samples and coordinate barriers or stop.
     sampler: SamplerHandle,
+    /// Requested sampling frequency, also the fallback batch-weight denominator.
     sample_rate: u64,
+    /// Whether idle thread stacks contribute to the aggregate.
     include_idle: bool,
     /// The requested duration: sampling ends there, so recorded time does too.
     limit: Option<Duration>,
@@ -119,6 +127,7 @@ impl CpuSession {
         }
     }
 
+    /// Project current recording state into the session-listing wire model.
     fn info(&self) -> ProfileSessionInfo {
         ProfileSessionInfo {
             session_id: self.session_id.clone(),
@@ -131,6 +140,7 @@ impl CpuSession {
         }
     }
 
+    /// Clone the aggregate and metadata needed for an independent report.
     fn recorded(&self) -> RecordedProfile {
         RecordedProfile {
             session_id: self.session_id.clone(),
@@ -176,13 +186,17 @@ pub struct RecordedProfile {
 /// clone can drive the live-progress task.
 #[derive(Clone, Default)]
 pub struct CpuSessionManager {
+    /// Shared live-session table keyed by public session identifier.
     sessions: Arc<Mutex<HashMap<String, Arc<SessionEntry>>>>,
 }
 
 /// Stable identity and stop control, independent of the recording's async lock.
 struct SessionEntry {
+    /// Profiled process ID used to enforce one active session per process.
     pid: u32,
+    /// Lock-free stop signal available even while recording state is locked.
     stop: SamplerStop,
+    /// Recording state, removed at stop while its identity remains available.
     state: Mutex<Option<CpuSession>>,
 }
 

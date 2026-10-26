@@ -32,12 +32,19 @@ pub const DEFAULT_TRACEBACK_DEPTH: u32 = 25;
 
 /// One tracking session.
 struct MemorySession {
+    /// Stable identity and runtime acquisition settings shared across steps.
     context: MemoryContext,
+    /// Runtime retained for subsequent parsing and memory operations.
     runtime: Arc<dyn Runtime>,
+    /// Start time used for session-age eviction and structured timing logs.
     started_at: Instant,
+    /// Previous snapshot against which the next comparison is computed.
     baseline: Option<HeapSnapshot>,
+    /// Cross-diff growth history used to assign leak confidence.
     leaks: LeakTracker,
+    /// Bounded snapshot history displayed by the memory dashboard.
     timeline: MemoryTimeline,
+    /// Monotonic counter that gives snapshots session-unique identifiers.
     snapshot_count: u64,
 }
 
@@ -54,8 +61,11 @@ pub struct MemorySettings {
 
 /// All memory sessions of one language server.
 pub struct MemorySessionManager {
+    /// Live session state serialized across concurrent memory requests.
     sessions: Mutex<HashMap<String, MemorySession>>,
+    /// Process-local sequence used to mint collision-free session IDs.
     next_seq: AtomicU64,
+    /// Shared scoring, diagnostic, and artifact-output configuration.
     settings: MemorySettings,
 }
 
@@ -170,6 +180,7 @@ impl MemorySessionManager {
 }
 
 impl MemorySession {
+    /// Convert neutral runtime output into a scored outcome and diagnostics.
     fn score(
         &mut self,
         payload: MemoryPayload,
@@ -202,6 +213,7 @@ impl MemorySession {
         snapshot
     }
 
+    /// Establish a new baseline, export the snapshot, and update the timeline.
     fn adopt_snapshot(
         &mut self,
         snapshot: HeapSnapshot,
@@ -225,6 +237,7 @@ impl MemorySession {
         (outcome, diagnostics)
     }
 
+    /// Update leak streaks and derive diagnostics from a computed heap diff.
     fn score_diff(
         &mut self,
         diff: HeapDiff,

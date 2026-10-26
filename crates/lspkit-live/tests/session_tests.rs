@@ -27,7 +27,7 @@ struct OkAnalyzer {
 #[async_trait]
 impl Analyzer for OkAnalyzer {
     async fn analyze(&self, _trigger: Trigger) -> AnalyzerResult {
-        self.calls.fetch_add(1, Ordering::SeqCst);
+        let _previous_calls = self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -42,6 +42,7 @@ impl Analyzer for FailAnalyzer {
     }
 }
 
+/// Yield repeatedly so the spawned scheduler observes all pending work.
 async fn settle() {
     for _ in 0..16 {
         tokio::task::yield_now().await;
@@ -49,20 +50,20 @@ async fn settle() {
 }
 
 /// Produce `count` triggers using the scheduler under virtual time.
-async fn produce_triggers(count: usize) -> Vec<Trigger> {
+async fn produce_triggers(count: usize) -> Option<Vec<Trigger>> {
     let (tx, rx) = mpsc::unbounded_channel();
     let mut triggers_rx = spawn_scheduler(rx, ScheduleConfig::default());
     let mut out = Vec::with_capacity(count);
     for idx in 0..count {
         tx.send(ChangeEvent::Touched(vec![PathBuf::from(format!("f{idx}"))]))
-            .expect("send");
+            .ok()?;
         settle().await;
         time::advance(Duration::from_millis(150)).await;
         settle().await;
-        let trig = triggers_rx.recv().await.expect("trigger");
+        let trig = triggers_rx.recv().await?;
         out.push(trig);
     }
-    out
+    Some(out)
 }
 
 #[tokio::test]
@@ -111,7 +112,7 @@ async fn clone_shares_state() {
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn run_advances_generation_on_each_success() {
-    let triggers = produce_triggers(3).await;
+    let triggers = produce_triggers(3).await.expect("three real triggers");
 
     let session = Session::new();
     let calls = Arc::new(AtomicUsize::new(0));
@@ -133,7 +134,7 @@ async fn run_advances_generation_on_each_success() {
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn run_does_not_advance_on_analyzer_failure() {
-    let triggers = produce_triggers(2).await;
+    let triggers = produce_triggers(2).await.expect("two real triggers");
 
     let session = Session::new();
     let (tx, rx) = mpsc::unbounded_channel();

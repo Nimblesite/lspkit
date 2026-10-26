@@ -8,10 +8,14 @@ use tokio::process::{Child, ChildStdin};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
+use common::{at, entry};
+
+mod common;
 #[path = "../../../test-support/reference_program.rs"]
 mod reference_program;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+type CloseOutcome = (std::process::ExitStatus, bool, bool);
 const INVALID: &str = "{\"unterminated\": ";
 
 struct NativeSession {
@@ -69,14 +73,13 @@ impl NativeSession {
         }
     }
 
-    async fn close(&mut self) -> TestResult {
+    async fn close(&mut self) -> TestResult<CloseOutcome> {
         drop(self.input.take());
         let status = timeout(reference_program::READ_GUARD, self.child.wait()).await??;
-        assert!(status.success(), "real backend exits naturally: {status:?}");
         timeout(reference_program::READ_GUARD, &mut self.inbound.task).await??;
-        assert!(self.inbound.responses.recv().await.is_none());
-        assert!(self.inbound.notifications.recv().await.is_none());
-        Ok(())
+        let responses_closed = self.inbound.responses.recv().await.is_none();
+        let notifications_closed = self.inbound.notifications.recv().await.is_none();
+        Ok((status, responses_closed, notifications_closed))
     }
 }
 
@@ -105,32 +108,49 @@ impl Drop for NativeSession {
     }
 }
 
-fn assert_reply(value: &Value, id: u64, path: &Path, broken: bool) -> TestResult {
-    assert_eq!(value["id"], id, "only the current request owns this reply");
-    assert_eq!(value["result"]["path"], json!(path));
-    assert!(value.get("error").is_none());
-    let diagnostics = value["result"]["diagnostics"]
-        .as_array()
-        .ok_or("diagnostics missing")?;
-    assert_eq!(diagnostics.len(), usize::from(broken));
-    if broken {
-        assert_parse_error(&diagnostics[0])?;
-    }
-    Ok(())
+/// The real backend exits naturally and closes both ordered event streams.
+fn assert_close((status, responses_closed, notifications_closed): CloseOutcome) {
+    assert!(status.success(), "real backend exits naturally: {status:?}");
+    assert!(responses_closed);
+    assert!(notifications_closed);
 }
 
-fn assert_parse_error(diagnostic: &Value) -> TestResult {
-    let actual = serde_json::from_str::<Value>(INVALID)
-        .err()
-        .ok_or("invalid source parsed")?;
-    assert_eq!(diagnostic["message"], actual.to_string());
-    assert_eq!(diagnostic["severity"], 1);
-    assert_eq!(diagnostic["source"], "serde_json");
+/// Replies retain identity, source location and diagnostics for the active request.
+fn assert_reply(value: &Value, id: u64, path: &Path, broken: bool) {
     assert_eq!(
-        diagnostic["range"]["start"],
-        json!({"line": actual.line() - 1, "character": actual.column() - 1})
+        at(value, "/id"),
+        id,
+        "only the current request owns this reply"
     );
-    Ok(())
+    assert_eq!(at(value, "/result/path"), &json!(path));
+    assert!(value.get("error").is_none());
+    let diagnostics = at(value, "/result/diagnostics").as_array();
+    assert_eq!(diagnostics.map_or(0, Vec::len), usize::from(broken));
+    if broken {
+        let diagnostic = diagnostics.map_or(&Value::Null, |items| entry(items, 0));
+        assert_parse_error(diagnostic);
+    }
+}
+
+/// The backend reports the actual parser's location, severity, origin and message.
+fn assert_parse_error(diagnostic: &Value) {
+    let actual = match serde_json::from_str::<Value>(INVALID) {
+        Err(error) => error,
+        Ok(parsed) => {
+            assert_eq!(parsed, Value::Null, "invalid source parsed");
+            return;
+        }
+    };
+    assert_eq!(
+        at(diagnostic, "/message").as_str().unwrap_or_default(),
+        actual.to_string()
+    );
+    assert_eq!(at(diagnostic, "/severity"), 1);
+    assert_eq!(at(diagnostic, "/source"), "serde_json");
+    assert_eq!(
+        at(diagnostic, "/range/start"),
+        &json!({"line": actual.line() - 1, "character": actual.column() - 1})
+    );
 }
 
 fn source_session() -> TestResult<(
@@ -146,48 +166,59 @@ fn source_session() -> TestResult<(
 }
 
 #[tokio::test]
-async fn actual_diagnostics_repair_and_regress_with_uncancelled_interest() -> TestResult {
-    let (_fixture, path, mut session, token) = source_session()?;
+async fn actual_diagnostics_repair_and_regress_with_uncancelled_interest() {
+    let (_fixture, path, mut session, token) = source_session().expect("start native session");
     for (id, contents, broken) in [(1, INVALID, true), (2, "{}", false), (3, INVALID, true)] {
-        std::fs::write(&path, contents)?;
-        session.analyze(id, &path).await?;
+        std::fs::write(&path, contents).expect("write native source");
+        session.analyze(id, &path).await.expect("request analysis");
         let interest = (id != 1).then_some(&token);
-        assert_reply(&session.response(interest, false).await?, id, &path, broken)?;
+        let reply = session
+            .response(interest, false)
+            .await
+            .expect("native reply");
+        assert_reply(&reply, id, &path, broken);
         assert!(!token.is_cancelled());
     }
-    session.close().await
+    assert_close(session.close().await.expect("close native session"));
 }
 
 #[tokio::test]
-async fn cancelled_reply_is_drained_before_the_actual_repaired_file_is_queried() -> TestResult {
-    let (_fixture, path, mut session, token) = source_session()?;
+async fn cancelled_reply_is_drained_before_the_actual_repaired_file_is_queried() {
+    let (_fixture, path, mut session, token) = source_session().expect("start native session");
     token.cancel();
-    std::fs::write(&path, INVALID)?;
-    session.analyze(41, &path).await?;
-    let retired = session.response(Some(&token), true).await?;
-    assert_reply(&retired, 41, &path, true)?;
-    std::fs::write(&path, "{}")?;
-    session.analyze(42, &path).await?;
-    assert_reply(&session.response(None, false).await?, 42, &path, false)?;
-    session.close().await
+    std::fs::write(&path, INVALID).expect("write invalid source");
+    session
+        .analyze(41, &path)
+        .await
+        .expect("request cancelled analysis");
+    let retired = session
+        .response(Some(&token), true)
+        .await
+        .expect("retired reply");
+    assert_reply(&retired, 41, &path, true);
+    std::fs::write(&path, "{}").expect("repair source");
+    session
+        .analyze(42, &path)
+        .await
+        .expect("request repaired analysis");
+    let repaired = session.response(None, false).await.expect("repaired reply");
+    assert_reply(&repaired, 42, &path, false);
+    assert_close(session.close().await.expect("close native session"));
 }
 
 #[tokio::test]
-async fn ended_real_backend_is_an_error_with_and_without_cancellation() -> TestResult {
-    let mut session = NativeSession::start()?;
-    session.close().await?;
+async fn ended_real_backend_is_an_error_with_and_without_cancellation() {
+    let mut session = NativeSession::start().expect("start native session");
+    assert_close(session.close().await.expect("close native session"));
     let token = CancellationToken::new();
     token.cancel();
     let normal = (None, false, "backend response stream ended");
     let cancelled = (Some(&token), true, "backend stdin closed");
     for (interest, disposition, expected) in [normal, cancelled] {
         let response = session.response(interest, disposition).await;
-        let error = response
-            .err()
-            .ok_or("terminal failure fabricated a reply")?;
-        assert_eq!(error.to_string(), expected);
+        let error = response.err().map(|error| error.to_string());
+        assert_eq!(error.as_deref(), Some(expected));
     }
-    Ok(())
 }
 
 fn native_watcher(root: &Path) -> TestResult<lspkit_sidecar::Sidecar> {
@@ -205,18 +236,18 @@ fn native_watcher(root: &Path) -> TestResult<lspkit_sidecar::Sidecar> {
 }
 
 #[tokio::test]
-async fn native_watcher_lifecycle_reaps_and_respawns_the_actual_process() -> TestResult {
-    let fixture = tempfile::TempDir::new()?;
-    let mut sidecar = native_watcher(fixture.path())?;
+async fn native_watcher_lifecycle_reaps_and_respawns_the_actual_process() {
+    let fixture = tempfile::TempDir::new().expect("native watcher fixture");
+    let mut sidecar = native_watcher(fixture.path()).expect("configure native watcher");
     assert!(sidecar.wait().await.is_none());
     for _ in 0..2 {
-        sidecar.spawn()?;
+        sidecar.spawn().expect("spawn native watcher");
         let status = timeout(reference_program::READ_GUARD, sidecar.wait())
-            .await?
-            .ok_or("spawned child was lost")?;
+            .await
+            .expect("watcher wait remains responsive")
+            .expect("spawned child was lost");
         assert!(status.success(), "actual watcher failed: {status:?}");
         assert_eq!(sidecar.wait().await, Some(status));
         assert_eq!(sidecar.next_backoff(), std::time::Duration::from_secs(1));
     }
-    Ok(())
 }

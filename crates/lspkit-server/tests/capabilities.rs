@@ -106,5 +106,5 @@ fn text_sync_copy_eq() {
 fn feature_ordering_is_stable() {
     let mut features = [Feature::Hover, Feature::Completion];
     features.sort();
-    assert_eq!(features[0], Feature::Completion);
+    assert_eq!(features, [Feature::Completion, Feature::Hover]);
 }

@@ -10,13 +10,19 @@ use tokio::io::AsyncWriteExt;
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub(super) enum Packet {
+    /// An unsolicited backend notification.
     Notification {
+        /// The notification method name.
         method: String,
+        /// Remaining notification fields beyond the method.
         #[serde(flatten)]
         fields: Map<String, Value>,
     },
+    /// A correlated backend response.
     Response {
+        /// The request identity echoed from the inbound request.
         id: RequestId,
+        /// Remaining response fields beyond the identity.
         #[serde(flatten)]
         fields: Map<String, Value>,
     },
@@ -25,7 +31,9 @@ pub(super) enum Packet {
 /// Closure observations come from receiving EOF on each independent channel.
 #[derive(Default, Serialize)]
 pub(super) struct Closed {
+    /// The response channel reached EOF.
     responses_closed: bool,
+    /// The notification channel reached EOF.
     notifications_closed: bool,
 }
 
@@ -33,19 +41,29 @@ pub(super) struct Closed {
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum Event {
+    /// A rendered unsolicited notification.
     Notification {
+        /// The decoded notification envelope.
         envelope: Packet,
     },
+    /// A rendered correlated response.
     Response {
+        /// The decoded response envelope.
         envelope: Packet,
     },
+    /// A decode failure that could not become a typed reply.
     Error {
+        /// The human-readable decode failure.
         message: String,
     },
+    /// One terminal observation of channel, task and process endings.
     Closed {
+        /// Which independent channels reached EOF.
         #[serde(flatten)]
         streams: Closed,
+        /// Whether the reader task ended without error.
         reader_ended: bool,
+        /// Whether the backend process exited successfully, when observed.
         backend_success: Option<bool>,
     },
 }
@@ -53,8 +71,10 @@ enum Event {
 /// JSON rendering and native stdout failures remain visible.
 #[derive(Debug, thiserror::Error)]
 pub(super) enum WireError {
+    /// A journal event could not be serialized.
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    /// Native stdout write or flush failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

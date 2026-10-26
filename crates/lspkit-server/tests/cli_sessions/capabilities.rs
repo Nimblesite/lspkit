@@ -3,26 +3,68 @@
 //! `workspace.diagnostics` capability clients actually send decodes once at
 //! the shared boundary, and malformed initialize data stays an error.
 
+use std::path::Path;
+
 use super::common::{
-    assert_backend_failure, error_of, initialize_at, reference_binary, result_of, uri_for,
-    ReferenceClient,
+    assert_backend_failure, clean_exit, error_of, initialize_session, reference_binary, result_of,
+    uri_for, ReferenceClient, StepResult,
 };
+use lspkit_server::Message;
 use serde_json::{json, Value};
 use tempfile::TempDir;
 
 /// The full advertisement every accepted initialize must produce.
 pub(super) fn assert_advertised(capabilities: &Value) {
-    let capabilities = &capabilities["capabilities"];
-    assert_eq!(capabilities["positionEncoding"], "utf-16");
-    assert_eq!(capabilities["textDocumentSync"], 1);
-    let provider = &capabilities["diagnosticProvider"];
-    assert_eq!(provider["identifier"], "diagnostic-reference");
-    assert_eq!(provider["interFileDependencies"], true);
-    assert_eq!(provider["workspaceDiagnostics"], true);
+    let provider = "/capabilities/diagnosticProvider";
+    assert_eq!(
+        capabilities.pointer("/capabilities/positionEncoding"),
+        Some(&json!("utf-16"))
+    );
+    assert_eq!(
+        capabilities.pointer("/capabilities/textDocumentSync"),
+        Some(&json!(1))
+    );
+    assert_eq!(
+        capabilities.pointer(&format!("{provider}/identifier")),
+        Some(&json!("diagnostic-reference"))
+    );
+    assert_eq!(
+        capabilities.pointer(&format!("{provider}/interFileDependencies")),
+        Some(&json!(true))
+    );
+    assert_eq!(
+        capabilities.pointer(&format!("{provider}/workspaceDiagnostics")),
+        Some(&json!(true))
+    );
 }
 
-/// LSP and VS Code send the plural `workspace.diagnostics` capability.
-async fn plural_advertisement(client: &mut ReferenceClient) -> Value {
+/// An accepted initialize response decodes and carries the advertisement.
+fn assert_decodes(response: &Message, label: &str) {
+    assert!(response.error.is_none(), "{label}");
+    assert_advertised(&result_of(response));
+}
+
+/// Malformed initialize data must retain the informative protocol error.
+fn assert_malformed(response: &Message) {
+    match response.error.clone() {
+        Some(error) => {
+            assert_eq!(error.code, -32602, "malformed initialize");
+            assert!(
+                !error.message.is_empty(),
+                "the decode error stays informative: {error:?}"
+            );
+        }
+        None => assert!(
+            response.error.is_some(),
+            "malformed initialize answers an error: {response:?}"
+        ),
+    }
+}
+
+/// Issue the four initialize variants in protocol order.
+async fn initialize_variants(
+    client: &mut ReferenceClient,
+) -> StepResult<(Message, Message, Message, Message)> {
     let plural = client
         .request(
             "initialize",
@@ -34,27 +76,10 @@ async fn plural_advertisement(client: &mut ReferenceClient) -> Value {
                 }
             }),
         )
-        .await;
-    assert!(plural.error.is_none(), "plural capability decodes");
-    assert_advertised(&result_of(&plural));
-    result_of(&plural)
-}
-
-/// Malformed initialize data must retain the informative protocol error.
-async fn assert_malformed(client: &mut ReferenceClient) {
+        .await?;
     let malformed = client
         .request("initialize", json!({ "capabilities": "not-an-object" }))
-        .await;
-    let error = error_of(&malformed);
-    assert_eq!(error.code, -32602, "malformed initialize");
-    assert!(
-        !error.message.is_empty(),
-        "the decode error stays informative: {error:?}"
-    );
-}
-
-/// The dependency's singular field remains accepted at the boundary.
-async fn assert_singular(client: &mut ReferenceClient, plural: &Value) {
+        .await?;
     let singular = client
         .request(
             "initialize",
@@ -62,32 +87,76 @@ async fn assert_singular(client: &mut ReferenceClient, plural: &Value) {
                 "capabilities": { "workspace": { "diagnostic": { "refreshSupport": true } } }
             }),
         )
-        .await;
-    assert!(singular.error.is_none(), "singular capability decodes");
-    assert_eq!(
-        result_of(&singular),
-        *plural,
-        "plural and singular produce the same advertisement"
-    );
+        .await?;
+    let absent = client
+        .request("initialize", json!({ "capabilities": {} }))
+        .await?;
+    Ok((plural, malformed, singular, absent))
 }
 
 #[tokio::test]
 async fn capability_variants_advertise_identically_and_malformed_stays_an_error() {
-    let _binary = reference_binary();
-    let mut client = ReferenceClient::spawn();
-    let plural = plural_advertisement(&mut client).await;
-    assert_malformed(&mut client).await;
-    assert_singular(&mut client, &plural).await;
-    // Absent capability data still yields the same server advertisement.
-    let absent = client
-        .request("initialize", json!({ "capabilities": {} }))
-        .await;
-    assert!(absent.error.is_none(), "empty capabilities decode");
-    assert_eq!(result_of(&absent), plural);
-    let unknown = client.request("workspace/noSuchMethod", json!({})).await;
-    assert_eq!(error_of(&unknown).code, -32601, "unknown method");
+    let _binary = reference_binary().expect("real reference CLI producer was built");
+    let mut client = ReferenceClient::spawn().expect("spawn reference server");
+    let (plural, malformed, singular, absent) = initialize_variants(&mut client)
+        .await
+        .expect("initialize variants round trip");
+    assert_decodes(&plural, "plural capability decodes");
+    assert_malformed(&malformed);
+    assert_decodes(&singular, "singular capability decodes");
+    assert_eq!(
+        result_of(&singular),
+        result_of(&plural),
+        "plural and singular produce the same advertisement"
+    );
+    assert_decodes(&absent, "empty capabilities decode");
+    assert_eq!(result_of(&absent), result_of(&plural));
+    let unknown = client
+        .request("workspace/noSuchMethod", json!({}))
+        .await
+        .expect("unknown method round trip");
+    let error = error_of(&unknown).expect("unknown method answers an error");
+    assert_eq!(error.code, -32601, "unknown method");
 
-    client.assert_clean_exit().await;
+    clean_exit!(client);
+}
+
+/// Scan the workspace while its real source stays unreadable.
+async fn scan_unreadable(client: &mut ReferenceClient) -> StepResult<(Message, Vec<Value>)> {
+    let token = json!("invalid-native-source");
+    client
+        .request_with_progress(
+            "workspace/diagnostic",
+            json!({"previousResultIds":[],"partialResultToken":token}),
+            &token,
+        )
+        .await
+}
+
+/// Repair the source on disk and pull it again through the watcher.
+async fn repaired_pull(client: &mut ReferenceClient, workspace: &Path) -> StepResult<Message> {
+    let source = workspace.join("invalid.json");
+    std::fs::write(&source, b"{\"fixed\":true}")?;
+    let _changed = client.notification("$/referenceWorkspaceChanged").await?;
+    client.pull_document(&uri_for(&source)?).await
+}
+
+/// The failed native source is an honest scan error with no fabricated partials.
+fn assert_scan_failure(response: &Message, partials: &[Value]) {
+    assert_backend_failure(response);
+    assert!(
+        partials.is_empty(),
+        "failed source never streams a fabricated clean report"
+    );
+}
+
+/// A real filesystem repair invalidates the failed memo and recovers normally.
+fn assert_repaired(response: &Message) {
+    assert!(response.error.is_none());
+    let report = result_of(response);
+    assert_eq!(report.get("kind"), Some(&json!("full")));
+    assert_eq!(report.get("items"), Some(&json!([])));
+    assert!(report.get("resultId").is_some_and(Value::is_string));
 }
 
 /// A watched workspace with no synced documents still answers pulls of
@@ -97,45 +166,22 @@ async fn pull_of_a_missing_file_is_an_honest_error() {
     let workspace = TempDir::new().expect("tempdir");
     std::fs::write(workspace.path().join("invalid.json"), [0xff])
         .expect("write actual unreadable source");
-    let mut client = ReferenceClient::spawn();
-    initialize_at(&mut client, workspace.path()).await;
+    let mut client = ReferenceClient::spawn().expect("spawn reference server");
+    initialize_session!(client, workspace.path());
 
-    let missing_uri = uri_for(workspace.path().join("missing.json"));
-    let missing = client.pull_document(&missing_uri).await;
+    let missing_uri = uri_for(workspace.path().join("missing.json")).expect("fixture uri");
+    let missing = client
+        .pull_document(&missing_uri)
+        .await
+        .expect("pull the missing source");
     assert_backend_failure(&missing);
-    assert_workspace_read_failure(&mut client).await;
-    assert_native_source_repair(&mut client, workspace.path()).await;
-
-    let status = client.shutdown_and_exit().await;
-    assert!(status.success(), "clean exit, got {status:?}");
-}
-
-/// An actual non-UTF8 source is a compiler-input error, never a supersession retry.
-async fn assert_workspace_read_failure(client: &mut ReferenceClient) {
-    let token = json!("invalid-native-source");
-    let (response, partials) = client
-        .request_with_progress(
-            "workspace/diagnostic",
-            json!({"previousResultIds":[],"partialResultToken":token}),
-            &token,
-        )
-        .await;
-    assert_backend_failure(&response);
-    assert!(
-        partials.is_empty(),
-        "failed source never streams a fabricated clean report"
-    );
-}
-
-/// A real filesystem repair invalidates the failed memo and recovers normally.
-async fn assert_native_source_repair(client: &mut ReferenceClient, workspace: &std::path::Path) {
-    let source = workspace.join("invalid.json");
-    std::fs::write(&source, b"{\"fixed\":true}").expect("repair actual source");
-    client.notification("$/referenceWorkspaceChanged").await;
-    let response = client.pull_document(&uri_for(source)).await;
-    assert!(response.error.is_none());
-    let report = result_of(&response);
-    assert_eq!(report["kind"], "full");
-    assert_eq!(report["items"], json!([]));
-    assert!(report["resultId"].is_string());
+    let (response, partials) = scan_unreadable(&mut client)
+        .await
+        .expect("scan the unreadable source");
+    assert_scan_failure(&response, &partials);
+    let repaired = repaired_pull(&mut client, workspace.path())
+        .await
+        .expect("pull the repaired source");
+    assert_repaired(&repaired);
+    clean_exit!(client);
 }

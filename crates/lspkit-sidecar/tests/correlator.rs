@@ -52,7 +52,10 @@ async fn resolving_unknown_id_errors() {
         .expect_err("second resolve should fail");
     match err {
         CorrelationError::UnknownId(raw) => assert_eq!(raw, real_id.get()),
-        other => panic!("expected UnknownId, got {other:?}"),
+        other => assert!(
+            matches!(other, CorrelationError::UnknownId(_)),
+            "expected UnknownId, got {other:?}"
+        ),
     }
 }
 
@@ -68,8 +71,14 @@ async fn resolve_against_dropped_receiver_errors() {
         .resolve(id, 99)
         .expect_err("resolve should fail when receiver is gone");
     match err {
-        CorrelationError::AlreadyResolved(raw) => assert_eq!(raw, id.get()),
-        other => panic!("expected AlreadyResolved, got {other:?}"),
+        CorrelationError::AlreadyResolved(raw, response) => {
+            assert_eq!(raw, id.get());
+            assert_eq!(response, 99);
+        }
+        other => assert!(
+            matches!(other, CorrelationError::AlreadyResolved(_, _)),
+            "expected AlreadyResolved, got {other:?}"
+        ),
     }
 }
 
@@ -122,10 +131,10 @@ fn request_id_traits_are_derived() {
 /// Error `Display` strings are stable.
 #[test]
 fn error_display_strings_are_stable() {
-    let unknown = CorrelationError::UnknownId(11);
+    let unknown = CorrelationError::<()>::UnknownId(11);
     assert_eq!(unknown.to_string(), "unknown request id: 11");
 
-    let already = CorrelationError::AlreadyResolved(12);
+    let already = CorrelationError::AlreadyResolved(12, ());
     assert_eq!(already.to_string(), "request 12 already completed");
 
     assert!(format!("{unknown:?}").contains("UnknownId"));

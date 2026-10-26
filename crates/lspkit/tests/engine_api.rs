@@ -216,9 +216,9 @@ async fn subscribe_collects_multiple_events_after_rescans() {
         collected.push(event.generation);
     }
     assert_eq!(collected.len(), 3);
-    assert_eq!(collected[0], Generation::ZERO);
-    assert_eq!(collected[1], Generation::new(1));
-    assert_eq!(collected[2], Generation::new(2));
+    assert_eq!(collected.first(), Some(&Generation::ZERO));
+    assert_eq!(collected.get(1), Some(&Generation::new(1)));
+    assert_eq!(collected.get(2), Some(&Generation::new(2)));
 }
 
 #[tokio::test]

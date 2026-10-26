@@ -19,9 +19,12 @@ pub use cancellation::CancellationHandle;
 use interest::RequestControl;
 pub use interest::RequestInterest;
 
+/// Sole registry connecting protocol cancellation to queued and executing work.
 type Cancellations = RwLock<HashMap<RequestId, Arc<RequestControl>>>;
 
+/// Object-safe async handler result used by dynamically registered methods.
 type HandlerFuture = Pin<Box<dyn std::future::Future<Output = HandlerResult> + Send>>;
+/// Shareable type-erased handler invoked with request parameters and lifetime.
 type HandlerFn = Arc<dyn Fn(Value, CancellationToken) -> HandlerFuture + Send + Sync>;
 
 /// The two outcomes a request handler can produce.
@@ -45,15 +48,18 @@ pub enum DispatchError {
     /// a poisoned registry lock is reported instead of skipping registration.
     /// [LSP-PULL-CANCELLATION]
     #[error("cancellation registry lock poisoned; request {0:?} not registered")]
-    RegistrationPoisoned(RequestId),
+    RegistrationPoisoned(RequestId, String),
 }
 
 /// RAII registration: removes a request's cancellation token on drop, whether
 /// the handler completed or the future was dropped before its first poll.
 /// [LSP-PULL-CANCELLATION]
 struct RegistrationGuard {
+    /// Identifies the registry entry owned by this exact request.
     id: RequestId,
+    /// Prevents a reused request ID from removing a newer registration.
     control: Arc<RequestControl>,
+    /// Shared registry released on completion or dropped work.
     cancellations: Arc<Cancellations>,
 }
 
@@ -64,7 +70,7 @@ impl Drop for RegistrationGuard {
                 .get(&self.id)
                 .is_some_and(|control| Arc::ptr_eq(control, &self.control))
             {
-                guard.remove(&self.id);
+                let _removed = guard.remove(&self.id);
             }
         }
     }
@@ -73,7 +79,9 @@ impl Drop for RegistrationGuard {
 /// Routes inbound JSON-RPC method calls to async handlers.
 #[derive(Clone, Default)]
 pub struct Dispatcher {
+    /// Consumer handlers shared with clones and replaced by method name.
     handlers: Arc<RwLock<HashMap<String, HandlerFn>>>,
+    /// Cancellation controls registered before any request is scheduled.
     cancellations: Arc<Cancellations>,
 }
 
@@ -92,7 +100,7 @@ impl Dispatcher {
     {
         let wrapped: HandlerFn = Arc::new(move |params, cancel| Box::pin(handler(params, cancel)));
         if let Ok(mut guard) = self.handlers.write() {
-            guard.insert(method.into(), wrapped);
+            let _replaced = guard.insert(method.into(), wrapped);
         }
     }
 
@@ -156,10 +164,9 @@ impl Dispatcher {
         &self,
         id: RequestId,
     ) -> Result<(Arc<RequestControl>, RegistrationGuard), DispatchError> {
-        let mut registry = self
-            .cancellations
-            .write()
-            .map_err(|_| DispatchError::RegistrationPoisoned(id.clone()))?;
+        let mut registry = self.cancellations.write().map_err(|source| {
+            DispatchError::RegistrationPoisoned(id.clone(), source.to_string())
+        })?;
         let control = Arc::clone(registry.entry(id.clone()).or_default());
         let guard = RegistrationGuard {
             id,

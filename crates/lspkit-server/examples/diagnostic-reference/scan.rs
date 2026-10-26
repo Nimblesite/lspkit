@@ -19,7 +19,9 @@ pub(super) const MAX_SCAN_PASSES: usize = 3;
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceParams {
+    /// Previously known snapshot identities, matched per document to skip unchanged reports.
     previous_result_ids: Vec<PreviousResult>,
+    /// When set, each scanned document streams as a `$/progress` partial.
     partial_result_token: Option<Value>,
 }
 
@@ -27,19 +29,25 @@ struct WorkspaceParams {
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PreviousResult {
+    /// The document the identity belongs to.
     uri: String,
+    /// The client's last accepted result identity for that document.
     value: String,
 }
 
 /// Terminal outcome of one scan attempt.
 enum ScanOutcome {
+    /// The scan finished under one stable revision.
     Complete(HandlerResult),
+    /// The snapshot moved mid-scan and the pass must restart.
     Interrupted,
 }
 
 /// Supersession retries the scan; real compiler and protocol errors stay errors.
 enum ScanError {
+    /// The snapshot was superseded by a newer revision.
     Superseded,
+    /// A protocol, cancellation or compiler error ends the scan.
     Request(JsonRpcError),
 }
 
@@ -121,7 +129,9 @@ async fn scan_in_background(
     let computation = start_document(server, params, gate, uri);
     let result = lspkit_sidecar::cancellation::until_cancelled(computation, Some(cancel))
         .await
-        .map_err(|_| ScanError::Request(cancelled_error()))?;
+        .map_err(|cancelled| {
+            ScanError::Request(cancelled_error().with_data(json!(cancelled.to_string())))
+        })?;
     items.extend(
         result
             .map_err(|error| ScanError::Request(JsonRpcError::new(-32603, error.to_string())))??,
@@ -193,8 +203,8 @@ fn stamp_document(item: &mut Value, uri: &str, version: i32) -> Result<(), JsonR
     let fields = item
         .as_object_mut()
         .ok_or_else(|| JsonRpcError::new(-32603, "report must be an object"))?;
-    fields.insert("uri".to_owned(), json!(uri));
-    fields.insert("version".to_owned(), json!(version));
+    let _ = fields.insert("uri".to_owned(), json!(uri));
+    let _ = fields.insert("version".to_owned(), json!(version));
     Ok(())
 }
 
@@ -211,7 +221,10 @@ fn emit_partial(
             .outbox
             .send(lspkit_server::Message::notification("$/progress", progress))
     })
-    .map_err(|_| JsonRpcError::new(-32803, "partial diagnostic stream closed"))
+    .map_err(|emission| {
+        JsonRpcError::new(-32803, "partial diagnostic stream closed")
+            .with_data(json!(emission.to_string()))
+    })
 }
 
 /// The cancellation error code every cancelled request reports.

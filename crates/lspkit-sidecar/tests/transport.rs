@@ -104,11 +104,17 @@ async fn oversized_announced_length_is_rejected() {
         .await
         .expect_err("oversized frame must error");
     match err {
-        TransportError::FrameTooLarge(observed, limit) => {
-            assert_eq!(observed, announced as usize);
+        TransportError::FrameTooLarge(observed, limit, None) => {
+            assert_eq!(
+                observed,
+                usize::try_from(announced).expect("announced length fits in usize")
+            );
             assert_eq!(limit, 16);
         }
-        other => panic!("expected FrameTooLarge, got {other:?}"),
+        other => assert!(
+            matches!(other, TransportError::FrameTooLarge(_, _, _)),
+            "expected FrameTooLarge, got {other:?}"
+        ),
     }
 }
 
@@ -150,7 +156,7 @@ async fn truncated_payload_yields_io_error() {
 /// Error `Display` impls render the documented strings.
 #[test]
 fn error_display_strings_are_stable() {
-    let too_large = TransportError::FrameTooLarge(100, 50);
+    let too_large = TransportError::FrameTooLarge(100, 50, None);
     assert_eq!(
         too_large.to_string(),
         "frame too large: 100 bytes (limit 50)"

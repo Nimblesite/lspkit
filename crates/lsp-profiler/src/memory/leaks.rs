@@ -39,6 +39,7 @@ pub fn label(confidence: &LeakConfidence) -> &'static str {
 /// Consecutive-growth streaks per site, across one session's diffs.
 #[derive(Debug, Default)]
 pub struct LeakTracker {
+    /// Consecutive growing diffs by allocation site; absent sites reset to zero.
     streaks: HashMap<SiteKey, u32>,
 }
 
@@ -81,6 +82,7 @@ fn suspected(growth: &SiteGrowth, streak: u32) -> SuspectedLeak {
     }
 }
 
+/// Apply [PROF-MEMORY-CONFIDENCE] thresholds and explain the selected level.
 fn score(streak: u32, size_diff: i64) -> (LeakConfidence, String) {
     if streak >= 3 {
         (

@@ -27,14 +27,20 @@ pub(super) const WORKSPACE_DIAGNOSTIC: &str = "workspace/diagnostic";
 /// Shared per-connection state; clones observe one session.
 #[derive(Clone)]
 pub(super) struct Server {
+    /// Editor-owned document sources plus the watched workspace root.
     pub(super) sources: Sources,
+    /// The memoized diagnostics store shared by document and workspace pulls.
     pub(super) pull: PullStore,
+    /// The request dispatcher that registers cancellation before scheduling.
     dispatcher: Dispatcher,
+    /// Per-request reply gates, keyed by request identity.
     pub(super) gates: Arc<Mutex<HashMap<RequestId, ReplyGate>>>,
+    /// The serialized egress boundary for this session.
     pub(super) outbox: Outbox,
 }
 
 impl Server {
+    /// Wire a fresh session around one serialized egress outbox.
     fn new(outbox: Outbox) -> Self {
         let sources = Sources::default();
         let pull = PullStore::new(analysis::analyzer(sources.clone()));
@@ -61,7 +67,7 @@ pub(super) async fn serve() -> std::process::ExitCode {
     let outbox = Outbox::new(inbox);
     let server = Server::new(outbox.clone());
     register_handlers(&server);
-    tokio::spawn(pump(
+    let _pump = tokio::spawn(pump(
         receiver,
         lspkit_server::MessageWriter::new(tokio::io::stdout()),
         outbox.clone(),
@@ -134,7 +140,7 @@ fn store_document(server: &Server, document: Option<(String, Document)>) {
         return;
     };
     if let Ok(mut documents) = server.sources.documents.lock() {
-        documents.insert(uri, document);
+        let _ = documents.insert(uri, document);
     }
     server.pull.invalidate();
 }
@@ -143,14 +149,18 @@ fn store_document(server: &Server, document: Option<(String, Document)>) {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Opened {
+    /// The synchronized text-document snapshot carried by the notification.
     text_document: OpenedText,
 }
 
 /// The synchronized text and version supplied by the editor.
 #[derive(Deserialize)]
 struct OpenedText {
+    /// The document URI.
     uri: String,
+    /// The editor-assigned version.
     version: i32,
+    /// The full document text.
     text: String,
 }
 
@@ -171,18 +181,25 @@ fn opened(params: &Value) -> Option<(String, Document)> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Change {
+    /// The changed document's identity and version.
     text_document: ChangedText,
+    /// Full-sync content replacements, newest last.
     content_changes: Vec<FullChange>,
 }
 
+/// The changed document's identity and version.
 #[derive(Deserialize)]
 struct ChangedText {
+    /// The document URI.
     uri: String,
+    /// The editor-assigned version after the change.
     version: i32,
 }
 
+/// One full-sync content replacement.
 #[derive(Deserialize)]
 struct FullChange {
+    /// The complete replacement text.
     text: String,
 }
 
@@ -335,7 +352,7 @@ fn schedule_scan(server: &Server, id: RequestId, params: Value) {
 /// Keep the scan's reply gate so the terminal reply closes the stream.
 fn remember_gate(server: &Server, id: &RequestId, gate: ReplyGate) {
     if let Ok(mut gates) = server.gates.lock() {
-        gates.insert(id.clone(), gate);
+        let _ = gates.insert(id.clone(), gate);
     }
 }
 
@@ -418,15 +435,19 @@ fn document_pull(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DocumentDiagnostic {
+    /// The document being pulled.
     text_document: TextDocumentRef,
+    /// The client's last accepted result identity, when known.
     previous_result_id: Option<String>,
 }
 
 impl DocumentDiagnostic {
     /// Decode at the foreground boundary before compiler work is scheduled.
     fn decode(raw: Value) -> Result<Self, JsonRpcError> {
-        serde_json::from_value(raw)
-            .map_err(|_| JsonRpcError::new(-32602, "malformed textDocument/diagnostic params"))
+        serde_json::from_value(raw).map_err(|error| {
+            JsonRpcError::new(-32602, "malformed textDocument/diagnostic params")
+                .with_data(json!(error.to_string()))
+        })
     }
 
     /// A supplied version or the current synchronized editor input.
@@ -441,7 +462,9 @@ impl DocumentDiagnostic {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TextDocumentRef {
+    /// The document URI.
     uri: String,
+    /// An explicit editor version, used before the synchronized fallback.
     version: Option<i32>,
 }
 

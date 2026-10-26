@@ -20,16 +20,16 @@ struct TestConfig {
 const CONFIG_NAME: &str = "lspkit.toml";
 
 /// Build a temp dir holding `lspkit.toml` with the given body, returning both.
-fn temp_with_config(body: &str) -> (TempDir, PathBuf) {
-    let dir = TempDir::new().expect("create tempdir");
+fn temp_with_config(body: &str) -> std::io::Result<(TempDir, PathBuf)> {
+    let dir = TempDir::new()?;
     let path = dir.path().join(CONFIG_NAME);
-    fs::write(&path, body).expect("write config");
-    (dir, path)
+    fs::write(&path, body)?;
+    Ok((dir, path))
 }
 
 #[test]
 fn find_ancestor_returns_path_when_file_in_start_dir() {
-    let (dir, path) = temp_with_config("name = \"x\"\ncount = 1\n");
+    let (dir, path) = temp_with_config("name = \"x\"\ncount = 1\n").expect("create fixture");
     let found = find_ancestor(dir.path(), CONFIG_NAME).expect("config should be found");
     assert_eq!(found, path);
 }
@@ -62,7 +62,7 @@ fn find_ancestor_ignores_directories_named_like_target() {
 
 #[test]
 fn load_from_path_deserializes_valid_toml() {
-    let (_dir, path) = temp_with_config("name = \"alpha\"\ncount = 42\n");
+    let (_dir, path) = temp_with_config("name = \"alpha\"\ncount = 42\n").expect("create fixture");
     let loaded: LoadedConfig<TestConfig> = load_from_path(&path).expect("load ok");
     assert_eq!(loaded.source, path);
     assert_eq!(
@@ -85,7 +85,7 @@ fn load_from_path_returns_io_error_for_missing_file() {
 
 #[test]
 fn load_from_path_returns_parse_error_for_invalid_toml() {
-    let (_dir, path) = temp_with_config("this is = not valid = toml\n");
+    let (_dir, path) = temp_with_config("this is = not valid = toml\n").expect("create fixture");
     let err = load_from_path::<TestConfig>(&path).expect_err("must error");
     assert!(matches!(&err, LoadError::Parse { path: p, message }
         if p == &path && !message.is_empty()));
@@ -94,7 +94,7 @@ fn load_from_path_returns_parse_error_for_invalid_toml() {
 #[test]
 fn load_from_path_returns_parse_error_for_wrong_schema() {
     // Valid TOML, wrong shape for `TestConfig` (count is missing).
-    let (_dir, path) = temp_with_config("name = \"only\"\n");
+    let (_dir, path) = temp_with_config("name = \"only\"\n").expect("create fixture");
     let err = load_from_path::<TestConfig>(&path).expect_err("must error");
     assert!(matches!(err, LoadError::Parse { .. }));
 }
@@ -124,7 +124,7 @@ fn load_from_ancestor_returns_not_found() {
 
 #[test]
 fn load_from_ancestor_surfaces_parse_error() {
-    let (dir, _path) = temp_with_config("oops = = =\n");
+    let (dir, _path) = temp_with_config("oops = = =\n").expect("create fixture");
     let err = load_from_ancestor::<TestConfig>(dir.path(), CONFIG_NAME).expect_err("must error");
     assert!(matches!(err, LoadError::Parse { .. }));
 }
@@ -152,7 +152,7 @@ fn load_error_debug_is_implemented() {
 
 #[test]
 fn loaded_config_debug_is_implemented() {
-    let (_dir, path) = temp_with_config("name = \"d\"\ncount = 0\n");
+    let (_dir, path) = temp_with_config("name = \"d\"\ncount = 0\n").expect("create fixture");
     let loaded: LoadedConfig<TestConfig> = load_from_path(&path).expect("load");
     let dbg = format!("{loaded:?}");
     assert!(dbg.contains("LoadedConfig"));

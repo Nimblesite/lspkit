@@ -8,10 +8,12 @@ use super::{Cancellations, DispatchError, RequestControl, RequestId, RequestInte
 /// Weak access to the dispatcher's sole registry; does not retain the server or its handlers.
 #[derive(Clone, Debug)]
 pub struct CancellationHandle {
+    /// Prevents protocol-reader controls from keeping the dispatcher alive.
     registry: Weak<Cancellations>,
 }
 
 impl CancellationHandle {
+    /// Creates weak protocol access to the dispatcher's sole registry.
     pub(super) fn new(registry: &Arc<Cancellations>) -> Self {
         Self {
             registry: Arc::downgrade(registry),
@@ -33,9 +35,9 @@ impl CancellationHandle {
         let Some(registry) = self.registry.upgrade() else {
             return Ok(());
         };
-        let mut guard = registry
-            .write()
-            .map_err(|_| DispatchError::RegistrationPoisoned(id.clone()))?;
+        let mut guard = registry.write().map_err(|source| {
+            DispatchError::RegistrationPoisoned(id.clone(), source.to_string())
+        })?;
         register(&mut guard, id, interest);
         Ok(())
     }
@@ -113,7 +115,7 @@ fn register(
         return;
     }
     supersede(registry, interest.as_ref());
-    registry.insert(
+    let _replaced = registry.insert(
         id,
         Arc::new(RequestControl {
             interest,

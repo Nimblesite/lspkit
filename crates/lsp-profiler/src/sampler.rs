@@ -104,6 +104,7 @@ impl SamplerSink {
 /// A cooperative stop control that can interrupt a pending snapshot barrier.
 #[derive(Debug, Clone)]
 pub struct SamplerStop {
+    /// Shared stop signal observed by the backend without holding session locks.
     flag: Arc<AtomicBool>,
 }
 
@@ -245,6 +246,7 @@ impl SamplerHandle {
         }
     }
 
+    /// Drain batches until the producer acknowledges completion or times out.
     async fn drain_until(
         &mut self,
         mut completion: oneshot::Receiver<()>,

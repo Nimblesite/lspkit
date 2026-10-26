@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use num_traits::ToPrimitive;
 use serde_json::{json, Value};
 
 use super::{artifact_path, sorted_threads, validate_exportable, write_artifact, ExportMeta};
@@ -25,11 +26,14 @@ struct CpuNode {
 
 /// Incremental call-tree builder.
 struct CallTree {
+    /// Arena of call-tree nodes; the synthetic root occupies index zero.
     nodes: Vec<CpuNode>,
+    /// Reuses an existing child for each `(parent, frame)` pair.
     child_of: HashMap<(usize, usize), usize>,
 }
 
 impl CallTree {
+    /// Start an empty call tree with the synthetic root V8 requires.
     fn new() -> Self {
         Self {
             nodes: vec![CpuNode {
@@ -52,6 +56,7 @@ impl CallTree {
         leaf
     }
 
+    /// Find or create the node for `frame` beneath `parent`.
     fn child(&mut self, parent: usize, frame: usize) -> usize {
         if let Some(existing) = self.child_of.get(&(parent, frame)) {
             return *existing;
@@ -70,19 +75,18 @@ impl CallTree {
     }
 }
 
-/// Seconds to whole microseconds, clamped to `[0, 1e15]`.
-#[expect(
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    reason = "f64 -> i64 has no TryFrom; the value is rounded and clamped into i64 range first"
-)]
-fn secs_to_micros(secs: f64) -> i64 {
-    (secs * 1_000_000.0).round().clamp(0.0, 1.0e15) as i64
+/// Seconds to whole microseconds, clamped to `[0, 1e15]`; a NaN weight has no
+/// microsecond value, so it is `None` rather than a silent zero.
+fn secs_to_micros(secs: f64) -> Option<i64> {
+    (secs * 1_000_000.0).round().clamp(0.0, 1.0e15).to_i64()
 }
 
 /// Build a V8 `Profiler.Profile` value from aggregated data.
-#[must_use]
-pub fn build(data: &ProfileData) -> Value {
+///
+/// # Errors
+///
+/// Returns a message if a recorded sample weight cannot be represented.
+pub fn build(data: &ProfileData) -> Result<Value, String> {
     let mut tree = CallTree::new();
     let mut samples: Vec<usize> = Vec::new();
     let mut time_deltas: Vec<i64> = Vec::new();
@@ -91,7 +95,9 @@ pub fn build(data: &ProfileData) -> Value {
         let weights = data.thread_weights.get(&tid).map_or(&[][..], Vec::as_slice);
         for (stack, weight) in stacks.iter().zip(weights) {
             samples.push(tree.insert(stack) + 1);
-            time_deltas.push(secs_to_micros(*weight));
+            let micros = secs_to_micros(*weight)
+                .ok_or_else(|| format!("Sample weight {weight} has no whole-microsecond value"))?;
+            time_deltas.push(micros);
         }
     }
     let nodes: Vec<Value> = tree
@@ -100,13 +106,13 @@ pub fn build(data: &ProfileData) -> Value {
         .enumerate()
         .map(|(index, node)| node_json(index, node, &data.frames))
         .collect();
-    json!({
+    Ok(json!({
         "nodes": nodes,
         "startTime": 0,
         "endTime": time_deltas.iter().sum::<i64>(),
         "samples": samples,
         "timeDeltas": time_deltas,
-    })
+    }))
 }
 
 /// Write `data` as a `.cpuprofile`.
@@ -123,7 +129,7 @@ pub fn export(
     output_dir: &Path,
 ) -> Result<PathBuf, String> {
     validate_exportable(data)?;
-    let json = serde_json::to_string(&build(data))
+    let json = serde_json::to_string(&build(data)?)
         .map_err(|err| format!("Failed to serialize cpuprofile: {err}"))?;
     write_artifact(
         &artifact_path(output_dir, meta.session_id, "cpuprofile"),
@@ -131,6 +137,7 @@ pub fn export(
     )
 }
 
+/// Serialize one arena node using V8's one-based node identifiers.
 fn node_json(index: usize, node: &CpuNode, frames: &[FrameKey]) -> Value {
     json!({
         "id": index + 1,
@@ -175,7 +182,8 @@ mod tests {
     // [PROF-EXPORT-CPUPROFILE] nodes/samples/timeDeltas with 0-based lines.
     #[test]
     fn cpuprofile_matches_v8_schema() {
-        let profile = build(&single_frame_data(vec![0.01, 0.01]));
+        let profile = build(&single_frame_data(vec![0.01, 0.01]))
+            .expect("build a representative V8 CPU profile");
         assert_eq!(
             profile
                 .pointer("/nodes")
@@ -220,8 +228,29 @@ mod tests {
     // report variable sample durations keep their timing.
     #[test]
     fn time_deltas_follow_recorded_weights() {
-        let profile = build(&single_frame_data(vec![0.001, 0.25]));
+        let profile = build(&single_frame_data(vec![0.001, 0.25]))
+            .expect("build a CPU profile with variable sample weights");
         assert_eq!(profile.get("timeDeltas"), Some(&json!([1_000, 250_000])));
+    }
+
+    // A NaN weight has no time delta: the cpuprofile is refused with the bad
+    // weight named, never written with a fabricated zero. Out-of-range weights
+    // still clamp into the viewer's range.
+    #[test]
+    fn nan_weights_are_refused_and_extremes_clamp() {
+        let refused = build(&single_frame_data(vec![0.5, f64::NAN]))
+            .expect_err("a NaN sample weight must refuse the profile");
+        assert_eq!(refused, "Sample weight NaN has no whole-microsecond value");
+        let clamped = build(&single_frame_data(vec![-1.0, f64::INFINITY]))
+            .expect("build a CPU profile with out-of-range weights");
+        assert_eq!(
+            clamped.get("timeDeltas"),
+            Some(&json!([0, 1_000_000_000_000_000_i64]))
+        );
+        assert_eq!(
+            clamped.get("endTime"),
+            Some(&json!(1_000_000_000_000_000_i64))
+        );
     }
 
     #[test]
@@ -232,7 +261,7 @@ mod tests {
             file: None,
             line: None,
         }];
-        let profile = build(&data);
+        let profile = build(&data).expect("build a CPU profile with an unlocated frame");
         assert_eq!(
             profile
                 .pointer("/nodes/1/callFrame/lineNumber")
@@ -254,13 +283,13 @@ mod tests {
     }
 
     #[test]
-    fn export_writes_a_loadable_file() -> Result<(), String> {
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let path = export(&single_frame_data(vec![0.01]), &meta("cp"), dir.path())?;
+    fn export_writes_a_loadable_file() {
+        let dir = tempfile::tempdir().expect("create temporary cpuprofile directory");
+        let path = export(&single_frame_data(vec![0.01]), &meta("cp"), dir.path())
+            .expect("export a loadable cpuprofile");
         assert!(path.extension().is_some_and(|ext| ext == "cpuprofile"));
-        let parsed: Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())?;
+        let text = std::fs::read_to_string(&path).expect("read exported cpuprofile");
+        let parsed: Value = serde_json::from_str(&text).expect("parse exported cpuprofile JSON");
         assert_eq!(
             parsed
                 .pointer("/nodes")
@@ -268,6 +297,5 @@ mod tests {
                 .map(Vec::len),
             Some(2)
         );
-        Ok(())
     }
 }

@@ -69,7 +69,9 @@ impl ProgressReporter for NoopReporter {
 /// A handle that publishes updates to its inner reporter.
 #[derive(Clone)]
 pub struct ProgressSink {
+    /// Consumer-supplied destination shared by cloned progress handles.
     inner: Arc<dyn ProgressReporter>,
+    /// Correlates every update with its client-owned progress stream.
     token: String,
 }
 

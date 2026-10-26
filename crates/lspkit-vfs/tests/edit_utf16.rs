@@ -1,6 +1,6 @@
 //! Integration tests for UTF-16 position handling, including surrogate pairs.
 
-use lspkit_vfs::{DocumentUri, PositionEncoding, Vfs, VfsError};
+use lspkit_vfs::{DocumentUri, EditError, PositionEncoding, Vfs, VfsError};
 
 mod common;
 use common::{apply_one, edit};
@@ -76,7 +76,7 @@ fn out_of_bounds_utf16_offset_returns_edit_error() {
         VfsError::Edit(inner) => {
             assert!(format!("{inner}").contains("position out of bounds"));
         }
-        other => panic!("unexpected: {other:?}"),
+        other => assert!(matches!(other, VfsError::Edit(_)), "unexpected: {other:?}"),
     }
 }
 
@@ -93,4 +93,26 @@ fn utf16_offset_at_line_end_is_valid() {
     // End of "naïve" is 5 UTF-16 units; an insertion there must succeed.
     apply_one(&store, &doc, edit((0, 5), (0, 5), "!")).expect("append");
     assert_eq!(store.text(&doc).as_deref(), Some("naïve!"));
+}
+
+#[test]
+fn utf16_character_past_line_reports_requested_offset() {
+    let (store, doc) = store_with("naïve");
+    // Unit 9 lies past the line's 5 UTF-16 units; the error must carry the
+    // requested unit count, not a conversion failure.
+    let result = apply_one(&store, &doc, edit((0, 9), (0, 9), "x"));
+    let error = result.expect_err("unit past line end must fail");
+    let inner = match &error {
+        VfsError::Edit(inner) => Some(inner),
+        _ => None,
+    }
+    .expect("unit past line end must surface as VfsError::Edit");
+    assert_eq!(
+        inner,
+        &EditError::OutOfBounds {
+            line: u32::MAX,
+            character: 9
+        }
+    );
+    assert_eq!(store.text(&doc).as_deref(), Some("naïve"));
 }

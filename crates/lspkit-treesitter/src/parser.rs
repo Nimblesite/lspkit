@@ -25,4 +25,8 @@ pub enum ParserError {
     /// No parser registered for the given extension.
     #[error("no parser registered for extension: {0}")]
     UnknownExtension(String),
+    /// Tree-sitter rejected the named language (an incompatible grammar ABI); the
+    /// rejection is kept as the source.
+    #[error("tree-sitter rejected language {0}")]
+    Language(String, #[source] tree_sitter::LanguageError),
 }

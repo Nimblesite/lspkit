@@ -24,7 +24,10 @@ fn change_unknown_uri_returns_not_found() {
     let err = result.expect_err("missing URI must error");
     match err {
         VfsError::NotFound(path) => assert_eq!(path, "file:///missing.txt"),
-        other => panic!("unexpected error: {other:?}"),
+        other => assert!(
+            matches!(other, VfsError::NotFound(_)),
+            "unexpected error: {other:?}"
+        ),
     }
 }
 
@@ -44,7 +47,10 @@ fn change_stale_equal_version_is_rejected() {
             assert_eq!(have, 5);
             assert_eq!(got, 5);
         }
-        other => panic!("unexpected error: {other:?}"),
+        other => assert!(
+            matches!(other, VfsError::StaleVersion { .. }),
+            "unexpected error: {other:?}"
+        ),
     }
 }
 
@@ -64,7 +70,10 @@ fn change_older_version_is_rejected() {
             assert_eq!(have, 10);
             assert_eq!(got, 9);
         }
-        other => panic!("unexpected error: {other:?}"),
+        other => assert!(
+            matches!(other, VfsError::StaleVersion { .. }),
+            "unexpected error: {other:?}"
+        ),
     }
 }
 
@@ -131,7 +140,10 @@ fn change_propagates_edit_error_for_out_of_bounds_line() {
                 "got {rendered}"
             );
         }
-        other => panic!("unexpected error: {other:?}"),
+        other => assert!(
+            matches!(other, VfsError::Edit(_)),
+            "unexpected error: {other:?}"
+        ),
     }
 }
 

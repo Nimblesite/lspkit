@@ -1,0 +1,2 @@
+# lspkit's rule: tests may `expect` with a message; production code never does.
+allow-expect-in-tests = true

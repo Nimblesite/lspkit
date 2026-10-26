@@ -13,9 +13,9 @@ pub enum TransportError {
     /// Underlying I/O failure.
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    /// Frame length exceeded the configured maximum.
+    /// Frame length exceeded its limit, retaining conversion failures when applicable.
     #[error("frame too large: {0} bytes (limit {1})")]
-    FrameTooLarge(usize, usize),
+    FrameTooLarge(usize, usize, #[source] Option<std::num::TryFromIntError>),
 }
 
 /// Default maximum frame size (16 MiB) — large enough for realistic IPC,
@@ -33,13 +33,14 @@ where
     R: AsyncReadExt + Unpin,
 {
     let mut len_bytes = [0u8; 4];
-    reader.read_exact(&mut len_bytes).await?;
-    let len = u32::from_le_bytes(len_bytes) as usize;
+    let _ = reader.read_exact(&mut len_bytes).await?;
+    let len = usize::try_from(u32::from_le_bytes(len_bytes))
+        .map_err(|source| TransportError::FrameTooLarge(usize::MAX, max_frame, Some(source)))?;
     if len > max_frame {
-        return Err(TransportError::FrameTooLarge(len, max_frame));
+        return Err(TransportError::FrameTooLarge(len, max_frame, None));
     }
     let mut payload = vec![0u8; len];
-    reader.read_exact(&mut payload).await?;
+    let _ = reader.read_exact(&mut payload).await?;
     Ok(payload)
 }
 
@@ -52,8 +53,13 @@ pub async fn write_frame<W>(writer: &mut W, payload: &[u8]) -> Result<(), Transp
 where
     W: AsyncWriteExt + Unpin,
 {
-    let len = u32::try_from(payload.len())
-        .map_err(|_| TransportError::FrameTooLarge(payload.len(), u32::MAX as usize))?;
+    let len = u32::try_from(payload.len()).map_err(|source| {
+        TransportError::FrameTooLarge(
+            payload.len(),
+            usize::try_from(u32::MAX).unwrap_or(usize::MAX),
+            Some(source),
+        )
+    })?;
     writer.write_all(&len.to_le_bytes()).await?;
     writer.write_all(payload).await?;
     writer.flush().await?;

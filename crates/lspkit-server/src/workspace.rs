@@ -31,6 +31,7 @@ impl WorkspaceFolder {
 /// Multi-root workspace state.
 #[derive(Debug, Clone, Default)]
 pub struct Workspace {
+    /// Shared multi-root configuration replaced and queried across handlers.
     folders: Arc<RwLock<Vec<WorkspaceFolder>>>,
 }
 

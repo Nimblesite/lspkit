@@ -49,6 +49,7 @@ pub struct FrameKey {
 }
 
 impl FrameKey {
+    /// Capture the source identity used to deduplicate a sampled frame.
     fn of(frame: &StackFrame) -> Self {
         Self {
             name: frame.name.clone(),
@@ -108,8 +109,11 @@ impl Default for HotspotConfig {
 /// every thread shares can push a share above 100%.
 #[derive(Default)]
 struct SampleSeen {
+    /// Source lines already credited during the current sampling tick.
     lines: HashSet<(String, i64)>,
+    /// Functions already credited with inclusive time during this tick.
     functions: HashSet<FunctionKey>,
+    /// Functions already credited with self time during this tick.
     leaves: HashSet<FunctionKey>,
 }
 

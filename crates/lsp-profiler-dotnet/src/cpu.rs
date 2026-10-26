@@ -26,6 +26,7 @@ const STOP_POLL: Duration = Duration::from_millis(100);
 /// The .NET CPU backend.
 #[derive(Debug)]
 pub struct DotNetCpu {
+    /// Launches a fresh engine for each sampling session.
     engine: Engine,
 }
 
@@ -76,6 +77,7 @@ impl CpuBackend for DotNetCpu {
     }
 }
 
+/// Consume the attach handshake before exposing the sampler to its session.
 async fn await_attached(running: &mut RunningEngine, pid: u32) -> Result<String, SamplerError> {
     match running
         .next()
@@ -128,12 +130,16 @@ async fn forward(
 
 /// One owner serializes snapshot barriers and stop on the engine's input.
 struct CpuControl {
+    /// Writes snapshot and stop commands to the engine's standard input.
     signal: StopSignal,
+    /// Receives snapshot requests from the public sampler handle.
     snapshots: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
+    /// Queues acknowledgements for the relay to release after each flush.
     barriers: mpsc::UnboundedSender<oneshot::Sender<()>>,
 }
 
 impl CpuControl {
+    /// Serialize snapshot commands with the duration or caller-initiated stop.
     async fn run(mut self, sink: SamplerSink, limit: Option<Duration>) {
         let stopped = wait_for_stop(&sink, limit);
         tokio::pin!(stopped);
@@ -167,11 +173,14 @@ async fn relay(
 
 /// Symbolized frames and barrier acknowledgements share one ordered engine stream.
 struct Relay {
+    /// Resolves engine frame IDs against all symbolized frames received so far.
     frames: FrameTable,
+    /// Holds snapshot callers until their corresponding flush arrives.
     barriers: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
 }
 
 impl Relay {
+    /// Read one engine message and report whether relaying should continue.
     async fn receive(&mut self, running: &mut RunningEngine, sink: &SamplerSink) -> bool {
         match running.next().await {
             Ok(Some(message)) => self.deliver(sink, message).await,
@@ -183,6 +192,7 @@ impl Relay {
         }
     }
 
+    /// Apply one message to the frame table, sample sink, or snapshot waiters.
     async fn deliver(&mut self, sink: &SamplerSink, message: EngineMessage) -> bool {
         match message {
             EngineMessage::Frames { items } => {
@@ -203,6 +213,7 @@ impl Relay {
         }
     }
 
+    /// Release the oldest snapshot caller after the engine flushes its segment.
     async fn acknowledge(&mut self) -> bool {
         let Some(done) = self.barriers.recv().await else {
             return false;
@@ -212,6 +223,7 @@ impl Relay {
     }
 }
 
+/// Wait until the session requests stop or its optional duration elapses.
 async fn wait_for_stop(sink: &SamplerSink, limit: Option<Duration>) {
     let started = tokio::time::Instant::now();
     while !sink.stop_requested() && limit.is_none_or(|limit| started.elapsed() < limit) {
@@ -219,6 +231,7 @@ async fn wait_for_stop(sink: &SamplerSink, limit: Option<Duration>) {
     }
 }
 
+/// Convert ticks in stream order, stopping early if the sample consumer closes.
 async fn deliver(sink: &SamplerSink, frames: &FrameTable, ticks: Vec<TickRecord>) -> bool {
     for tick in ticks {
         if sink.sender.send(frames.batch(tick)).await.is_err() {
@@ -231,10 +244,12 @@ async fn deliver(sink: &SamplerSink, frames: &FrameTable, ticks: Vec<TickRecord>
 /// The engine's frame table: IDs are positions in arrival order.
 #[derive(Debug, Default)]
 struct FrameTable {
+    /// Keeps each frame at the index assigned by its arrival order.
     frames: Vec<StackFrame>,
 }
 
 impl FrameTable {
+    /// Append newly symbolized frames without disturbing existing frame IDs.
     fn extend(&mut self, items: Vec<FrameRecord>) {
         self.frames.extend(items.into_iter().map(|f| StackFrame {
             name: f.name,
@@ -244,6 +259,7 @@ impl FrameTable {
         }));
     }
 
+    /// Resolve one tick's thread stacks into the runtime-neutral sample model.
     fn batch(&self, tick: TickRecord) -> SampleBatch {
         let samples = tick
             .threads

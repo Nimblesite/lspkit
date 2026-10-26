@@ -31,8 +31,11 @@ impl RequestInterest {
 /// A queued or executing request has exactly one cancellation control.
 #[derive(Debug, Default)]
 pub(super) struct RequestControl {
+    /// Signals executing consumer work after the first interruption.
     pub(super) cancel: CancellationToken,
+    /// Identifies replaceable method/resource/input scope without caching results.
     pub(super) interest: Option<RequestInterest>,
+    /// Atomically records whether cancellation or supersession arrived first.
     pub(super) reason: AtomicU8,
 }
 
@@ -48,14 +51,17 @@ impl RequestControl {
         }
     }
 
+    /// Marks client cancellation unless supersession already won.
     pub(super) fn cancel(&self) {
         self.interrupt(1);
     }
 
+    /// Marks replacement unless client cancellation already won.
     pub(super) fn supersede(&self) {
         self.interrupt(2);
     }
 
+    /// Converts superseded completion into the retriggerable protocol error.
     pub(super) fn result(&self, result: HandlerResult) -> HandlerResult {
         if self.reason.load(Ordering::SeqCst) == 2 {
             HandlerResult::Err(

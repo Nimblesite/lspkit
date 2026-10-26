@@ -1,6 +1,9 @@
 //! Integration tests for edits under `PositionEncoding::Utf8`.
 
-use lspkit_vfs::{DocumentUri, Position, PositionEncoding, Range, TextEdit, Vfs, VfsError};
+use lspkit_vfs::{
+    DocumentUri, DocumentVersion, EditError, Position, PositionEncoding, Range, TextEdit, Vfs,
+    VfsError,
+};
 
 mod common;
 use common::{apply_one, edit};
@@ -66,7 +69,7 @@ fn position_past_last_line_returns_out_of_bounds() {
     let err = result.expect_err("must fail");
     match err {
         VfsError::Edit(_) => {}
-        other => panic!("unexpected: {other:?}"),
+        other => assert!(matches!(other, VfsError::Edit(_)), "unexpected: {other:?}"),
     }
 }
 
@@ -90,4 +93,31 @@ fn position_constructors_round_trip_fields() {
     let edit = TextEdit::new(range, "x".to_owned());
     assert_eq!(edit.range, range);
     assert_eq!(edit.text, "x");
+}
+
+#[test]
+fn position_beyond_document_returns_exact_out_of_bounds_variant() {
+    let (store, doc) = store_with("abc");
+    // Line 12 does not exist; the error must name the offending position.
+    let result = apply_one(&store, &doc, edit((12, 3), (12, 3), "x"));
+    let error = result.expect_err("edit past the last line must fail");
+    let inner = match &error {
+        VfsError::Edit(inner) => Some(inner),
+        _ => None,
+    }
+    .expect("out-of-range edit must surface as VfsError::Edit");
+    assert_eq!(
+        inner,
+        &EditError::OutOfBounds {
+            line: 12,
+            character: 3
+        }
+    );
+    assert_eq!(
+        inner.to_string(),
+        "position out of bounds: line 12, character 3"
+    );
+    // The rejected edit must not have mutated the document.
+    assert_eq!(store.text(&doc).as_deref(), Some("abc"));
+    assert_eq!(store.version(&doc).map(DocumentVersion::get), Some(1));
 }

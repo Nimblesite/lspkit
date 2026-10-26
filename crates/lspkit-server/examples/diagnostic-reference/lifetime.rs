@@ -8,17 +8,23 @@ use serde_json::{json, Value};
 
 use crate::{client, client_wire};
 
+/// The shared error type for this native consumer session.
 type Outcome<T> = Result<T, Box<dyn std::error::Error>>;
+/// The registered workspace method exercised by every scope snapshot.
 const METHOD: &str = "reference/roots";
 
 /// The consumer owns real native roots; the dispatcher handler owns this context.
 struct Roots {
+    /// The shared workspace whose folder ownership is observed.
     workspace: Workspace,
+    /// The first native workspace root.
     first: PathBuf,
+    /// The second native workspace root.
     second: PathBuf,
 }
 
 impl Roots {
+    /// Claim the two CLI-named directories as workspace folders.
     fn from_args() -> Outcome<Self> {
         let [first, second] = options()?;
         let workspace = Workspace::new();
@@ -31,6 +37,7 @@ impl Roots {
         })
     }
 
+    /// Render the current workspace's folder count, names and ownership.
     fn report(&self) -> Value {
         let names: Vec<_> = self
             .workspace
@@ -49,9 +56,12 @@ impl Roots {
 /// Native CLI arguments must name exactly two existing workspace directories.
 fn options() -> Outcome<[PathBuf; 2]> {
     let paths: Vec<_> = std::env::args_os().skip(2).map(PathBuf::from).collect();
-    let paths: [PathBuf; 2] = paths
-        .try_into()
-        .map_err(|_| std::io::Error::other("two workspace roots are required"))?;
+    let paths: [PathBuf; 2] = paths.try_into().map_err(|paths: Vec<PathBuf>| {
+        std::io::Error::other(format!(
+            "two workspace roots are required, got {}",
+            paths.len()
+        ))
+    })?;
     if paths.iter().any(|path| !path.is_dir()) {
         return Err(std::io::Error::other("both workspace roots must exist").into());
     }
@@ -62,7 +72,7 @@ fn options() -> Outcome<[PathBuf; 2]> {
 fn dispatcher(roots: Arc<Roots>) -> Dispatcher {
     let dispatcher = Dispatcher::new();
     dispatcher.register(METHOD, move |_, cancel| {
-        let roots = roots.clone();
+        let roots = Arc::clone(&roots);
         async move {
             if cancel.is_cancelled() {
                 HandlerResult::Err(JsonRpcError::new(-32800, "Request cancelled"))
@@ -115,7 +125,7 @@ async fn emit_scope(dispatcher: &Dispatcher, id: i64) -> Outcome<()> {
 async fn run() -> Outcome<()> {
     let roots = Arc::new(Roots::from_args()?);
     let observed = Arc::downgrade(&roots);
-    let dispatcher = dispatcher(roots.clone());
+    let dispatcher = dispatcher(Arc::clone(&roots));
     let ingress = dispatcher.cancellation_handle();
     emit_scope(&dispatcher, 1).await?;
     roots.workspace.remove(&roots.first);

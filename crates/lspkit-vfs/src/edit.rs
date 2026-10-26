@@ -67,7 +67,7 @@ impl TextEdit {
 
 /// Errors from applying an edit.
 #[non_exhaustive]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum EditError {
     /// The edit's position lies outside the document.
     #[error("position out of bounds: line {line}, character {character}")]
@@ -79,6 +79,7 @@ pub enum EditError {
     },
 }
 
+/// Apply each replacement in order against the rope's negotiated encoding.
 pub(crate) fn apply(
     rope: &mut Rope,
     edits: &[TextEdit],
@@ -95,12 +96,15 @@ pub(crate) fn apply(
     Ok(())
 }
 
+/// Translate an LSP position into the byte offset expected by `Rope`.
 fn position_to_byte(
     rope: &Rope,
     pos: Position,
     encoding: PositionEncoding,
 ) -> Result<usize, EditError> {
-    let line_idx = pos.line as usize;
+    // u32→usize cannot fail on any supported (>=32-bit) target; saturate so an
+    // unrepresentable offset falls into the existing out-of-range errors.
+    let line_idx = usize::try_from(pos.line).unwrap_or(usize::MAX);
     if line_idx > rope.len_lines() {
         return Err(EditError::OutOfBounds {
             line: pos.line,
@@ -110,14 +114,17 @@ fn position_to_byte(
     let line_byte_start = rope.line_to_byte(line_idx.min(rope.len_lines()));
     let line = rope.line(line_idx.min(rope.len_lines().saturating_sub(1)));
     let line_str = line.to_string();
+    // Saturating for the same reason as `line_idx` above.
+    let character = usize::try_from(pos.character).unwrap_or(usize::MAX);
     let char_offset = match encoding {
-        PositionEncoding::Utf8 => pos.character as usize,
-        PositionEncoding::Utf16 => utf16_to_utf8_offset(&line_str, pos.character as usize)?,
-        PositionEncoding::Utf32 => utf32_to_utf8_offset(&line_str, pos.character as usize)?,
+        PositionEncoding::Utf8 => character,
+        PositionEncoding::Utf16 => utf16_to_utf8_offset(&line_str, character)?,
+        PositionEncoding::Utf32 => utf32_to_utf8_offset(&line_str, character)?,
     };
     Ok(line_byte_start + char_offset)
 }
 
+/// Count Unicode scalar values until the requested UTF-16 code-unit boundary.
 fn utf16_to_utf8_offset(line: &str, utf16_units: usize) -> Result<usize, EditError> {
     let mut counted = 0usize;
     let mut byte_offset = 0usize;
@@ -137,6 +144,7 @@ fn utf16_to_utf8_offset(line: &str, utf16_units: usize) -> Result<usize, EditErr
     Ok(byte_offset)
 }
 
+/// Locate a UTF-32 code-point boundary and return its UTF-8 byte offset.
 fn utf32_to_utf8_offset(line: &str, code_points: usize) -> Result<usize, EditError> {
     line.char_indices().nth(code_points).map_or_else(
         || {

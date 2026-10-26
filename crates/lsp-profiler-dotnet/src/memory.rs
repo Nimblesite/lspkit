@@ -39,8 +39,11 @@ struct SessionState {
 /// The .NET memory backend.
 #[derive(Debug)]
 pub struct DotNetMemory {
+    /// Runs the one-shot engine commands used by each memory operation.
     engine: Engine,
+    /// Roots the per-session directories that retain heap graph artifacts.
     output_dir: PathBuf,
+    /// Serializes snapshot counters and heap measurements across async requests.
     sessions: Mutex<HashMap<String, SessionState>>,
 }
 
@@ -55,10 +58,12 @@ impl DotNetMemory {
         }
     }
 
+    /// Execute one engine command and classify failures for memory callers.
     async fn run(&self, args: Vec<String>) -> Result<EngineMessage, MemoryError> {
         self.engine.run(&args).await.map_err(memory_error)
     }
 
+    /// Find the snapshot graph required by later reference and object queries.
     async fn graph_of(&self, session_id: &str) -> Result<PathBuf, MemoryError> {
         let sessions = self.sessions.lock().await;
         sessions
@@ -69,6 +74,7 @@ impl DotNetMemory {
             })
     }
 
+    /// Capture a new graph and update the session's current and peak measurements.
     async fn capture(&self, context: &MemoryContext) -> Result<HeapSnapshot, MemoryError> {
         let graph = self.next_graph_path(&context.session_id).await?;
         let args = vec![
@@ -112,6 +118,7 @@ impl DotNetMemory {
         })
     }
 
+    /// Allocate a fresh numbered graph path without overwriting earlier snapshots.
     async fn next_graph_path(&self, session_id: &str) -> Result<PathBuf, MemoryError> {
         let dir = self.output_dir.join(format!("heap-{session_id}"));
         tokio::fs::create_dir_all(&dir).await.map_err(|error| {
@@ -123,6 +130,7 @@ impl DotNetMemory {
         Ok(dir.join(format!("snapshot-{}.heapgraph.json", state.snapshots)))
     }
 
+    /// Apply one atomic state update while holding the session map lock.
     async fn remember(&self, session_id: &str, update: impl FnOnce(&mut SessionState)) {
         let mut sessions = self.sessions.lock().await;
         update(sessions.entry(session_id.to_owned()).or_default());
@@ -274,6 +282,7 @@ impl MemoryBackend for DotNetMemory {
     }
 }
 
+/// Build a graph query with its target type and operation-specific result limits.
 fn graph_args(command: &str, graph: &Path, type_name: &str, limits: &[(&str, u32)]) -> Vec<String> {
     let mut args = vec![
         command.to_owned(),
@@ -289,7 +298,7 @@ fn graph_args(command: &str, graph: &Path, type_name: &str, limits: &[(&str, u32
     args
 }
 
-/// A type row as the neutral allocation site: the type's declaration stands in for an allocation line.
+/// Pair the engine's ordered generation measurements with their wire-model names.
 fn generation_sizes(bytes: Vec<i64>) -> Vec<GenerationSize> {
     ["Gen 0", "Gen 1", "Gen 2", "LOH", "POH"]
         .into_iter()
@@ -301,6 +310,7 @@ fn generation_sizes(bytes: Vec<i64>) -> Vec<GenerationSize> {
         .collect()
 }
 
+/// Represent a type's declaration as its allocation site for the neutral model.
 fn site(row: TypeRow) -> AllocationSite {
     AllocationSite {
         file: row.file,
@@ -312,6 +322,7 @@ fn site(row: TypeRow) -> AllocationSite {
     }
 }
 
+/// Discard source metadata when only aggregate type statistics are requested.
 fn type_stat(row: TypeRow) -> TypeStat {
     TypeStat {
         type_name: row.type_name,
@@ -320,6 +331,7 @@ fn type_stat(row: TypeRow) -> TypeStat {
     }
 }
 
+/// Translate an engine graph node, leaving unavailable retained sizes unknown.
 fn ref_node(node: RefNodeRecord) -> RefNode {
     RefNode {
         id: node.id,
@@ -334,6 +346,7 @@ fn ref_node(node: RefNodeRecord) -> RefNode {
     }
 }
 
+/// Translate a holder-to-held reference into the neutral retention graph.
 fn ref_edge(edge: RefEdgeRecord) -> RefEdge {
     RefEdge {
         from: edge.from,
@@ -342,6 +355,7 @@ fn ref_edge(edge: RefEdgeRecord) -> RefEdge {
     }
 }
 
+/// Translate a live object, marking reference counts unavailable for .NET.
 fn object(item: ObjectRecord) -> ObjectSample {
     ObjectSample {
         id: item.id,
@@ -352,6 +366,7 @@ fn object(item: ObjectRecord) -> ObjectSample {
     }
 }
 
+/// Preserve the engine's error classification in the memory backend API.
 fn memory_error(error: EngineError) -> MemoryError {
     match error {
         EngineError::Missing(message) => MemoryError::ToolMissing(message),

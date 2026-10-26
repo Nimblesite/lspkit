@@ -161,8 +161,8 @@ fn content_hash_copy_and_debug() {
 fn content_hash_is_hashable() {
     use std::collections::HashSet;
     let mut set = HashSet::new();
-    set.insert(ContentHash::of(b"one"));
-    set.insert(ContentHash::of(b"two"));
-    set.insert(ContentHash::of(b"one"));
+    assert!(set.insert(ContentHash::of(b"one")));
+    assert!(set.insert(ContentHash::of(b"two")));
+    assert!(!set.insert(ContentHash::of(b"one")));
     assert_eq!(set.len(), 2);
 }

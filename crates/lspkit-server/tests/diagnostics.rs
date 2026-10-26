@@ -10,9 +10,14 @@ use lspkit_server::{
 };
 use lspkit_vfs::DocumentUri;
 
-/// Test sink that records every batch it receives.
+/// Captures every batch a bus publishes, for whole-history assertions.
 struct Recorder {
     batches: Mutex<Vec<DiagnosticsBatch>>,
+}
+
+/// The recorder coerced to the trait object the bus consumes.
+fn sink(recorder: Arc<Recorder>) -> Arc<dyn DiagnosticsSink> {
+    recorder
 }
 
 #[async_trait]
@@ -24,6 +29,7 @@ impl DiagnosticsSink for Recorder {
     }
 }
 
+/// A batch of `count` warnings for `uri` at engine `generation`.
 fn make_batch(uri: &str, generation: u64, count: usize) -> DiagnosticsBatch {
     let diagnostics: Vec<Diagnostic> = (0..count)
         .map(|i| {
@@ -51,17 +57,19 @@ async fn single_sink_receives_batch() {
     let recorder = Arc::new(Recorder {
         batches: Mutex::new(Vec::new()),
     });
-    let count = bus.attach(Arc::clone(&recorder) as Arc<dyn DiagnosticsSink>);
+    let count = bus.attach(sink(Arc::clone(&recorder)));
     assert_eq!(count, 1);
 
     bus.publish(make_batch("file:///a", 2, 3)).await;
     let captured = recorder.batches.lock().expect("lock");
     assert_eq!(captured.len(), 1);
-    assert_eq!(captured[0].uri.as_str(), "file:///a");
-    assert_eq!(captured[0].generation, Generation::new(2));
-    assert_eq!(captured[0].diagnostics.len(), 3);
-    assert_eq!(captured[0].diagnostics[0].code.as_deref(), Some("E0"));
-    assert_eq!(captured[0].diagnostics[0].source.as_deref(), Some("test"));
+    let first = captured.first().expect("exactly one batch captured");
+    assert_eq!(first.uri.as_str(), "file:///a");
+    assert_eq!(first.generation, Generation::new(2));
+    assert_eq!(first.diagnostics.len(), 3);
+    let finding = first.diagnostics.first().expect("diagnostic captured");
+    assert_eq!(finding.code.as_deref(), Some("E0"));
+    assert_eq!(finding.source.as_deref(), Some("test"));
 }
 
 #[tokio::test]
@@ -73,8 +81,8 @@ async fn multiple_sinks_each_receive_batch() {
     let b = Arc::new(Recorder {
         batches: Mutex::new(Vec::new()),
     });
-    assert_eq!(bus.attach(Arc::clone(&a) as Arc<dyn DiagnosticsSink>), 1);
-    assert_eq!(bus.attach(Arc::clone(&b) as Arc<dyn DiagnosticsSink>), 2);
+    assert_eq!(bus.attach(sink(Arc::clone(&a))), 1);
+    assert_eq!(bus.attach(sink(Arc::clone(&b))), 2);
 
     bus.publish(make_batch("file:///b", 5, 1)).await;
     assert_eq!(a.batches.lock().expect("lock").len(), 1);
@@ -87,7 +95,7 @@ async fn default_bus_works() {
     let r = Arc::new(Recorder {
         batches: Mutex::new(Vec::new()),
     });
-    bus.attach(Arc::clone(&r) as Arc<dyn DiagnosticsSink>);
+    assert_eq!(bus.attach(sink(Arc::clone(&r))), 1);
     bus.publish(make_batch("file:///c", 0, 0)).await;
     assert_eq!(r.batches.lock().expect("lock").len(), 1);
 }
@@ -98,7 +106,7 @@ async fn debug_format_shows_sink_count() {
     let r = Arc::new(Recorder {
         batches: Mutex::new(Vec::new()),
     });
-    bus.attach(Arc::clone(&r) as Arc<dyn DiagnosticsSink>);
+    assert_eq!(bus.attach(sink(Arc::clone(&r))), 1);
     let rendered = format!("{bus:?}");
     assert!(rendered.contains("DiagnosticsBus"));
     assert!(rendered.contains("sinks: 1"));
@@ -153,10 +161,10 @@ fn diagnostic_clone_works() {
 fn severity_eq_and_hash() {
     use std::collections::HashSet;
     let mut set = HashSet::new();
-    set.insert(Severity::Error);
-    set.insert(Severity::Warning);
-    set.insert(Severity::Information);
-    set.insert(Severity::Hint);
+    assert!(set.insert(Severity::Error));
+    assert!(set.insert(Severity::Warning));
+    assert!(set.insert(Severity::Information));
+    assert!(set.insert(Severity::Hint));
     assert_eq!(set.len(), 4);
 }
 

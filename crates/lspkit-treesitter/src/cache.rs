@@ -36,6 +36,7 @@ impl ContentHash {
 /// Concurrent parse cache.
 #[derive(Default, Clone)]
 pub struct ParseCache {
+    /// Trees shared by language identity and exact source-content hash.
     entries: Arc<DashMap<(String, ContentHash), Arc<Tree>>>,
 }
 
@@ -58,17 +59,18 @@ impl ParseCache {
     ) -> Result<Arc<Tree>, ParserError> {
         let key = (language_name.to_owned(), ContentHash::of(source));
         if let Some(existing) = self.entries.get(&key) {
-            return Ok(existing.clone());
+            return Ok(Arc::clone(&existing));
         }
         let mut parser = Parser::new();
         parser
             .set_language(language)
-            .map_err(|_| ParserError::UnknownExtension(language_name.to_owned()))?;
+            .map_err(|source| ParserError::Language(language_name.to_owned(), source))?;
         let Some(tree) = parser.parse(source, None) else {
             return Err(ParserError::UnknownExtension(language_name.to_owned()));
         };
         let arc = Arc::new(tree);
-        self.entries.insert(key, arc.clone());
+        // Racing parsers may replace an equivalent tree; either tree remains valid.
+        let _ = self.entries.insert(key, Arc::clone(&arc));
         Ok(arc)
     }
 

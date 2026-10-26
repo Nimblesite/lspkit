@@ -55,7 +55,7 @@ fn out_of_bounds_code_point_offset_errors() {
         VfsError::Edit(inner) => {
             assert!(format!("{inner}").contains("position out of bounds"));
         }
-        other => panic!("unexpected: {other:?}"),
+        other => assert!(matches!(other, VfsError::Edit(_)), "unexpected: {other:?}"),
     }
 }
 

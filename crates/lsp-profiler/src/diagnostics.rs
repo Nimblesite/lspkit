@@ -50,6 +50,7 @@ impl Default for DiagnosticStyle {
 /// Accumulates diagnostics per file, in a stable file order.
 #[derive(Debug, Default)]
 pub struct DiagnosticSet {
+    /// Diagnostics grouped by file URI, with deterministic publication order.
     files: BTreeMap<String, Vec<ProfilerDiagnostic>>,
 }
 

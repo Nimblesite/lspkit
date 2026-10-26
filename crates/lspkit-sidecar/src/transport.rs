@@ -33,13 +33,14 @@ where
     R: AsyncReadExt + Unpin,
 {
     let mut len_bytes = [0u8; 4];
-    reader.read_exact(&mut len_bytes).await?;
-    let len = u32::from_le_bytes(len_bytes) as usize;
+    let _ = reader.read_exact(&mut len_bytes).await?;
+    // A length this platform cannot address is as unreadable as one over the limit.
+    let len = usize::try_from(u32::from_le_bytes(len_bytes)).unwrap_or(usize::MAX);
     if len > max_frame {
         return Err(TransportError::FrameTooLarge(len, max_frame));
     }
     let mut payload = vec![0u8; len];
-    reader.read_exact(&mut payload).await?;
+    let _ = reader.read_exact(&mut payload).await?;
     Ok(payload)
 }
 
@@ -52,8 +53,10 @@ pub async fn write_frame<W>(writer: &mut W, payload: &[u8]) -> Result<(), Transp
 where
     W: AsyncWriteExt + Unpin,
 {
-    let len = u32::try_from(payload.len())
-        .map_err(|_| TransportError::FrameTooLarge(payload.len(), u32::MAX as usize))?;
+    let Ok(len) = u32::try_from(payload.len()) else {
+        let limit = usize::try_from(u32::MAX).unwrap_or(usize::MAX);
+        return Err(TransportError::FrameTooLarge(payload.len(), limit));
+    };
     writer.write_all(&len.to_le_bytes()).await?;
     writer.write_all(payload).await?;
     writer.flush().await?;

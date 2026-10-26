@@ -50,10 +50,15 @@ pub enum LifecycleError {
 
 /// Owns a single sidecar child process.
 pub struct Sidecar {
+    /// Executable used for both the initial spawn and every restart.
     program: String,
+    /// Stable command-line arguments retained across process generations.
     args: Vec<String>,
+    /// Current child, absent before spawning or after process teardown.
     child: Option<Child>,
+    /// Health and backoff policy applied to this process instance.
     config: LifecycleConfig,
+    /// Consecutive restart attempts driving exponential backoff and budget checks.
     restart_count: u32,
 }
 

@@ -81,7 +81,7 @@ export class FileLogSink implements LogSink {
 // ── Logger with injectable sink ─────────────────────────────────────────
 
 /** Sink accessor — set once at startup by extension.ts via bindLogger(). */
-// eslint-disable-next-line func-style
+ 
 let sinkAccessor: () => LogSink = () => nullSink;
 
 /**

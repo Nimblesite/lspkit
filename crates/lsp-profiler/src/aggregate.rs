@@ -49,6 +49,7 @@ pub struct FrameKey {
 }
 
 impl FrameKey {
+    /// Capture the source identity used to deduplicate a sampled frame.
     fn of(frame: &StackFrame) -> Self {
         Self {
             name: frame.name.clone(),
@@ -108,8 +109,11 @@ impl Default for HotspotConfig {
 /// every thread shares can push a share above 100%.
 #[derive(Default)]
 struct SampleSeen {
+    /// Source lines already credited during the current sampling tick.
     lines: HashSet<(String, i64)>,
+    /// Functions already credited with inclusive time during this tick.
     functions: HashSet<FunctionKey>,
+    /// Functions already credited with self time during this tick.
     leaves: HashSet<FunctionKey>,
 }
 
@@ -260,7 +264,14 @@ impl ProfileData {
                 self_percentage: pct_of(stats.self_samples, total),
             })
             .collect();
-        result.sort_by_key(|func| std::cmp::Reverse(func.samples));
+        // Equal inclusive totals (a stack's root and its callees) put the one
+        // with more time of its own first, then order by name: never by hash order.
+        result.sort_by(|a, b| {
+            b.samples
+                .cmp(&a.samples)
+                .then_with(|| b.self_samples.cmp(&a.self_samples))
+                .then_with(|| a.name.cmp(&b.name))
+        });
         result
     }
 }

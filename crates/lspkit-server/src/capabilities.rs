@@ -7,6 +7,29 @@ use std::collections::BTreeSet;
 
 use lspkit_vfs::PositionEncoding;
 
+/// Decode standard initialize capabilities despite lsp-types 0.97's singular field.
+///
+/// LSP and VS Code send `workspace.diagnostics.refreshSupport`; the dependency's
+/// Rust field currently accepts only `workspace.diagnostic`. Keep this compatibility
+/// conversion at the shared protocol boundary. Implements [LSP-PULL-CAPABILITIES].
+///
+/// # Errors
+/// Returns the original JSON deserialization error for malformed initialize data.
+pub fn decode_initialize(
+    mut params: serde_json::Value,
+) -> Result<lsp_types::InitializeParams, serde_json::Error> {
+    if let Some(workspace) = params
+        .get_mut("capabilities")
+        .and_then(|capabilities| capabilities.get_mut("workspace"))
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        if let Some(diagnostics) = workspace.remove("diagnostics") {
+            let _ = workspace.insert("diagnostic".to_owned(), diagnostics);
+        }
+    }
+    serde_json::from_value(params)
+}
+
 /// Kind of text-document synchronization the server supports.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -40,8 +63,11 @@ pub enum Feature {
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Capabilities {
+    /// Position unit negotiated for every document location.
     encoding: PositionEncoding,
+    /// Document update granularity advertised during initialization.
     text_sync: TextSync,
+    /// Deduplicated optional methods enabled by the consumer.
     features: BTreeSet<Feature>,
 }
 
@@ -73,7 +99,7 @@ impl Capabilities {
     /// Advertise `feature`.
     #[must_use]
     pub fn enable(mut self, feature: Feature) -> Self {
-        self.features.insert(feature);
+        let _was_new = self.features.insert(feature);
         self
     }
 

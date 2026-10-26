@@ -80,3 +80,36 @@ fn install_then_install_returns_init_error() {
         "expected one of the installs to fail with Init: first={first:?} second={second:?}"
     );
 }
+
+#[test]
+fn install_without_explicit_filter_uses_rust_log_then_info_fallback() {
+    // With no explicit directives and no RUST_LOG, the `info` fallback filter
+    // must be selected; a filter error can never surface from this arm.
+    let previous = std::env::var("RUST_LOG").ok();
+    std::env::remove_var("RUST_LOG");
+    let outcome = TracingBuilder::new().install();
+    if let Some(value) = previous {
+        std::env::set_var("RUST_LOG", value);
+    }
+    assert!(
+        matches!(outcome, Ok(())) || matches!(outcome, Err(TracingError::Init(_))),
+        "fallback filter must install or hit an already-installed subscriber: {outcome:?}"
+    );
+}
+
+#[test]
+fn json_install_over_an_installed_subscriber_returns_init_error() {
+    let temp =
+        std::env::temp_dir().join(format!("lspkit-tracing-json-{}.json", std::process::id()));
+    // Afterwards a global subscriber is installed, by this call or by an earlier test.
+    let _first = TracingBuilder::new().with_filter("info").install();
+    let second = TracingBuilder::new()
+        .with_filter("info")
+        .with_json_file(&temp)
+        .install();
+    let _ = std::fs::remove_file(&temp);
+    assert!(
+        matches!(&second, Err(TracingError::Init(message)) if !message.is_empty()),
+        "a JSON-file install over an installed subscriber must fail with Init: {second:?}"
+    );
+}

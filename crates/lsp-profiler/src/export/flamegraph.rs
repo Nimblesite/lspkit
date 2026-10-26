@@ -71,16 +71,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn flamegraph_svg_renders_every_frame() -> Result<(), String> {
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let svg = std::fs::read_to_string(export(&sample_data(), &meta("fg-1"), dir.path())?)
-            .map_err(|e| e.to_string())?;
+    fn flamegraph_svg_renders_every_frame() {
+        let dir = tempfile::tempdir().expect("create temporary flamegraph directory");
+        let path = export(&sample_data(), &meta("fg-1"), dir.path())
+            .expect("export representative flamegraph data");
+        let svg = std::fs::read_to_string(path).expect("read exported flamegraph SVG");
         assert!(svg.starts_with("<?xml") && svg.contains("<svg"));
         for name in ["&lt;module&gt;", "process", "parse"] {
             assert!(svg.contains(name), "missing frame {name}");
         }
         assert!(svg.contains("Test profile \u{2014} PID 4242"));
-        Ok(())
     }
 
     #[test]
@@ -97,7 +97,7 @@ mod tests {
 
     // A path containing ';' must not split into phantom frames.
     #[test]
-    fn flamegraph_survives_semicolons_in_file_paths() -> Result<(), String> {
+    fn flamegraph_survives_semicolons_in_file_paths() {
         let data = ProfileData {
             frames: vec![
                 frame("outer", "/data;backup/main.py", 1),
@@ -107,14 +107,14 @@ mod tests {
             thread_weights: HashMap::from([(1, vec![0.01])]),
             ..ProfileData::default()
         };
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let svg = std::fs::read_to_string(export(&data, &meta("semi"), dir.path())?)
-            .map_err(|e| e.to_string())?;
+        let dir = tempfile::tempdir().expect("create temporary flamegraph directory");
+        let path = export(&data, &meta("semi"), dir.path())
+            .expect("export flamegraph data containing semicolons");
+        let svg = std::fs::read_to_string(path).expect("read exported flamegraph SVG");
         assert_eq!(
             svg.matches("<title>").count(),
             3,
             "root + 2 frames; more means ';' split the stack"
         );
-        Ok(())
     }
 }

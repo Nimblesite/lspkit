@@ -189,8 +189,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exports_all_three_artifacts() -> Result<(), String> {
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+    fn exports_all_three_artifacts() {
+        let dir = tempfile::tempdir().expect("create temporary export directory");
         let artifacts = export_artifacts(&sample_data(), &meta("all-three"), dir.path());
         assert_eq!(artifacts.export_error, None);
         for path in [
@@ -198,21 +198,20 @@ mod tests {
             &artifacts.flamegraph_path,
             &artifacts.cpuprofile_path,
         ] {
-            let path = path.as_deref().ok_or("every artifact must be written")?;
+            let path = path.as_deref().expect("every artifact must be written");
             assert!(Path::new(path).exists(), "{path} must exist");
             assert!(
                 path.contains("lsp-profiler-all-three."),
                 "{path} must be named after the session"
             );
         }
-        Ok(())
     }
 
     // [PROF-EXPORT-VALIDATE] An empty profile is refused by every exporter and
     // the reason is reported once, never silently.
     #[test]
-    fn empty_profile_reports_a_single_reason() -> Result<(), String> {
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+    fn empty_profile_reports_a_single_reason() {
+        let dir = tempfile::tempdir().expect("create temporary export directory");
         let artifacts = export_artifacts(&ProfileData::default(), &meta("empty"), dir.path());
         assert_eq!(artifacts.speedscope_path, None);
         assert_eq!(artifacts.flamegraph_path, None);
@@ -221,7 +220,6 @@ mod tests {
             artifacts.export_error.as_deref(),
             Some("no samples were collected — nothing to export")
         );
-        Ok(())
     }
 
     #[test]

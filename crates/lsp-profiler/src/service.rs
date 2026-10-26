@@ -72,17 +72,24 @@ impl Default for ProfilerConfig {
     }
 }
 
+/// Shared service state, kept behind one reference for cheap request handlers.
 struct Inner {
+    /// Runtime plugins available for process classification and profiling.
     runtimes: Vec<Arc<dyn Runtime>>,
+    /// CPU recording lifecycle shared with background progress tasks.
     cpu: CpuSessionManager,
+    /// Memory tracking lifecycle and cross-snapshot scoring state.
     memory: MemorySessionManager,
+    /// Diagnostic, threshold, and artifact-output settings for all requests.
     config: ProfilerConfig,
+    /// Host transport used to publish asynchronous profiler notifications.
     events: Arc<dyn ProfilerEvents>,
 }
 
 /// The profiler of one language server. Cheap to clone.
 #[derive(Clone)]
 pub struct ProfilerService {
+    /// Shared state allowing clones to serve requests and progress concurrently.
     inner: Arc<Inner>,
 }
 
@@ -326,6 +333,7 @@ impl ProfilerService {
         Ok(self.report(&recorded))
     }
 
+    /// Aggregate exports, hotspots, and diagnostics for a completed recording.
     fn report(&self, recorded: &crate::session::RecordedProfile) -> ProfileReport {
         let config = &self.inner.config;
         let report = build_report(
@@ -418,6 +426,7 @@ impl ProfilerService {
         })
     }
 
+    /// Dispatch a parameter-free memory operation and normalize its next step.
     async fn memory_step(
         &self,
         method: &str,
@@ -443,6 +452,7 @@ impl ProfilerService {
         Ok(step)
     }
 
+    /// Run a bounded type query for references or live-object inspection.
     async fn memory_type_step(
         &self,
         method: &str,
@@ -485,6 +495,7 @@ impl ProfilerService {
             .await?)
     }
 
+    /// Convert runtime instructions into evaluation or a scored completed result.
     async fn to_step(
         &self,
         session_id: &str,
@@ -509,6 +520,7 @@ impl ProfilerService {
         self.inner.cpu.stop_all().await;
     }
 
+    /// Publish periodic live CPU progress until the session leaves the manager.
     fn spawn_progress(&self, session_id: String) {
         let inner = Arc::clone(&self.inner);
         let _task = tokio::spawn(async move {
@@ -532,6 +544,7 @@ impl ProfilerService {
         });
     }
 
+    /// Resolve an explicitly requested runtime or report an unknown plugin ID.
     fn runtime_by_id(&self, id: &str) -> Result<Arc<dyn Runtime>, ProfilerError> {
         self.inner
             .runtimes
@@ -556,6 +569,7 @@ impl ProfilerService {
             .ok_or_else(|| self.unrecognised(pid, alive))
     }
 
+    /// Distinguish a missing process from a live but unsupported runtime.
     fn unrecognised(&self, pid: u32, alive: bool) -> ProfilerError {
         if !alive {
             return crate::sampler::SamplerError::ProcessNotFound(pid).into();
@@ -590,6 +604,7 @@ impl ProfilerService {
         self.recognise(pid).await
     }
 
+    /// Select a runtime with CPU support using the standard resolution order.
     async fn cpu_runtime(
         &self,
         id: Option<&str>,
@@ -598,6 +613,7 @@ impl ProfilerService {
         self.pick(id, pid, |r| r.cpu().is_some()).await
     }
 
+    /// Select a runtime with memory support using the standard resolution order.
     async fn memory_runtime(
         &self,
         id: Option<&str>,
@@ -607,6 +623,7 @@ impl ProfilerService {
     }
 }
 
+/// Require memory support after runtime selection, with a classified error.
 fn memory_backend(runtime: &dyn Runtime) -> Result<&dyn MemoryBackend, ProfilerError> {
     runtime.memory().ok_or_else(|| {
         MemoryError::Unsupported(format!("memory profiling of {}", runtime.display_name())).into()

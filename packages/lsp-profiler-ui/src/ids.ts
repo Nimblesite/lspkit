@@ -57,11 +57,7 @@ export function lsp(name: string): string {
 
 /** An object whose properties resolve `lsp(name)` on read, so a module-level table follows the installed prefix. */
 export function lspTable<const T extends Record<string, string>>(names: T): { readonly [K in keyof T]: string } {
-  const table = {} as { [K in keyof T]: string };
-  for (const key of Object.keys(names) as (keyof T)[]) {
-    Object.defineProperty(table, key, { enumerable: true, get: () => lsp(names[key]) });
-  }
-  return table;
+  return new Proxy(names, { get: (target, key) => (typeof key === "string" && key in target ? lsp(target[key]) : undefined) });
 }
 
 /** The URI scheme of process rows (file decorations). */

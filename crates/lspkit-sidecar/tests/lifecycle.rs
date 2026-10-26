@@ -65,7 +65,7 @@ fn backoff_saturates_on_overflow() {
     cfg.max_backoff = Duration::from_secs(5);
     let mut sidecar = Sidecar::new("/nonexistent/never-spawned", Vec::new(), cfg);
     for _ in 0..25 {
-        sidecar.record_restart();
+        let _restart_count = sidecar.record_restart();
     }
     assert_eq!(sidecar.next_backoff(), Duration::from_secs(5));
 }
@@ -76,7 +76,7 @@ fn record_restart_saturates_at_u32_max() {
     let cfg = LifecycleConfig::default();
     let mut sidecar = Sidecar::new("/nonexistent/never-spawned", Vec::new(), cfg);
     for _ in 0..3 {
-        sidecar.record_restart();
+        let _restart_count = sidecar.record_restart();
     }
     sidecar.reset_restart_count();
     // After reset, next_backoff returns the initial value again.
@@ -99,7 +99,10 @@ async fn spawn_nonexistent_program_errors() {
             assert!(err.to_string().starts_with("spawn failed: "));
             assert_ne!(io.to_string(), "");
         }
-        other => panic!("expected Spawn error, got {other:?}"),
+        other => assert!(
+            matches!(other, LifecycleError::Spawn(_)),
+            "expected Spawn error, got {other:?}"
+        ),
     }
 }
 

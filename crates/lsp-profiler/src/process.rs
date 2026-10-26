@@ -35,10 +35,15 @@ pub struct RecognisedProcess {
 
 /// The process table, refreshed twice so CPU percentages are meaningful.
 struct ProcessTable {
+    /// Refreshed OS process data used for classification and display metrics.
     system: System,
+    /// Account records that resolve process owner IDs without exposing secrets.
     users: Users,
+    /// Current account used to mark processes requiring elevated attachment.
     current_uid: Option<Uid>,
+    /// Language-server PID excluded from its own profiling candidates.
     self_pid: Option<u32>,
+    /// Batched command lines for processes whose details `sysinfo` cannot read.
     argv_fallback: HashMap<u32, Vec<OsString>>,
 }
 
@@ -83,6 +88,7 @@ impl ProcessTable {
             .collect()
     }
 
+    /// Normalize one OS process into the runtime-neutral classification input.
     fn candidate(&self, pid: Pid, process: &Process) -> ProcessCandidate {
         // sysinfo returns an empty argv for other users' processes on macOS;
         // the batched `ps` snapshot recovers it there.
@@ -110,6 +116,7 @@ impl ProcessTable {
         }
     }
 
+    /// Resolve the display account name when the OS makes it available.
     fn user_of(&self, process: &Process) -> Option<String> {
         process
             .user_id()

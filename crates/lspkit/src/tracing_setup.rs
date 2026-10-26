@@ -15,7 +15,9 @@ use tracing_subscriber::EnvFilter;
 #[non_exhaustive]
 #[derive(Debug, Default)]
 pub struct TracingBuilder {
+    /// Caller-supplied directives; absence selects `RUST_LOG`, then the `info` fallback.
     env_filter: Option<String>,
+    /// Optional JSON sink that duplicates events without disturbing stdio-safe stderr logging.
     json_file: Option<PathBuf>,
 }
 

@@ -136,9 +136,9 @@ pub enum FramingError {
     /// Underlying I/O failure.
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// Header could not be parsed.
+    /// Header could not be parsed; numeric failures retain their source.
     #[error("malformed Content-Length header: {0}")]
-    BadHeader(String),
+    BadHeader(String, #[source] Option<std::num::ParseIntError>),
     /// Message body was not valid JSON.
     #[error("malformed JSON body: {0}")]
     BadJson(#[from] serde_json::Error),
@@ -172,19 +172,22 @@ where
                 value
                     .trim()
                     .parse()
-                    .map_err(|_| FramingError::BadHeader(trimmed.to_owned()))?,
+                    .map_err(|source| FramingError::BadHeader(trimmed.to_owned(), Some(source)))?,
             );
         }
     }
-    let length = content_length.ok_or_else(|| FramingError::BadHeader("missing".to_owned()))?;
+    let length =
+        content_length.ok_or_else(|| FramingError::BadHeader("missing".to_owned(), None))?;
     let mut body = vec![0u8; length];
-    reader.read_exact(&mut body).await?;
+    let _ = reader.read_exact(&mut body).await?;
     let message: Message = serde_json::from_slice(&body)?;
     Ok(message)
 }
 
 /// Writer half of a JSON-RPC connection, serialized so multiple tasks can send.
+#[derive(Debug)]
 pub struct MessageWriter<W: AsyncWrite + Unpin + Send> {
+    /// Serializes complete frames so concurrent writers cannot interleave bytes.
     inner: Mutex<W>,
 }
 

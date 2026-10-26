@@ -90,9 +90,9 @@ fn negotiate_returns_first_client_entry_utf32() {
 fn encoding_is_copy_and_hashable() {
     use std::collections::HashSet;
     let mut set: HashSet<PositionEncoding> = HashSet::new();
-    set.insert(PositionEncoding::Utf8);
-    set.insert(PositionEncoding::Utf8);
-    set.insert(PositionEncoding::Utf16);
-    set.insert(PositionEncoding::Utf32);
+    assert!(set.insert(PositionEncoding::Utf8));
+    assert!(!set.insert(PositionEncoding::Utf8));
+    assert!(set.insert(PositionEncoding::Utf16));
+    assert!(set.insert(PositionEncoding::Utf32));
     assert_eq!(set.len(), 3);
 }

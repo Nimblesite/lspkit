@@ -37,7 +37,9 @@ pub struct DotNetConfig {
 /// The .NET runtime plug-in.
 #[derive(Debug)]
 pub struct DotNetRuntime {
+    /// Supplies `EventPipe` sampling through the shared profiler CPU interface.
     cpu: cpu::DotNetCpu,
+    /// Supplies heap capture and graph queries through the shared memory interface.
     memory: memory::DotNetMemory,
 }
 

@@ -71,16 +71,21 @@ pub enum VfsError {
     Edit(#[from] EditError),
 }
 
+/// Versioned rope retained for one open document.
 #[derive(Debug)]
 struct DocumentEntry {
+    /// Incrementally editable document contents.
     rope: Rope,
+    /// Last client version accepted for this document.
     version: DocumentVersion,
 }
 
 /// Concurrent open-document store.
 #[derive(Debug, Default, Clone)]
 pub struct Vfs {
+    /// Open entries shared by cheap clones of the store.
     docs: Arc<DashMap<DocumentUri, DocumentEntry>>,
+    /// Encoding used to translate every incoming edit position.
     encoding: PositionEncoding,
 }
 
@@ -100,7 +105,8 @@ impl Vfs {
             rope: Rope::from_str(text),
             version,
         };
-        self.docs.insert(uri, entry);
+        // A reopened URI intentionally replaces and drops its previous entry.
+        let _ = self.docs.insert(uri, entry);
     }
 
     /// Apply incremental edits. Called from `textDocument/didChange`.
@@ -132,7 +138,8 @@ impl Vfs {
 
     /// Remove a document. Called from `textDocument/didClose`.
     pub fn close(&self, uri: &DocumentUri) {
-        self.docs.remove(uri);
+        // Closing an unknown document is idempotent; a removed entry can be dropped.
+        let _ = self.docs.remove(uri);
     }
 
     /// Read a document's current text. Returns `None` if not tracked.

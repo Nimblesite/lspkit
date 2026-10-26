@@ -108,6 +108,7 @@ pub trait DiagnosticsSink: Send + Sync + 'static {
 /// Fan-out bus connecting one diagnostics source to many sinks.
 #[derive(Clone, Default)]
 pub struct DiagnosticsBus {
+    /// Shared sink registry snapshotted before asynchronous fan-out begins.
     sinks: Arc<Mutex<Vec<Arc<dyn DiagnosticsSink>>>>,
 }
 

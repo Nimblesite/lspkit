@@ -58,12 +58,10 @@ export function bindProfilerStatusBar(store: Store): vscode.Disposable {
 /** Repaint the item to match the current CPU session state. */
 function renderStatusBar(item: vscode.StatusBarItem, session: ProfilerSession): void {
   renderedActivity = session.cpu;
-
   if (session.cpu === "idle") {
     item.hide();
     return;
   }
-
   if (session.cpu === "starting") {
     // [PROF-UI-STATE] Click → spinner, never click → silence.
     item.text = "$(loading~spin) Profiler starting…";
@@ -73,20 +71,22 @@ function renderStatusBar(item: vscode.StatusBarItem, session: ProfilerSession): 
     return;
   }
 
-  // Active: the live flame counter, warning-tinted so it reads as "running".
-  item.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
-  if (session.sampleCount > 0) {
-    const samples = formatSampleCount(session.sampleCount);
-    const duration = formatProfileDuration(session.durationSecs);
-    item.text = `$(flame) ${samples} samples (${duration})`;
-    item.tooltip =
-      `PID ${session.cpuPid ?? "?"} — ${samples} samples, ${duration}\n` +
-      `Top: ${session.topFunction ?? "—"}\nClick to stop`;
-  } else {
-    item.text = "$(flame) Profiling...";
-    item.tooltip = `Profiling PID ${session.cpuPid ?? "?"} — click to stop`;
-  }
+  renderActive(item, session);
   item.show();
+}
+
+/** Active: the live flame counter, warning-tinted so it reads as "running". */
+function renderActive(item: vscode.StatusBarItem, session: ProfilerSession): void {
+  item.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+  if (session.sampleCount === 0) {
+    item.text = "$(flame) Profiling...";
+    item.tooltip = `Profiling PID ${String(session.cpuPid ?? "?")} — click to stop`;
+    return;
+  }
+  const samples = formatSampleCount(session.sampleCount);
+  const duration = formatProfileDuration(session.durationSecs);
+  item.text = `$(flame) ${samples} samples (${duration})`;
+  item.tooltip = `PID ${String(session.cpuPid ?? "?")} — ${samples} samples, ${duration}\nTop: ${session.topFunction ?? "—"}\nClick to stop`;
 }
 
 /**
@@ -120,19 +120,16 @@ export function registerProgressListener(store: Store): vscode.Disposable {
     if (client === undefined || client === boundClient) { return; }
     registration?.dispose();
     boundClient = client;
-    registration = client.onNotification(PROFILER_PROGRESS_NOTIFICATION, (params: ProfileProgress) => {
-      if (params.session_id === store.profiler.value.cpuSessionId) {
-        store.profilerProgress(params.sample_count, params.duration_secs, params.top_function ?? "");
-      }
-    });
+    registration = onProgress(store, client);
   });
+  return { dispose() { disposeEffect(); registration?.dispose(); registration = undefined; boundClient = undefined; } };
+}
 
-  return {
-    dispose() {
-      disposeEffect();
-      registration?.dispose();
-      registration = undefined;
-      boundClient = undefined;
-    },
-  };
+/** Feed `client`'s progress for the active CPU session into the store. */
+function onProgress(store: Store, client: LanguageClient): vscode.Disposable {
+  return client.onNotification(PROFILER_PROGRESS_NOTIFICATION, (params: ProfileProgress) => {
+    if (params.session_id === store.profiler.value.cpuSessionId) {
+      store.profilerProgress(params.sample_count, params.duration_secs, params.top_function ?? "");
+    }
+  });
 }

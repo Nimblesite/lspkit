@@ -50,7 +50,7 @@ pub fn spawn(
     config: ScheduleConfig,
 ) -> mpsc::UnboundedReceiver<Trigger> {
     let (tx, rx) = mpsc::unbounded_channel();
-    tokio::spawn(async move {
+    let _scheduler = tokio::spawn(async move {
         let mut buffered: Vec<ChangeEvent> = Vec::new();
         let mut first_event_at: Option<time::Instant> = None;
 
@@ -82,6 +82,7 @@ pub fn spawn(
     rx
 }
 
+/// Bounds the next quiet-window deadline by the burst's maximum wait.
 fn compute_deadline(first: Option<time::Instant>, config: ScheduleConfig) -> time::Instant {
     let now = time::Instant::now();
     let quiet_deadline = now + config.quiet;

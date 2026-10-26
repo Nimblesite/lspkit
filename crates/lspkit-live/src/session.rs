@@ -37,7 +37,9 @@ pub trait Analyzer: Send + Sync + 'static {
 /// Session that drives an [`Analyzer`] from a scheduler stream.
 #[derive(Clone)]
 pub struct Session {
+    /// Shares monotonic generation state across clones and analyzer tasks.
     generation: Arc<AtomicU64>,
+    /// Publishes successful analysis generations to all current subscribers.
     events: broadcast::Sender<GenerationEvent>,
 }
 

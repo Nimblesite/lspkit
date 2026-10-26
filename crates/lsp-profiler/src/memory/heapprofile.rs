@@ -27,15 +27,22 @@ enum NodeKey {
     Type(String),
 }
 
+/// Arena node accumulating a merged allocation path for V8's heap viewer.
 struct TreeNode {
+    /// Source or type identity; `None` marks the synthetic root.
     key: Option<NodeKey>,
+    /// Bytes allocated at this leaf rather than in its descendants.
     self_size: i64,
+    /// Stable identifier referenced by the profile's allocation samples.
     id: u64,
+    /// Arena indices of child nodes in insertion order.
     children: Vec<usize>,
+    /// Reuses children shared by allocation paths with the same prefix.
     index: HashMap<NodeKey, usize>,
 }
 
 impl TreeNode {
+    /// Create a node with no allocations or merged children yet.
     fn new(id: u64, key: Option<NodeKey>) -> Self {
         Self {
             key,
@@ -117,6 +124,7 @@ fn path_of(site: &AllocationSite) -> Vec<NodeKey> {
     }
 }
 
+/// Recursively serialize a merged allocation subtree in V8's schema.
 fn node_json(nodes: &[TreeNode], node: &TreeNode, labels: &mut SourceLabels) -> Value {
     let children: Vec<Value> = node
         .children
@@ -142,10 +150,12 @@ fn call_frame(key: Option<&NodeKey>, labels: &mut SourceLabels) -> Value {
 /// Source-line labels, reading each file at most once.
 #[derive(Default)]
 struct SourceLabels {
+    /// Source text by path, including failed reads to avoid repeated I/O.
     cache: HashMap<String, Option<Vec<String>>>,
 }
 
 impl SourceLabels {
+    /// Prefer the referenced source text, falling back to the file basename.
     fn label(&mut self, file: &str, line: i64) -> String {
         let lines = self
             .cache
@@ -160,6 +170,7 @@ impl SourceLabels {
     }
 }
 
+/// Load a bounded source file for labels, or decline unreadable/oversized input.
 fn read_lines(file: &str) -> Option<Vec<String>> {
     if std::fs::metadata(file).ok()?.len() > MAX_LABEL_SOURCE_BYTES {
         return None;
@@ -169,6 +180,7 @@ fn read_lines(file: &str) -> Option<Vec<String>> {
         .map(|text| text.lines().map(str::to_owned).collect())
 }
 
+/// Produce a useful location label without exposing the full source text.
 fn basename(file: &str) -> String {
     Path::new(file).file_name().map_or_else(
         || file.to_owned(),
@@ -283,10 +295,11 @@ mod tests {
 
     // Labels come from the source line when the file is readable.
     #[test]
-    fn labels_use_the_source_line() -> Result<(), String> {
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+    fn labels_use_the_source_line() {
+        let dir = tempfile::tempdir().expect("create temporary heapprofile directory");
         let file = dir.path().join("cache.py");
-        std::fs::write(&file, "x = 1\n   cache.append(row)   \n").map_err(|e| e.to_string())?;
+        std::fs::write(&file, "x = 1\n   cache.append(row)   \n")
+            .expect("write source used for heap labels");
         let path = file.display().to_string();
         let profile = build(&snapshot(vec![site(&path, 2, 10, vec![])]));
         assert_eq!(
@@ -295,7 +308,6 @@ mod tests {
                 .and_then(Value::as_str),
             Some("cache.append(row)")
         );
-        Ok(())
     }
 
     // Type-keyed sites (no location) become type-named nodes.

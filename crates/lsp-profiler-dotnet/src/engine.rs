@@ -47,6 +47,7 @@ pub enum EngineError {
 /// Handle on the engine executable.
 #[derive(Debug, Clone)]
 pub struct Engine {
+    /// Overrides discovery with an explicit executable when configured.
     configured: Option<PathBuf>,
 }
 
@@ -131,8 +132,11 @@ impl Engine {
 /// A spawned engine command.
 #[derive(Debug)]
 pub struct RunningEngine {
+    /// Owns the engine process so dropping this handle also terminates it.
     child: Child,
+    /// Remains available until a CPU session transfers it to its stop signal.
     stdin: Option<ChildStdin>,
+    /// Buffers the NDJSON response stream until the engine closes it.
     stdout: Option<BufReader<ChildStdout>>,
 }
 
@@ -186,22 +190,43 @@ impl RunningEngine {
 /// The CPU command's stop line, sent at most once.
 #[derive(Debug)]
 pub struct StopSignal {
+    /// Provides exclusive command input while a CPU recording is active.
     stdin: Option<ChildStdin>,
 }
 
 impl StopSignal {
+    /// Close the current CPU segment without ending the recording.
+    ///
+    /// # Errors
+    /// Returns an I/O error if the engine has stopped accepting commands.
+    pub async fn snapshot(&mut self) -> Result<(), EngineError> {
+        self.write(b"snapshot\n").await
+    }
+
     /// Tell the engine to end its recording; dropping the signal closes stdin.
     pub async fn send(mut self) {
-        let Some(stdin) = self.stdin.as_mut() else {
-            return;
-        };
-        if let Err(error) = stdin.write_all(b"stop\n").await {
+        if let Err(error) = self.write(b"stop\n").await {
             warn!(%error, "cannot signal the .NET profiling engine");
         }
-        let _ = stdin.flush().await;
+    }
+
+    /// Write and flush one complete command so the engine acts on it immediately.
+    async fn write(&mut self, command: &[u8]) -> Result<(), EngineError> {
+        let Some(stdin) = self.stdin.as_mut() else {
+            return Err(EngineError::Io("engine command input is closed".to_owned()));
+        };
+        stdin
+            .write_all(command)
+            .await
+            .map_err(|error| EngineError::Io(error.to_string()))?;
+        stdin
+            .flush()
+            .await
+            .map_err(|error| EngineError::Io(error.to_string()))
     }
 }
 
+/// Add the executable suffix required by the host operating system.
 fn executable_name() -> String {
     if cfg!(windows) {
         format!("{ENGINE_STEM}.exe")
@@ -210,6 +235,7 @@ fn executable_name() -> String {
     }
 }
 
+/// Include every attempted location so a missing engine is actionable.
 fn missing_message(candidates: &[Option<PathBuf>]) -> String {
     let looked = candidates
         .iter()

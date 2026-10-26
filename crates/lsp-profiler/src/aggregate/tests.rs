@@ -261,3 +261,30 @@ fn threads_sharing_a_function_in_one_tick_count_it_once() {
         .iter()
         .all(|f| f.samples <= 2 && f.percentage <= 100.0 && f.self_percentage <= f.percentage));
 }
+
+// [PROF-CPU-REPORT] Hot functions are ordered by inclusive share, then self
+// share, then name: a stack's root and its leaf tie on inclusive samples, and
+// equal functions never fall back to hash order.
+#[test]
+fn hot_functions_break_equal_totals_by_self_samples_then_name() {
+    let mut data = ProfileData::default();
+    for _ in 0..3 {
+        ingest(
+            &mut data,
+            &tick(
+                1,
+                true,
+                vec![frame("spin", "a.osp", 2), frame("main", "a.osp", 1)],
+            ),
+        );
+    }
+    for name in ["zeta", "alpha"] {
+        ingest(&mut data, &tick(1, true, vec![frame(name, "b.osp", 1)]));
+    }
+    let order: Vec<String> = data
+        .hot_functions(&HotspotConfig::default())
+        .into_iter()
+        .map(|hot| hot.name)
+        .collect();
+    assert_eq!(order, vec!["spin", "main", "alpha", "zeta"]);
+}

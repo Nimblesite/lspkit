@@ -7,19 +7,19 @@ use lspkit_server::{DispatchError, Dispatcher, HandlerResult, JsonRpcError, Requ
 use serde_json::{json, Value};
 use tokio::sync::Notify;
 
-fn assert_ok(result: HandlerResult, expected: &Value) {
-    if let HandlerResult::Ok(value) = result {
-        assert_eq!(&value, expected);
-    } else {
-        panic!("expected Ok variant");
+/// The `Ok` payload of a handler result; tests `expect` on it by step name.
+fn ok_value(result: HandlerResult) -> Result<Value, String> {
+    match result {
+        HandlerResult::Ok(value) => Ok(value),
+        _ => Err(format!("expected Ok variant: {result:?}")),
     }
 }
 
-fn assert_err_code(result: HandlerResult, expected: i32) {
-    if let HandlerResult::Err(err) = result {
-        assert_eq!(err.code, expected);
-    } else {
-        panic!("expected Err variant");
+/// The error code of a handler result; tests `expect` on it by step name.
+fn err_code(result: HandlerResult) -> Result<i32, String> {
+    match result {
+        HandlerResult::Err(err) => Ok(err.code),
+        _ => Err(format!("expected Err variant: {result:?}")),
     }
 }
 
@@ -47,7 +47,10 @@ async fn registered_handler_receives_params_and_returns_ok() {
         .dispatch(&id, "echo", json!({"hello": "world"}))
         .await
         .expect("dispatch ok");
-    assert_ok(result, &json!({"hello": "world"}));
+    assert_eq!(
+        ok_value(result).expect("handler answered Ok"),
+        json!({"hello": "world"})
+    );
 }
 
 #[tokio::test]
@@ -61,7 +64,7 @@ async fn registered_handler_can_return_jsonrpc_error() {
         .dispatch(&id, "bad", Value::Null)
         .await
         .expect("dispatch ok");
-    assert_err_code(result, -32602);
+    assert_eq!(err_code(result).expect("handler answered Err"), -32602);
 }
 
 #[tokio::test]
@@ -78,7 +81,10 @@ async fn re_registering_replaces_handler() {
         .dispatch(&id, "m", Value::Null)
         .await
         .expect("dispatch ok");
-    assert_ok(result, &json!("second"));
+    assert_eq!(
+        ok_value(result).expect("handler answered Ok"),
+        json!("second")
+    );
 }
 
 #[tokio::test]
@@ -111,7 +117,7 @@ async fn cancel_trips_token_for_inflight_request() {
         .expect("did not time out")
         .expect("join ok")
         .expect("dispatch ok");
-    assert_err_code(result, -32800);
+    assert_eq!(err_code(result).expect("handler answered Err"), -32800);
 }
 
 #[tokio::test]
@@ -188,5 +194,8 @@ async fn dispatcher_clone_shares_handlers() {
         .dispatch(&id, "shared", Value::Null)
         .await
         .expect("ok");
-    assert_ok(result, &json!("shared!"));
+    assert_eq!(
+        ok_value(result).expect("handler answered Ok"),
+        json!("shared!")
+    );
 }

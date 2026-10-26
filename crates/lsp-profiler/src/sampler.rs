@@ -15,6 +15,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, warn};
 
+use crate::error::ProfilerError;
 use crate::wire::{AttachErrorKind, ThreadSample};
 
 /// Capacity of the batch channel between a backend and its session.
@@ -100,6 +101,20 @@ impl SamplerSink {
     }
 }
 
+/// A cooperative stop control that can interrupt a pending snapshot barrier.
+#[derive(Debug, Clone)]
+pub struct SamplerStop {
+    /// Shared stop signal observed by the backend without holding session locks.
+    flag: Arc<AtomicBool>,
+}
+
+impl SamplerStop {
+    /// Ask the producer to finish without waiting for its recording lock.
+    pub fn request(&self) {
+        self.flag.store(true, Ordering::Relaxed);
+    }
+}
+
 /// Consumer side of a sampler: what the session manager owns.
 #[derive(Debug)]
 pub struct SamplerHandle {
@@ -115,6 +130,8 @@ pub struct SamplerHandle {
     completion: Option<oneshot::Receiver<()>>,
     /// How long `stop` waits for the producer to finish.
     finish_timeout: Duration,
+    /// Optional barrier for backends that buffer unfinished recording segments.
+    snapshots: Option<mpsc::UnboundedSender<oneshot::Sender<()>>>,
 }
 
 /// Everything a backend needs to start producing samples.
@@ -145,43 +162,102 @@ impl SamplerHandle {
                 stop_flag: Arc::clone(&stop_flag),
             },
             done,
-            handle: Self {
+            handle: Self::from_channel(
                 receiver,
-                runtime_version,
-                pid,
+                (pid, runtime_version),
                 stop_flag,
-                completion: Some(completion),
+                completion,
                 finish_timeout,
-            },
+            ),
+        }
+    }
+
+    /// Assemble the consumer from the same channel endpoints as its producer.
+    fn from_channel(
+        receiver: mpsc::Receiver<SampleBatch>,
+        identity: (u32, String),
+        stop_flag: Arc<AtomicBool>,
+        completion: oneshot::Receiver<()>,
+        finish_timeout: Duration,
+    ) -> Self {
+        let (pid, runtime_version) = identity;
+        Self {
+            receiver,
+            runtime_version,
+            pid,
+            stop_flag,
+            completion: Some(completion),
+            finish_timeout,
+            snapshots: None,
         }
     }
 
     /// Signal the producer to stop without waiting.
     pub fn signal_stop(&self) {
-        self.stop_flag.store(true, Ordering::Relaxed);
+        self.stop_control().request();
+    }
+
+    /// A stop control that remains available while a snapshot owns the sampler.
+    #[must_use]
+    pub fn stop_control(&self) -> SamplerStop {
+        SamplerStop {
+            flag: Arc::clone(&self.stop_flag),
+        }
+    }
+
+    /// Enable backend snapshot barriers. Acknowledge only after delivering the
+    /// buffered samples, so the session can drain them before reporting.
+    pub fn snapshot_requests(&mut self) -> mpsc::UnboundedReceiver<oneshot::Sender<()>> {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        self.snapshots = Some(sender);
+        receiver
+    }
+
+    /// Flush a buffered backend while draining its samples. Implements [PROF-CPU-SNAPSHOT].
+    ///
+    /// # Errors
+    /// Returns an error if the producer exits or cannot finish its barrier in time.
+    pub async fn snapshot(
+        &mut self,
+        on_batch: impl FnMut(SampleBatch),
+    ) -> Result<(), ProfilerError> {
+        let Some(requests) = self.snapshots.as_ref() else {
+            return Ok(());
+        };
+        let (done, completion) = oneshot::channel();
+        requests.send(done).map_err(|error| {
+            ProfilerError::Other(format!("Sampler snapshot channel closed: {error}"))
+        })?;
+        self.drain_until(completion, on_batch).await
     }
 
     /// Signal the producer to stop and wait (bounded) until it has delivered
     /// its last batch, handing every batch that arrives meanwhile to
     /// `on_batch`. A file backend delivers its whole recording at stop, so
     /// waiting without draining would fill the channel and deadlock.
-    pub async fn stop(&mut self, mut on_batch: impl FnMut(SampleBatch)) {
+    pub async fn stop(&mut self, on_batch: impl FnMut(SampleBatch)) {
         self.signal_stop();
-        let Some(mut completion) = self.completion.take() else {
+        let Some(completion) = self.completion.take() else {
             return;
         };
+        match self.drain_until(completion, on_batch).await {
+            Ok(()) => debug!(pid = self.pid, "sampler finished"),
+            Err(error) => warn!(pid = self.pid, %error, "sampler did not finish cleanly"),
+        }
+    }
+
+    /// Drain batches until the producer acknowledges completion or times out.
+    async fn drain_until(
+        &mut self,
+        mut completion: oneshot::Receiver<()>,
+        mut on_batch: impl FnMut(SampleBatch),
+    ) -> Result<(), ProfilerError> {
         let deadline = tokio::time::sleep(self.finish_timeout);
         tokio::pin!(deadline);
         loop {
             tokio::select! {
-                _ = &mut completion => {
-                    debug!(pid = self.pid, "sampler finished");
-                    break;
-                }
-                () = &mut deadline => {
-                    warn!(pid = self.pid, "sampler did not finish before the stop timeout");
-                    break;
-                }
+                result = &mut completion => return result.map_err(|error| ProfilerError::Other(format!("Sampler ended before completing its barrier: {error}"))),
+                () = &mut deadline => return Err(ProfilerError::Other("Sampler barrier timed out".to_owned())),
                 Some(batch) = self.receiver.recv() => on_batch(batch),
             }
         }

@@ -49,7 +49,10 @@ fn relative_path_rejected() {
     let err = path_to_uri(&PathBuf::from("relative/foo.txt")).expect_err("must reject");
     match err {
         UriError::InvalidPath(p) => assert_eq!(p, PathBuf::from("relative/foo.txt")),
-        other => panic!("wrong variant: {other:?}"),
+        other => assert!(
+            matches!(other, UriError::InvalidPath(_)),
+            "wrong variant: {other:?}"
+        ),
     }
 }
 
@@ -58,7 +61,10 @@ fn non_file_scheme_rejected() {
     let err = uri_to_path("https://example.com/foo").expect_err("must reject");
     match err {
         UriError::UnsupportedScheme(s) => assert_eq!(s, "https://example.com/foo"),
-        other => panic!("wrong variant: {other:?}"),
+        other => assert!(
+            matches!(other, UriError::UnsupportedScheme(_)),
+            "wrong variant: {other:?}"
+        ),
     }
 }
 
@@ -66,8 +72,11 @@ fn non_file_scheme_rejected() {
 fn invalid_percent_encoding_rejected() {
     let err = uri_to_path("file:///tmp/%ZZbroken").expect_err("must reject");
     match err {
-        UriError::InvalidUtf8 => {}
-        other => panic!("wrong variant: {other:?}"),
+        UriError::InvalidUtf8(_) => {}
+        other => assert!(
+            matches!(other, UriError::InvalidUtf8(_)),
+            "wrong variant: {other:?}"
+        ),
     }
 }
 
@@ -97,8 +106,11 @@ fn invalid_utf8_after_decode_rejected() {
     // %FF %FE are not valid UTF-8.
     let err = uri_to_path("file:///tmp/%FF%FE").expect_err("must reject");
     match err {
-        UriError::InvalidUtf8 => {}
-        other => panic!("wrong variant: {other:?}"),
+        UriError::InvalidUtf8(_) => {}
+        other => assert!(
+            matches!(other, UriError::InvalidUtf8(_)),
+            "wrong variant: {other:?}"
+        ),
     }
 }
 

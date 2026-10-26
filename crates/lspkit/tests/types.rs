@@ -55,7 +55,7 @@ fn generation_copy_and_hash_work() {
     let gen_a = Generation::new(5);
     let gen_b = gen_a;
     let mut set = HashSet::new();
-    set.insert(gen_a);
+    assert!(set.insert(gen_a));
     assert!(set.contains(&gen_b));
 }
 

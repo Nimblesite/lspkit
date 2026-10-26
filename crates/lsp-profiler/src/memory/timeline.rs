@@ -15,8 +15,11 @@ pub const TREND_POINTS: usize = 5;
 /// A session's timeline.
 #[derive(Debug)]
 pub struct MemoryTimeline {
+    /// Chart points in chronological order, bounded to the configured capacity.
     points: Vec<TimelinePoint>,
+    /// Session origin used to calculate each point's relative elapsed time.
     started_at: Instant,
+    /// Retention limit that bounds memory use in long-running sessions.
     max_points: usize,
 }
 

@@ -111,6 +111,7 @@ pub enum RescanScope {
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct RescanTicket {
+    /// Generation callers can await to observe completion of this rescan.
     generation: Generation,
 }
 
@@ -134,11 +135,14 @@ impl RescanTicket {
 /// did not advertise the capability. Use `Progress::noop()` in non-LSP contexts.
 #[derive(Clone)]
 pub struct Progress {
+    /// Selected reporting behavior, kept behind the context-neutral facade.
     inner: ProgressInner,
 }
 
+/// Reporting behavior available without coupling the engine to an LSP client.
 #[derive(Clone)]
 enum ProgressInner {
+    /// Discard updates where progress reporting is unsupported or unwanted.
     Noop,
 }
 

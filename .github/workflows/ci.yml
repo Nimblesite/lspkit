@@ -29,7 +29,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
           components: rustfmt, clippy, llvm-tools-preview
@@ -63,7 +63,7 @@ jobs:
       # Prebuilt binaries via taiki-e/install-action — seconds vs. minutes
       # compared to `cargo install --locked` building from source.
       - name: Install cargo-llvm-cov + cargo-nextest
-        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-llvm-cov,cargo-nextest
 
@@ -82,6 +82,9 @@ jobs:
 
       # make test = fail-fast + coverage + threshold enforcement.
       # Thresholds live in coverage-thresholds.json.
+      - name: Install syscall tracer
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends strace
+
       - name: Test
         run: make test
 

@@ -204,7 +204,7 @@ function providerWithClient(client: unknown): ProcessesProvider {
       onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
       ...asRecord(client),
     };
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- generic LanguageClient double; the store only reads onDidChangeState here
+     
     seedSignal(store.client, fake as never);
   }
   return new ProcessesProvider(store);

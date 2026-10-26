@@ -12,48 +12,8 @@ categories = ["development-tools::profiling"]
 
 # The profiler's own lint set, stricter than the lspkit workspace's
 # ([PROF-INVARIANTS]): no unwrap, expect, panic, indexing or `as` casts.
-[lints.rust]
-unsafe_code = "deny"
-missing_docs = "deny"
-missing_debug_implementations = "deny"
-unused_imports = "deny"
-dead_code = "deny"
-unused_variables = "deny"
-unused_mut = "deny"
-unused_assignments = "deny"
-unused_results = "deny"
-trivial_casts = "deny"
-trivial_numeric_casts = "deny"
-elided_lifetimes_in_paths = "deny"
-unfulfilled_lint_expectations = "deny"
-future_incompatible = { level = "deny", priority = -1 }
-nonstandard_style = { level = "deny", priority = -1 }
-rust_2018_idioms = { level = "deny", priority = -1 }
-
-[lints.clippy]
-all = { level = "deny", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
-todo = "deny"
-unimplemented = "deny"
-indexing_slicing = "deny"
-as_conversions = "deny"
-dbg_macro = "deny"
-print_stdout = "deny"
-mem_forget = "deny"
-fallible_impl_from = "deny"
-implicit_clone = "deny"
-lossy_float_literal = "deny"
-allow_attributes = "deny"
-too_many_lines = "deny"
-too_many_arguments = "deny"
-cast_possible_truncation = "deny"
-map_err_ignore = "deny"
-exit = "deny"
-rest_pat_in_fully_bound_structs = "deny"
-clone_on_ref_ptr = "deny"
+[lints]
+workspace = true
 
 [dependencies]
 async-trait.workspace = true

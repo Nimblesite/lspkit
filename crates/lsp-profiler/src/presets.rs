@@ -120,50 +120,50 @@ mod tests {
     }
 
     #[test]
-    fn presets_set_rate_and_duration() -> Result<(), String> {
-        let quick = resolve(1234, &preset("quick"))?;
+    fn presets_set_rate_and_duration() {
+        let quick = resolve(1234, &preset("quick")).expect("resolve quick preset");
         assert_eq!(
             (quick.pid, quick.sample_rate, quick.duration),
             (1234, 100, Some(Duration::from_secs(10)))
         );
-        let detailed = resolve(1, &preset("detailed"))?;
+        let detailed = resolve(1, &preset("detailed")).expect("resolve detailed preset");
         assert_eq!(
             (detailed.sample_rate, detailed.duration),
             (200, Some(Duration::from_secs(60)))
         );
-        let long = resolve(1, &preset("long_running"))?;
+        let long = resolve(1, &preset("long_running")).expect("resolve long-running preset");
         assert_eq!((long.sample_rate, long.duration), (50, None));
-        Ok(())
     }
 
     #[test]
-    fn explicit_values_override_the_preset() -> Result<(), String> {
+    fn explicit_values_override_the_preset() {
         let request = SamplingRequest {
             sample_rate: Some(333),
             include_native: Some(true),
             duration: Some(Duration::from_secs(3)),
             preset: Some("detailed".to_owned()),
         };
-        let config = resolve(9, &request)?;
+        let config = resolve(9, &request).expect("resolve explicit sampling overrides");
         assert_eq!(
             (config.sample_rate, config.include_native, config.duration),
             (333, true, Some(Duration::from_secs(3)))
         );
-        Ok(())
     }
 
     #[test]
-    fn defaults_apply_without_preset() -> Result<(), String> {
-        let config = resolve(9, &SamplingRequest::default())?;
+    fn defaults_apply_without_preset() {
+        let config =
+            resolve(9, &SamplingRequest::default()).expect("resolve default sampling request");
         assert_eq!(
             (config.sample_rate, config.include_native, config.duration),
             (DEFAULT_SAMPLE_RATE, false, None)
         );
         assert_eq!(
-            resolve(9, &preset("default"))?.sample_rate,
+            resolve(9, &preset("default"))
+                .expect("resolve explicit default preset")
+                .sample_rate,
             DEFAULT_SAMPLE_RATE
         );
-        Ok(())
     }
 
     #[test]

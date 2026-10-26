@@ -41,26 +41,26 @@ export function bindProcessPanelReactivity(
   provider: ProcessesProvider,
 ): vscode.Disposable {
   boundView = treeView;
-  let lastGate = "";
+  const regate = onGateChange(provider);
   const disposeEffect = effect(() => {
     const session = store.profiler.value;
     // Cheap, every change: the live readout above the tree.
     treeView.message = panelMessage(session);
     treeView.badge = panelBadge(session);
-
-    // Expensive (context keys + tree rebuild): only on gating transitions.
-    const gate = `${session.cpu}|${session.cpuPid ?? ""}|${session.memory}`;
-    if (gate !== lastGate) {
-      lastGate = gate;
-      applyContextKeys(session);
-      provider.refresh();
-    }
+    regate(session);
   });
-  return {
-    dispose() {
-      disposeEffect();
-      boundView = undefined;
-    },
+  return { dispose() { disposeEffect(); boundView = undefined; } };
+}
+
+/** The expensive leg (context keys + tree rebuild), run only on gating transitions. */
+function onGateChange(provider: ProcessesProvider): (session: ProfilerSession) => void {
+  let lastGate = "";
+  return (session) => {
+    const gate = `${session.cpu}|${String(session.cpuPid ?? "")}|${session.memory}`;
+    if (gate === lastGate) { return; }
+    lastGate = gate;
+    applyContextKeys(session);
+    provider.refresh();
   };
 }
 
@@ -76,12 +76,12 @@ export function bindProcessPanelReactivity(
  */
 export function bindDebuggeeTracking(store: Store): vscode.Disposable {
   function update(): void {
+    // Read on every pass, so the effect re-runs when a debuggee PID resolves or clears.
+    const pids = store.sessionIdToPid.value;
     const session = vscode.debug.activeDebugSession;
-    const pid = session?.type === debugType() ? store.getDebuggeeProcessId(session.id) : undefined;
-    store.setActiveDebuggeePid(pid);
+    store.setActiveDebuggeePid(session?.type === debugType() ? pids.get(session.id) : undefined);
   }
   const disposeEffect = effect(() => {
-    void store.sessionIdToPid.value; // re-run when a debuggee PID resolves/clears
     update();
   });
   const subscriptions = [
@@ -89,12 +89,7 @@ export function bindDebuggeeTracking(store: Store): vscode.Disposable {
     vscode.debug.onDidStartDebugSession(update),
     vscode.debug.onDidTerminateDebugSession(update),
   ];
-  return {
-    dispose() {
-      disposeEffect();
-      for (const sub of subscriptions) { sub.dispose(); }
-    },
-  };
+  return { dispose() { disposeEffect(); for (const sub of subscriptions) { sub.dispose(); } } };
 }
 
 /** Push the gating context keys every profiling `when` clause keys off. */
@@ -120,7 +115,7 @@ function applyContextKeys(session: ProfilerSession): void {
 export function panelMessage(session: ProfilerSession): string | undefined {
   if (session.cpu === "starting") { return "⏳ Starting CPU profiler…"; }
   if (session.cpu === "active") {
-    const head = `🔥 Profiling PID ${session.cpuPid ?? "?"}`;
+    const head = `🔥 Profiling PID ${String(session.cpuPid ?? "?")}`;
     if (session.sampleCount > 0) {
       const live = `${formatSampleCount(session.sampleCount)} samples (${formatProfileDuration(session.durationSecs)})`;
       const top = session.topFunction !== undefined && session.topFunction !== ""

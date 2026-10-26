@@ -71,7 +71,7 @@ async fn register_adds_tool_description_to_snapshot() {
     adapter.register(description("echo"), Arc::new(EchoHandler));
     let snapshot = adapter.tools();
     assert_eq!(snapshot.len(), 1);
-    assert_eq!(snapshot[0].name, "echo");
+    assert_eq!(snapshot.first().expect("one registered tool").name, "echo");
 }
 
 #[tokio::test]
@@ -92,7 +92,11 @@ async fn invoke_unknown_tool_returns_error() {
     let outcome = adapter.invoke("nope", json!({})).await;
     match outcome {
         Err(AdapterError::UnknownTool(name)) => assert_eq!(name, "nope"),
-        other => panic_unexpected("unknown tool", &format!("{other:?}")),
+        other => assert!(
+            matches!(other, Err(AdapterError::UnknownTool(_))),
+            "{}",
+            unexpected("unknown tool", &format!("{other:?}"))
+        ),
     }
 }
 
@@ -104,8 +108,14 @@ async fn invoke_passes_engine_through_to_handler() {
         .invoke("report", json!({ "q": "hello" }))
         .await
         .expect("invoke ok");
-    assert_eq!(result.output["generation"], 0);
-    assert_eq!(result.output["data"], "echo:hello");
+    assert_eq!(
+        result.output.get("generation").and_then(Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        result.output.get("data").and_then(Value::as_str),
+        Some("echo:hello")
+    );
 }
 
 #[tokio::test]
@@ -118,7 +128,11 @@ async fn invoke_propagates_invalid_input_error_from_handler() {
             assert_eq!(tool, "report");
             assert!(message.contains("missing q"));
         }
-        other => panic_unexpected("invalid input", &format!("{other:?}")),
+        other => assert!(
+            matches!(other, Err(AdapterError::InvalidInput { .. })),
+            "{}",
+            unexpected("invalid input", &format!("{other:?}"))
+        ),
     }
 }
 
@@ -129,7 +143,11 @@ async fn invoke_propagates_engine_error_from_handler() {
     let outcome = adapter.invoke("boom", json!({})).await;
     match outcome {
         Err(AdapterError::Engine(msg)) => assert!(msg.contains("kaboom")),
-        other => panic_unexpected("engine error", &format!("{other:?}")),
+        other => assert!(
+            matches!(other, Err(AdapterError::Engine(_))),
+            "{}",
+            unexpected("engine error", &format!("{other:?}"))
+        ),
     }
 }
 
@@ -142,7 +160,11 @@ async fn register_with_same_name_replaces_handler_and_description() {
     let outcome = adapter.invoke("echo", json!({})).await;
     match outcome {
         Err(AdapterError::Engine(msg)) => assert!(msg.contains("kaboom")),
-        other => panic_unexpected("re-registered handler", &format!("{other:?}")),
+        other => assert!(
+            matches!(other, Err(AdapterError::Engine(_))),
+            "{}",
+            unexpected("re-registered handler", &format!("{other:?}"))
+        ),
     }
 }
 
@@ -205,6 +227,6 @@ async fn tool_invocation_debug_includes_name() {
     assert!(rendered.contains("echo"));
 }
 
-fn panic_unexpected(expected: &str, actual: &str) -> ! {
-    panic!("expected {expected}, got {actual}");
+fn unexpected(expected: &str, actual: &str) -> String {
+    format!("expected {expected}, got {actual}")
 }

@@ -1,9 +1,9 @@
 //! `EventPipe` CPU sampling through the engine. Implements [PROF-DOTNET-CPU].
 //!
 //! The engine records in segments and streams each segment's ticks once it is
-//! symbolized, until it reads a line on stdin. Ticks therefore arrive a segment
-//! behind: the session's live count follows every finished segment, a snapshot
-//! sees them all, and a target that exits keeps them.
+//! symbolized, until stop or EOF on stdin. Live ticks arrive a segment behind;
+//! an explicit snapshot closes the current segment and waits for its final tick.
+//! A target that exits keeps every finished segment.
 
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use lsp_profiler::runtime::{CpuBackend, SamplerConfig};
 use lsp_profiler::sampler::{SampleBatch, SamplerError, SamplerHandle, SamplerSink};
 use lsp_profiler::wire::{AttachErrorKind, CpuCapabilities, StackFrame, ThreadSample};
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info};
 
 use crate::engine::{Engine, EngineError, RunningEngine, StopSignal};
@@ -26,6 +26,7 @@ const STOP_POLL: Duration = Duration::from_millis(100);
 /// The .NET CPU backend.
 #[derive(Debug)]
 pub struct DotNetCpu {
+    /// Launches a fresh engine for each sampling session.
     engine: Engine,
 }
 
@@ -34,6 +35,17 @@ impl DotNetCpu {
     #[must_use]
     pub fn new(engine: Engine) -> Self {
         Self { engine }
+    }
+
+    /// Start this runtime's engine with the requested sampling mode.
+    fn start_engine(&self, config: &SamplerConfig) -> Result<RunningEngine, SamplerError> {
+        let mut args = vec!["cpu".to_owned(), "--pid".to_owned(), config.pid.to_string()];
+        if config.include_native {
+            args.push("--native".to_owned());
+        }
+        self.engine
+            .spawn(&args)
+            .map_err(|error| sampler_error(error, config.pid))
     }
 }
 
@@ -49,27 +61,23 @@ impl CpuBackend for DotNetCpu {
     }
 
     async fn attach(&self, config: &SamplerConfig) -> Result<SamplerHandle, SamplerError> {
-        let mut args = vec!["cpu".to_owned(), "--pid".to_owned(), config.pid.to_string()];
-        if config.include_native {
-            args.push("--native".to_owned());
-        }
-        let mut running = self
-            .engine
-            .spawn(&args)
-            .map_err(|error| sampler_error(error, config.pid))?;
+        let mut running = self.start_engine(config)?;
         let version = await_attached(&mut running, config.pid).await?;
         info!(pid = config.pid, "attached to .NET process");
-        let parts = SamplerHandle::channel(config.pid, version, FINISH_TIMEOUT);
+        let mut parts = SamplerHandle::channel(config.pid, version, FINISH_TIMEOUT);
+        let snapshots = parts.handle.snapshot_requests();
         drop(tokio::spawn(forward(
             running,
             parts.sink,
             config.duration,
             parts.done,
+            snapshots,
         )));
         Ok(parts.handle)
     }
 }
 
+/// Consume the attach handshake before exposing the sampler to its session.
 async fn await_attached(running: &mut RunningEngine, pid: u32) -> Result<String, SamplerError> {
     match running
         .next()
@@ -105,49 +113,117 @@ async fn forward(
     sink: SamplerSink,
     limit: Option<Duration>,
     done: oneshot::Sender<()>,
+    snapshots: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
 ) {
-    let stopper = tokio::spawn(stop_when_asked(running.stop_signal(), sink.clone(), limit));
-    relay(&mut running, &sink).await;
+    let (acknowledge, barriers) = mpsc::unbounded_channel();
+    let control = CpuControl {
+        signal: running.stop_signal(),
+        snapshots,
+        barriers: acknowledge,
+    };
+    let stopper = tokio::spawn(control.run(sink.clone(), limit));
+    relay(&mut running, &sink, barriers).await;
     stopper.abort();
     running.finish().await;
     let _ = done.send(());
 }
 
-/// Send the engine its stop line once the session asks or the duration ends.
-async fn stop_when_asked(signal: StopSignal, sink: SamplerSink, limit: Option<Duration>) {
-    wait_for_stop(&sink, limit).await;
-    signal.send().await;
+/// One owner serializes snapshot barriers and stop on the engine's input.
+struct CpuControl {
+    /// Writes snapshot and stop commands to the engine's standard input.
+    signal: StopSignal,
+    /// Receives snapshot requests from the public sampler handle.
+    snapshots: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
+    /// Queues acknowledgements for the relay to release after each flush.
+    barriers: mpsc::UnboundedSender<oneshot::Sender<()>>,
 }
 
-/// Hand every tick to the session until the engine has delivered the last one.
-async fn relay(running: &mut RunningEngine, sink: &SamplerSink) {
-    let mut frames = FrameTable::default();
-    loop {
-        match running.next().await {
-            Ok(Some(EngineMessage::Frames { items })) => frames.extend(items),
-            Ok(Some(EngineMessage::Ticks { items })) => {
-                if !deliver(sink, &frames, items).await {
-                    break;
+impl CpuControl {
+    /// Serialize snapshot commands with the duration or caller-initiated stop.
+    async fn run(mut self, sink: SamplerSink, limit: Option<Duration>) {
+        let stopped = wait_for_stop(&sink, limit);
+        tokio::pin!(stopped);
+        loop {
+            tokio::select! {
+                () = &mut stopped => { self.signal.send().await; break; }
+                Some(done) = self.snapshots.recv() => {
+                    if let Err(error) = self.signal.snapshot().await {
+                        error!(%error, "cannot flush the .NET profiling engine");
+                        break;
+                    }
+                    let _ = self.barriers.send(done);
                 }
-            }
-            Ok(Some(EngineMessage::Failure { message, .. })) => {
-                error!(message, "the .NET profiling engine failed while sampling");
-                break;
-            }
-            Ok(Some(EngineMessage::Stopped { tick_count })) => {
-                debug!(tick_count, "the .NET profiling engine delivered every tick");
-                break;
-            }
-            Ok(Some(_)) => {}
-            Ok(None) => break,
-            Err(error) => {
-                error!(%error, "reading the .NET profiling engine failed");
-                break;
             }
         }
     }
 }
 
+/// Hand every tick to the session until the engine has delivered the last one.
+async fn relay(
+    running: &mut RunningEngine,
+    sink: &SamplerSink,
+    barriers: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
+) {
+    let mut relay = Relay {
+        frames: FrameTable::default(),
+        barriers,
+    };
+    while relay.receive(running, sink).await {}
+}
+
+/// Symbolized frames and barrier acknowledgements share one ordered engine stream.
+struct Relay {
+    /// Resolves engine frame IDs against all symbolized frames received so far.
+    frames: FrameTable,
+    /// Holds snapshot callers until their corresponding flush arrives.
+    barriers: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
+}
+
+impl Relay {
+    /// Read one engine message and report whether relaying should continue.
+    async fn receive(&mut self, running: &mut RunningEngine, sink: &SamplerSink) -> bool {
+        match running.next().await {
+            Ok(Some(message)) => self.deliver(sink, message).await,
+            Ok(None) => false,
+            Err(error) => {
+                error!(%error, "reading the .NET profiling engine failed");
+                false
+            }
+        }
+    }
+
+    /// Apply one message to the frame table, sample sink, or snapshot waiters.
+    async fn deliver(&mut self, sink: &SamplerSink, message: EngineMessage) -> bool {
+        match message {
+            EngineMessage::Frames { items } => {
+                self.frames.extend(items);
+                true
+            }
+            EngineMessage::Ticks { items } => deliver(sink, &self.frames, items).await,
+            EngineMessage::Flushed => self.acknowledge().await,
+            EngineMessage::Failure { message, .. } => {
+                error!(message, "the .NET profiling engine failed while sampling");
+                false
+            }
+            EngineMessage::Stopped { tick_count } => {
+                debug!(tick_count, "the .NET profiling engine delivered every tick");
+                false
+            }
+            _ => true,
+        }
+    }
+
+    /// Release the oldest snapshot caller after the engine flushes its segment.
+    async fn acknowledge(&mut self) -> bool {
+        let Some(done) = self.barriers.recv().await else {
+            return false;
+        };
+        let _ = done.send(());
+        true
+    }
+}
+
+/// Wait until the session requests stop or its optional duration elapses.
 async fn wait_for_stop(sink: &SamplerSink, limit: Option<Duration>) {
     let started = tokio::time::Instant::now();
     while !sink.stop_requested() && limit.is_none_or(|limit| started.elapsed() < limit) {
@@ -155,6 +231,7 @@ async fn wait_for_stop(sink: &SamplerSink, limit: Option<Duration>) {
     }
 }
 
+/// Convert ticks in stream order, stopping early if the sample consumer closes.
 async fn deliver(sink: &SamplerSink, frames: &FrameTable, ticks: Vec<TickRecord>) -> bool {
     for tick in ticks {
         if sink.sender.send(frames.batch(tick)).await.is_err() {
@@ -167,10 +244,12 @@ async fn deliver(sink: &SamplerSink, frames: &FrameTable, ticks: Vec<TickRecord>
 /// The engine's frame table: IDs are positions in arrival order.
 #[derive(Debug, Default)]
 struct FrameTable {
+    /// Keeps each frame at the index assigned by its arrival order.
     frames: Vec<StackFrame>,
 }
 
 impl FrameTable {
+    /// Append newly symbolized frames without disturbing existing frame IDs.
     fn extend(&mut self, items: Vec<FrameRecord>) {
         self.frames.extend(items.into_iter().map(|f| StackFrame {
             name: f.name,
@@ -180,6 +259,7 @@ impl FrameTable {
         }));
     }
 
+    /// Resolve one tick's thread stacks into the runtime-neutral sample model.
     fn batch(&self, tick: TickRecord) -> SampleBatch {
         let samples = tick
             .threads

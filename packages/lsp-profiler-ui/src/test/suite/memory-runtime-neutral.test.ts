@@ -117,7 +117,7 @@ suite('Memory UI — the GC toast speaks every runtime\'s language', () => {
         const text = gcSummary({ kind: 'gc', collected: 1, uncollectable: 0, freedBytes: 2 * 1_048_576 });
         assert.strictEqual(text, 'LspUi: Garbage collection ran — freed 2.0 MB');
         assert.ok(!text.includes('gc.collect()'), 'no Python call spelling');
-        assert.ok(!/1 object/.test(text), 'collected is not an object count');
+        assert.ok(!text.includes('1 object'), 'collected is not an object count');
     });
 
     test('uncollectable objects are surfaced when the runtime reports them', () => {

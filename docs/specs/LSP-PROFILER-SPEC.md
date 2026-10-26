@@ -254,11 +254,13 @@ Named presets fill unset parameters: sample rate, native frames and duration. Ex
 
 ### [PROF-CPU-SNAPSHOT] Snapshot
 
-`cpu.snapshot { session_id }` returns the same report shape for the data so far, without ending the session.
+`cpu.snapshot { session_id }` returns the same report shape for the data so far, without ending the session. A backend that buffers recording segments acknowledges a snapshot barrier only after delivering the samples recorded before the request. The session drains samples while awaiting the bounded barrier; a failed or timed-out barrier returns an error rather than a stale report.
 
 ### [PROF-CPU-SESSIONS] Sessions
 
 `cpu.list` returns every active session with its ID, PID, runtime, version, start time, sample count and duration. A `duration` on start ends the session automatically. Its report is kept for the next `stop` or `list`.
+
+Recording operations serialize per session. A snapshot barrier releases the session registry before waiting, so another session's controls and progress remain available. A stop control does not wait for the recording lock before signalling its producer; stopping retires the recording exactly once, and a previously cloned request cannot resurrect it.
 
 ### [PROF-CPU-PROGRESS] Live progress
 
@@ -266,13 +268,14 @@ While a session runs, the service holds a work-done progress for it.
 
 - Begin: "Profiling `<name>` (PID n)".
 - A report each second gives the elapsed time, plus the sample count and top function when the backend has `live_progress`.
+- The top function is the one with the most self samples, ties broken by name. Ranked by inclusive samples, the root of every whole stack would always win.
 - Cancelling the progress stops the session exactly as `cpu.stop` would. Its report is then delivered to the UI through `cpu.list`, and published as diagnostics.
 
 ### [PROF-CPU-REPORT] Report
 
 A `ProfileReport` contains the session, PID, runtime, duration, total and user samples, the sample rate, and:
 
-- hot functions: inclusive and self share;
+- hot functions: inclusive and self share, ordered by inclusive share, then self share, then name;
 - hot lines;
 - artifacts.
 
@@ -541,7 +544,7 @@ Every view ID, command ID, context key, configuration section and webview type i
 
 ### [PROF-UI-CAPABILITIES] Capability gating
 
-The library reads `experimental.lspProfiler`. A runtime without CPU shows no CPU action. A direct-mode runtime shows no debug-session requirement. A runtime without `references` hides retention actions. A runtime's `display_name` labels its rows. A process row opens its `entry` in the editor only when its runtime advertises `source_entries`; an entry that is a binary or an assembly is never opened. The library never branches on a runtime ID.
+The library reads `experimental.lspProfiler`. A runtime without CPU shows no CPU action. Once the server has advertised its runtimes and none of them has memory, the Processes view pins no memory launch, and a host whose runtimes never track memory passes `memory: false` to the contributions generator, so its manifest declares no memory command, menu, launch link or autopilot setting. A direct-mode runtime shows no debug-session requirement. A runtime without `references` hides retention actions. A runtime's `display_name` labels its rows. A process row opens its `entry` in the editor only when its runtime advertises `source_entries`; an entry that is a binary or an assembly is never opened. The library never branches on a runtime ID.
 
 ### [PROF-UI-PROCESSES] Processes view
 
@@ -620,7 +623,23 @@ All panels share:
 - source-navigation routing;
 - theme variables.
 
-The palette is orange/amber for CPU, purple for memory, red for leaks and green for freed memory, all over editor theme colours.
+Palettes follow [PROF-UI-PALETTE], over editor theme surfaces and text.
+
+### [PROF-UI-PALETTE] Host palettes
+
+A host supplies CPU critical/hot/warm, memory critical/hot (optionally warm/cool), leak and success colors. The user can override these through `<host>.profiler.palette`; only six-digit hex colors are accepted. The fallback keeps the original orange/purple palette. SharpLsp supplies green; Osprey supplies olive/brown-green. Panels, sampled frames and editor heat consume the same resolved palette: no view draws an accent of its own, and a label names its metric, never a colour. A palette without a memory ramp ramps from its own memory colour. Text drawn on an accent, a flame-graph label or an active toggle, takes the ink readable on that accent, so a dark host palette keeps light text. Runtime frames retain their host-supplied source classification. Frame identity determines color rank, independently of input ordering. Scientific totals render immediately; a counter animation must never temporarily misstate a measurement. Short captures display milliseconds.
+
+### [PROF-UI-SAMPLED] Interactive sampled profiles
+
+The shared CPU panel consumes sampled Speedscope exports and renders a canvas with left-heavy and time-order layouts, zoom, pan, frame tooltips, substring search, reset and per-thread/fiber selection. Existing SVG previews and native trace exports remain available. A native host may supply its already-parsed model and runtime summary, including CPU/waiting counts, sample rate and dropped samples. Missing scheduling metadata is labelled as sample counts rather than fabricated CPU utilization. Each layout embeds at most 150,000 slabs, so a long recording of a deep program, whose stack changes below the root on every sample, still opens: the widest slabs are kept first and the shallowest among equal widths, which keeps every kept slab's parents, and the toolbar states how many narrow frames were not drawn, all of which remain in the Speedscope export. Osprey owns capture, symbolization, compiler invocation, cancellation and its source classification; the shared package owns rendering and interactions.
+
+### [PROF-UI-DEBUG-LINK] Debugger selections
+
+Watch/Variables actions carry the adapter's expression, type, value and session identity into shared profiler panels. Hosts with a custom variable tree can invoke the same command on selection. The reverse action adds the exact expression to Watch through VS Code's variable context. A selection from another session is rejected; resume and termination clear it. Type-retention navigation is offered only with a backend callback and is explicitly a type query, never a claim that a type uniquely identifies the selected object. Osprey's native heap backend is not supplied by this UI integration.
+
+### [PROF-UI-CONTRACT] Shared VSIX contracts
+
+The same `testing/webview-contract` module runs inside both SharpLsp and Osprey. It covers CSP, hostile payloads, memory/retention presentation, singleton handlers, theme support, host palettes and debugger selection boundaries. `testing/cpu-capture-contract` drives each host's real runtime capture and checks attribution, Speedscope/V8 exports, interactive controls and source navigation. Runtime-specific capture and debugger tests remain alongside these contracts; sharing UI tests is not proof of backend parity.
 
 ## [PROF-DOTNET] .NET runtime
 
@@ -667,6 +686,8 @@ Every EventPipe session is stopped from the command's own thread, never from ins
 
 The exit code is 0 on success. On failure the engine writes exactly one `failure` message and exits 1. Stdout carries only protocol lines. Stderr is for humans and is never parsed.
 
+Explicit PID commands resolve only that target's diagnostics endpoint. They must not enumerate unrelated processes: an unrelated process can exit between discovery and reading its namespace metadata. Real syscall capture must prove that attachment does not read another live runtime's `/proc/<pid>/status`; real process-exit churn must preserve successful target operations and complete heap results. Missing targets, unavailable endpoints and permission failures retain their classified errors.
+
 ### [PROF-DOTNET-ENGINE-LOCATE] Locating the engine
 
 The crate looks for the engine in three places, in order:
@@ -686,6 +707,7 @@ The engine writes NDJSON, one object per line. Fields are snake_case, and a `kin
 | `attached` | `pid`, `runtime_version?` | The CPU session is recording |
 | `frames` | `items: [{name, file?, line?, module?}]` | New frame-table entries. IDs continue from the previous message |
 | `ticks` | `items: [{weight_ms, threads: [{tid, active, stack: [frame id, leaf first]}]}]` | A batch of ticks; always preceded by the frames they use |
+| `flushed` | — | Every tick preceding the CPU snapshot command has been sent |
 | `stopped` | `tick_count` | Every tick has been sent |
 | `snapshot` | `graph_path`, `live_bytes`, `live_objects`, `heap_bytes`, `generation_bytes[gen0, gen1, gen2, loh, poh]`, `types: [{type_name, count, size_bytes, file?, line?}]` | Heap summary |
 | `refs` | `nodes`, `edges`, `truncated` | Retention graph |
@@ -701,10 +723,10 @@ The engine opens an EventPipe session with rundown and a 256 MB buffer. It enabl
 
 Recording runs in segments, each its own session recorded to a temporary `.nettrace` that is deleted with its `.etlx` on every exit path. The first segment lasts 500 ms and each next one doubles, up to 10 s. A segment ends with its rundown, so its frames can be named. The next segment starts before the last one is symbolized, so the gap between them is only the rundown. Ticks therefore stream a segment behind:
 
-- `cpu.snapshot` sees every finished segment;
+- `cpu.snapshot` sends `snapshot` on stdin, closes the current segment, and drains through the engine's `flushed` acknowledgement; the next segment keeps recording while symbolization finishes;
 - a target that exits keeps every segment it finished. Its last segment never got a rundown, so its frames cannot be named and it is dropped.
 
-The backend reports `live_progress`: each finished segment's ticks advance the session's count, so the count runs a segment behind. A line or EOF on stdin ends the recording. The crate's finish timeout covers symbolizing the last segment.
+The backend reports `live_progress`: each finished segment's ticks advance the session's count, so the count runs a segment behind. `stop` or EOF on stdin ends the recording. The crate's finish timeout covers symbolizing the last segment and bounds an explicit snapshot barrier.
 
 ### [PROF-DOTNET-CPU-SYMBOLS] Symbolization
 

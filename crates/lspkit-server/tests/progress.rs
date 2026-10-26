@@ -5,8 +5,14 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use lspkit_server::{NoopReporter, ProgressReporter, ProgressSink, ProgressUpdate};
 
+/// Captures every update a sink reports, for whole-history assertions.
 struct Recorder {
     updates: Mutex<Vec<ProgressUpdate>>,
+}
+
+/// The recorder coerced to the trait object the sink consumes.
+fn reporter(recorder: Arc<Recorder>) -> Arc<dyn ProgressReporter> {
+    recorder
 }
 
 #[async_trait]
@@ -30,18 +36,20 @@ async fn report_forwards_with_token_and_done_false() {
     let recorder = Arc::new(Recorder {
         updates: Mutex::new(Vec::new()),
     });
-    let sink = ProgressSink::new(Arc::clone(&recorder) as Arc<dyn ProgressReporter>, "tok-1");
+    let sink = ProgressSink::new(reporter(Arc::clone(&recorder)), "tok-1");
     sink.report("step 1", Some(25)).await;
     sink.report("step 2", None).await;
 
     let updates = recorder.updates.lock().expect("lock");
     assert_eq!(updates.len(), 2);
-    assert_eq!(updates[0].token, "tok-1");
-    assert_eq!(updates[0].message, "step 1");
-    assert_eq!(updates[0].percentage, Some(25));
-    assert!(!updates[0].done);
-    assert_eq!(updates[1].percentage, None);
-    assert!(!updates[1].done);
+    let first = updates.first().expect("first update recorded");
+    assert_eq!(first.token, "tok-1");
+    assert_eq!(first.message, "step 1");
+    assert_eq!(first.percentage, Some(25));
+    assert!(!first.done);
+    let second = updates.get(1).expect("second update recorded");
+    assert_eq!(second.percentage, None);
+    assert!(!second.done);
 }
 
 #[tokio::test]
@@ -49,15 +57,16 @@ async fn finish_sets_percentage_100_and_done_true() {
     let recorder = Arc::new(Recorder {
         updates: Mutex::new(Vec::new()),
     });
-    let sink = ProgressSink::new(Arc::clone(&recorder) as Arc<dyn ProgressReporter>, "tok-2");
+    let sink = ProgressSink::new(reporter(Arc::clone(&recorder)), "tok-2");
     sink.finish("complete").await;
 
     let updates = recorder.updates.lock().expect("lock");
     assert_eq!(updates.len(), 1);
-    assert_eq!(updates[0].token, "tok-2");
-    assert_eq!(updates[0].message, "complete");
-    assert_eq!(updates[0].percentage, Some(100));
-    assert!(updates[0].done);
+    let final_update = updates.first().expect("final update recorded");
+    assert_eq!(final_update.token, "tok-2");
+    assert_eq!(final_update.message, "complete");
+    assert_eq!(final_update.percentage, Some(100));
+    assert!(final_update.done);
 }
 
 #[tokio::test]
@@ -71,7 +80,7 @@ async fn sink_clone_shares_reporter() {
     let recorder = Arc::new(Recorder {
         updates: Mutex::new(Vec::new()),
     });
-    let sink = ProgressSink::new(Arc::clone(&recorder) as Arc<dyn ProgressReporter>, "tok");
+    let sink = ProgressSink::new(reporter(Arc::clone(&recorder)), "tok");
     let cloned = sink.clone();
     sink.report("a", None).await;
     cloned.report("b", None).await;

@@ -96,24 +96,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round_trips_attach_command() -> Result<()> {
+    async fn round_trips_attach_command() {
         let cmd = HelperCommand::Attach {
             pid: 4242,
             sample_rate: 200,
             include_native: true,
         };
-        let (wire, decoded) = round_trip(&cmd).await?;
+        let (wire, decoded) = round_trip(&cmd).await.expect("round-trip attach command");
         assert!(wire.ends_with('\n'), "framed message must end with newline");
         assert!(
             wire.contains(r#""kind":"Attach""#),
             "commands are kind-tagged: {wire}"
         );
         assert_eq!(decoded, Some(cmd));
-        Ok(())
     }
 
     #[tokio::test]
-    async fn round_trips_samples_message() -> Result<()> {
+    async fn round_trips_samples_message() {
         let msg = HelperMessage::Samples {
             samples: vec![ThreadSample {
                 thread_id: 7,
@@ -127,38 +126,37 @@ mod tests {
                 }],
             }],
         };
-        let (wire, decoded) = round_trip(&msg).await?;
+        let (wire, decoded) = round_trip(&msg).await.expect("round-trip sample message");
         assert!(
             !wire.contains("module"),
             "absent options are omitted: {wire}"
         );
         assert_eq!(decoded, Some(msg));
-        Ok(())
     }
 
     #[tokio::test]
-    async fn round_trips_failure_message() -> Result<()> {
+    async fn round_trips_failure_message() {
         let msg = HelperMessage::Failure {
             error_kind: AttachErrorKind::PermissionDenied,
             message: "attach failed: Operation not permitted".to_owned(),
         };
-        let (wire, decoded) = round_trip(&msg).await?;
+        let (wire, decoded) = round_trip(&msg).await.expect("round-trip failure message");
         assert!(
             wire.contains(r#""kind":"Failure""#)
                 && wire.contains(r#""error_kind":{"kind":"PermissionDenied"}"#),
             "failure frames carry a tagged kind: {wire}"
         );
         assert_eq!(decoded, Some(msg));
-        Ok(())
     }
 
     #[tokio::test]
-    async fn read_message_returns_none_on_eof() -> Result<()> {
+    async fn read_message_returns_none_on_eof() {
         let empty: &[u8] = b"";
         let mut reader = BufReader::new(empty);
-        let decoded: Option<HelperMessage> = read_message(&mut reader).await?;
+        let decoded: Option<HelperMessage> = read_message(&mut reader)
+            .await
+            .expect("read clean end-of-stream");
         assert_eq!(decoded, None);
-        Ok(())
     }
 
     #[tokio::test]

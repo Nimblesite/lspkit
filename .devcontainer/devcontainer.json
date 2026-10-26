@@ -6,7 +6,7 @@
   "mounts": [
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.cargo,target=/home/vscode/.cargo,type=bind,consistency=cached"
   ],
-  "postCreateCommand": "make setup",
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends strace && make setup",
   "customizations": {
     "vscode": {
       "extensions": [

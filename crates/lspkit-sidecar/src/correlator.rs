@@ -25,19 +25,21 @@ impl RequestId {
 /// Errors from the correlator.
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
-pub enum CorrelationError {
+pub enum CorrelationError<R = ()> {
     /// A response arrived for an unknown request ID.
     #[error("unknown request id: {0}")]
     UnknownId(u64),
-    /// The pending future was already resolved.
+    /// The receiver was dropped; retains the response so callers can recover it.
     #[error("request {0} already completed")]
-    AlreadyResolved(u64),
+    AlreadyResolved(u64, R),
 }
 
 /// Pairs outbound requests with inbound responses by ID.
 #[derive(Default)]
 pub struct Correlator<R> {
+    /// Allocates identifiers that remain unique for this correlator's lifetime.
     next_id: AtomicU64,
+    /// Routes each in-flight response to the future returned by `register`.
     pending: Mutex<HashMap<RequestId, oneshot::Sender<R>>>,
 }
 
@@ -65,7 +67,7 @@ impl<R: Send + 'static> Correlator<R> {
         let id = RequestId(self.next_id.fetch_add(1, Ordering::SeqCst));
         let (tx, rx) = oneshot::channel();
         if let Ok(mut guard) = self.pending.lock() {
-            guard.insert(id, tx);
+            let _replaced = guard.insert(id, tx);
         }
         (id, rx)
     }
@@ -76,7 +78,7 @@ impl<R: Send + 'static> Correlator<R> {
     /// Returns [`CorrelationError::UnknownId`] when no pending request
     /// matches, or [`CorrelationError::AlreadyResolved`] if the receiver was
     /// dropped.
-    pub fn resolve(&self, id: RequestId, response: R) -> Result<(), CorrelationError> {
+    pub fn resolve(&self, id: RequestId, response: R) -> Result<(), CorrelationError<R>> {
         let sender = self
             .pending
             .lock()
@@ -85,7 +87,7 @@ impl<R: Send + 'static> Correlator<R> {
             .ok_or(CorrelationError::UnknownId(id.get()))?;
         sender
             .send(response)
-            .map_err(|_| CorrelationError::AlreadyResolved(id.get()))
+            .map_err(|response| CorrelationError::AlreadyResolved(id.get(), response))
     }
 }
 

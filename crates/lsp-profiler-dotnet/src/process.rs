@@ -15,8 +15,11 @@ use std::path::{Path, PathBuf};
 use lsp_profiler::paths::resolve_against;
 use lsp_profiler::runtime::{Classification, ProcessCandidate};
 
+/// Identifies the framework-dependent application launcher across platforms.
 const MUXER_STEM: &str = "dotnet";
+/// Identifies the SDK metadata that distinguishes .NET output directories.
 const RUNTIMECONFIG_SUFFIX: &str = ".runtimeconfig.json";
+/// Explains why a recognized runtime cannot accept a diagnostics attachment.
 const NO_ENDPOINT: &str = "no .NET diagnostics endpoint: the process was started with DOTNET_EnableDiagnostics=0 or is not CoreCLR";
 
 /// What a directory probe found, memoised per directory within one classification pass.
@@ -81,11 +84,13 @@ fn classify(
     })
 }
 
+/// Recognize `dotnet` launch commands without confusing apphost executables.
 fn is_muxer(exe: &Path) -> bool {
     exe.file_stem()
         .is_some_and(|stem| stem.eq_ignore_ascii_case(MUXER_STEM))
 }
 
+/// Match managed assembly suffixes case-insensitively for launcher arguments.
 fn has_extension(path: &Path, extension: &str) -> bool {
     path.extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
@@ -103,6 +108,7 @@ fn probe(dir: &Path, cache: &mut HashMap<PathBuf, Probe>) -> Probe {
         .clone()
 }
 
+/// Extract only successful directory probes as displayable runtime versions.
 fn version_of(probe: &Probe) -> Option<String> {
     match probe {
         Probe::NotDotNet => None,
@@ -110,6 +116,7 @@ fn version_of(probe: &Probe) -> Option<String> {
     }
 }
 
+/// Locate runtime metadata beside an apphost or launched managed assembly.
 fn runtimeconfig_in(dir: &Path) -> Option<PathBuf> {
     std::fs::read_dir(dir)
         .ok()?
@@ -133,6 +140,7 @@ pub fn runtimeconfig_version(path: &Path) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Read either single-framework or multi-framework runtimeconfig layouts.
 fn framework_version(options: &serde_json::Value) -> Option<&str> {
     let single = options.get("framework").and_then(|fw| fw.get("version"));
     let first_of_many = || {
@@ -155,6 +163,7 @@ pub fn has_endpoint(pid: u32) -> Option<bool> {
 }
 
 #[cfg(windows)]
+/// Search Windows named pipes for the target's CoreCLR diagnostics endpoint.
 fn endpoint_exists(pid: u32) -> Option<bool> {
     let exact = format!("dotnet-diagnostic-{pid}");
     let prefixed = format!("{exact}-");
@@ -167,6 +176,7 @@ fn endpoint_exists(pid: u32) -> Option<bool> {
 }
 
 #[cfg(unix)]
+/// Search Unix temporary directories for the target's diagnostics socket.
 fn endpoint_exists(pid: u32) -> Option<bool> {
     let prefix = format!("dotnet-diagnostic-{pid}-");
     let mut dirs = vec![std::env::temp_dir()];

@@ -51,8 +51,11 @@ pub trait ToolHandler<E: EngineApi>: Send + Sync + 'static {
 /// Adapter binding an engine and its tool handlers.
 #[derive(Clone)]
 pub struct Adapter<E: EngineApi> {
+    /// Shared engine supplied to every handler invocation.
     engine: Arc<E>,
+    /// Public metadata exposed when clients enumerate tools.
     registry: ToolRegistry,
+    /// Callable implementations indexed by their registered tool names.
     handlers: Vec<(String, Arc<dyn ToolHandler<E>>)>,
 }
 
@@ -94,7 +97,7 @@ impl<E: EngineApi> Adapter<E> {
             .handlers
             .iter()
             .find(|(n, _)| n == name)
-            .map(|(_, h)| h.clone())
+            .map(|(_, handler)| Arc::clone(handler))
             .ok_or_else(|| AdapterError::UnknownTool(name.to_owned()))?;
         let output = handler.invoke(self.engine.as_ref(), input).await?;
         Ok(ToolInvocation {

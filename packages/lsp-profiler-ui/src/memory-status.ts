@@ -29,67 +29,66 @@ let memoryStatusVisible = false;
  * disposables that tear down the effect, the listeners, and the item.
  */
 export function bindMemoryStatusBar(store: Store): vscode.Disposable[] {
-  memoryStatusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Left,
-    MEMORY_STATUS_BAR_PRIORITY,
-  );
+  memoryStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, MEMORY_STATUS_BAR_PRIORITY);
   // Click the status-bar item to open the memory action menu (no palette needed).
   memoryStatusBarItem.command = cmd("memoryMenu");
-
-  // Reactive leg: tracking state ([PROF-UI-PROCESSES]).
-  const disposeEffect = effect(() => {
-    void store.profiler.value.memory;
-    refreshMemoryStatusBar(store);
-  });
-
+  // Reactive leg: tracking state, and whether any runtime offers memory ([PROF-UI-CAPABILITIES]).
+  const disposeEffect = effect(() => { refreshMemoryStatusBar(store); });
   refreshMemoryStatusBar(store);
+  const forget = (): void => { memoryStatusBarItem = undefined; memoryStatusVisible = false; };
+  return [memoryStatusBarItem, { dispose: disposeEffect }, ...debugSessionRefresh(store), { dispose: forget }];
+}
+
+/** The imperative leg: show/hide as host debug sessions come and go. */
+function debugSessionRefresh(store: Store): vscode.Disposable[] {
+  const refresh = (): void => { refreshMemoryStatusBar(store); };
   return [
-    memoryStatusBarItem,
-    { dispose: disposeEffect },
-    // Imperative leg: show/hide as host debug sessions come and go.
-    vscode.debug.onDidChangeActiveDebugSession(() => { refreshMemoryStatusBar(store); }),
-    vscode.debug.onDidStartDebugSession(() => { refreshMemoryStatusBar(store); }),
-    vscode.debug.onDidTerminateDebugSession(() => { refreshMemoryStatusBar(store); }),
-    {
-      dispose: () => {
-        memoryStatusBarItem = undefined;
-        memoryStatusVisible = false;
-      },
-    },
+    vscode.debug.onDidChangeActiveDebugSession(refresh),
+    vscode.debug.onDidStartDebugSession(refresh),
+    vscode.debug.onDidTerminateDebugSession(refresh),
   ];
 }
 
 /**
  * Show the memory status-bar entry whenever a host debug session is active
- * (or tracking is starting/on) and click it to open the action menu. Hidden
+ * and a runtime offers memory (or tracking is starting/on) and click it to open the action menu. Hidden
  * otherwise. A start in flight shows a spinner — never silence between the
  * click and the tracking state ([PROF-UI-STATE]).
  */
 function refreshMemoryStatusBar(store: Store): void {
   if (memoryStatusBarItem === undefined) { return; }
 
-  const debugging = vscode.debug.activeDebugSession?.type === debugType();
+  // Both signals are read on every pass, so the effect that calls this
+  // re-runs when either changes ([PROF-UI-CAPABILITIES]).
   const memoryState = store.profiler.value.memory;
-  if (!debugging && memoryState === "idle") {
+  const offered = store.memoryOffered();
+  const debugging = vscode.debug.activeDebugSession?.type === debugType();
+  // A host whose runtimes advertise no memory backend never offers tracking.
+  if ((!debugging || !offered) && memoryState === "idle") {
     hideMemoryStatusBar();
     return;
   }
+  showMemoryStatusBar(memoryStatusBarItem, memoryStatusLook(memoryState));
+}
 
-  if (memoryState === "starting") {
-    memoryStatusBarItem.text = "$(loading~spin) Memory: starting…";
-    memoryStatusBarItem.tooltip = `${brand()} is starting memory tracking`;
-    memoryStatusBarItem.backgroundColor = undefined;
-  } else if (memoryState === "active") {
-    memoryStatusBarItem.text = "$(eye) Memory: tracking";
-    memoryStatusBarItem.tooltip = `${brand()}: memory tracking active — click for snapshot/compare/stop`;
-    memoryStatusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
-  } else {
-    memoryStatusBarItem.text = "$(database) Memory";
-    memoryStatusBarItem.tooltip = `${brand()}: click to start memory tracking (briefly pauses the program)`;
-    memoryStatusBarItem.backgroundColor = undefined;
-  }
+/** Paint the item with `look` and show it. */
+function showMemoryStatusBar(item: vscode.StatusBarItem, look: { text: string; tooltip: string; highlighted: boolean }): void {
+  item.text = look.text;
+  item.tooltip = look.tooltip;
+  item.backgroundColor = look.highlighted ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
   memoryStatusVisible = true;
-  memoryStatusBarItem.show();
+  item.show();
+}
+
+/** The item's text and tooltip in each tracking state; live tracking is highlighted. */
+function memoryStatusLook(state: string): { text: string; tooltip: string; highlighted: boolean } {
+  if (state === "starting") {
+    return { text: "$(loading~spin) Memory: starting…", tooltip: `${brand()} is starting memory tracking`, highlighted: false };
+  }
+  if (state === "active") {
+    return { text: "$(eye) Memory: tracking", tooltip: `${brand()}: memory tracking active — click for snapshot/compare/stop`, highlighted: true };
+  }
+  return { text: "$(database) Memory", tooltip: `${brand()}: click to start memory tracking (briefly pauses the program)`, highlighted: false };
 }
 
 /** Hide the item and record it for the e2e seam. */

@@ -11,9 +11,9 @@ pub enum UriError {
     /// URI scheme is not `file://`.
     #[error("unsupported URI scheme: {0}")]
     UnsupportedScheme(String),
-    /// Percent-decoded URI is not valid UTF-8.
+    /// Percent-decoded URI is not valid UTF-8, retaining conversion failures.
     #[error("URI is not valid UTF-8 after percent decoding")]
-    InvalidUtf8,
+    InvalidUtf8(#[source] Option<std::string::FromUtf8Error>),
     /// Path could not be converted to a URI.
     #[error("path cannot be expressed as a file URI: {0}")]
     InvalidPath(PathBuf),
@@ -29,12 +29,11 @@ pub fn uri_to_path(uri: &str) -> Result<PathBuf, UriError> {
         .ok_or_else(|| UriError::UnsupportedScheme(uri.to_owned()))?;
     let trimmed = rest.strip_prefix('/').unwrap_or(rest);
     let decoded = percent_decode(trimmed)?;
-    if cfg!(windows) {
-        let normalized = decoded.replace('/', "\\");
-        Ok(PathBuf::from(normalized))
-    } else {
-        Ok(PathBuf::from(format!("/{decoded}")))
-    }
+    #[cfg(windows)]
+    let native = decoded.replace('/', "\\");
+    #[cfg(not(windows))]
+    let native = format!("/{decoded}");
+    Ok(PathBuf::from(native))
 }
 
 /// Convert a filesystem path to a `file://` URI.
@@ -51,47 +50,51 @@ pub fn path_to_uri(path: &Path) -> Result<String, UriError> {
         .ok_or_else(|| UriError::InvalidPath(path.to_path_buf()))?;
     let normalized = as_str.replace('\\', "/");
     let encoded = percent_encode(&normalized);
-    if normalized.starts_with('/') {
-        Ok(format!("file://{encoded}"))
+    #[cfg(windows)]
+    let prefix = if normalized.starts_with('/') {
+        "file://"
     } else {
-        Ok(format!("file:///{encoded}"))
-    }
+        "file:///"
+    };
+    #[cfg(not(windows))]
+    let prefix = "file://";
+    Ok(format!("{prefix}{encoded}"))
 }
 
+/// Decodes complete percent triplets and preserves incomplete trailing input.
 fn percent_decode(input: &str) -> Result<String, UriError> {
-    let bytes = input.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut idx = 0;
-    while idx < bytes.len() {
-        if bytes[idx] == b'%' && idx + 2 < bytes.len() {
-            let hi = hex_digit(bytes[idx + 1])?;
-            let lo = hex_digit(bytes[idx + 2])?;
-            out.push((hi << 4) | lo);
-            idx += 3;
+    let mut out = Vec::with_capacity(input.len());
+    let mut rest = input.as_bytes();
+    while let Some((&byte, tail)) = rest.split_first() {
+        rest = if let (b'%', [hi, lo, after @ ..]) = (byte, tail) {
+            out.push((hex_digit(*hi)? << 4) | hex_digit(*lo)?);
+            after
         } else {
-            out.push(bytes[idx]);
-            idx += 1;
-        }
+            out.push(byte);
+            tail
+        };
     }
-    String::from_utf8(out).map_err(|_| UriError::InvalidUtf8)
+    String::from_utf8(out).map_err(|source| UriError::InvalidUtf8(Some(source)))
 }
 
+/// Converts one ASCII hexadecimal digit into its numeric nibble.
 fn hex_digit(byte: u8) -> Result<u8, UriError> {
     match byte {
         b'0'..=b'9' => Ok(byte - b'0'),
         b'a'..=b'f' => Ok(byte - b'a' + 10),
         b'A'..=b'F' => Ok(byte - b'A' + 10),
-        _ => Err(UriError::InvalidUtf8),
+        _ => Err(UriError::InvalidUtf8(None)),
     }
 }
 
+/// Percent-encodes non-ASCII and reserved bytes while retaining URI separators.
 fn percent_encode(input: &str) -> String {
     use std::fmt::Write as _;
     let mut out = String::with_capacity(input.len());
     for byte in input.bytes() {
         match byte {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' | b':' => {
-                out.push(byte as char);
+                out.push(char::from(byte));
             }
             _ => {
                 let _ = write!(out, "%{byte:02X}");

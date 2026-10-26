@@ -144,7 +144,11 @@ fn assert_complete_heap(report: &Value) {
     let generations = report["generation_bytes"]
         .as_array()
         .expect("real heap generations");
-    assert!(!generations.is_empty());
+    assert_ne!(
+        generations,
+        &Vec::<Value>::new(),
+        "real heap generations are reported"
+    );
     let total: i64 = generations
         .iter()
         .map(|value| value.as_i64().expect("generation bytes"))

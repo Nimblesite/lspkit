@@ -17,7 +17,8 @@ impl NativeEvents {
     /// Parse the actual structured diagnostic stream after natural process exit.
     pub async fn diagnostics(&mut self) -> Vec<Value> {
         let mut output = String::new();
-        self.child
+        let _bytes_read = self
+            .child
             .stderr
             .take()
             .expect("native diagnostic pipe")

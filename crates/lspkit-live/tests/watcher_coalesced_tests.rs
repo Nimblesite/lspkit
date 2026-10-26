@@ -18,10 +18,18 @@ mod native_events;
 
 #[cfg(target_os = "linux")]
 #[path = "../../../test-support/native_events_overflow.rs"]
+#[expect(
+    clippy::expect_used,
+    reason = "shared test-only module is outside Clippy's test-function detection"
+)]
 mod native_events_overflow;
 
 #[cfg(target_os = "linux")]
 #[path = "../../../test-support/native_overflow.rs"]
+#[expect(
+    clippy::expect_used,
+    reason = "shared test-only module is outside Clippy's test-function detection"
+)]
 mod native_overflow;
 
 /// Write one real JSON file into the watched root.

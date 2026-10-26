@@ -254,11 +254,13 @@ Named presets fill unset parameters: sample rate, native frames and duration. Ex
 
 ### [PROF-CPU-SNAPSHOT] Snapshot
 
-`cpu.snapshot { session_id }` returns the same report shape for the data so far, without ending the session.
+`cpu.snapshot { session_id }` returns the same report shape for the data so far, without ending the session. A backend that buffers recording segments acknowledges a snapshot barrier only after delivering the samples recorded before the request. The session drains samples while awaiting the bounded barrier; a failed or timed-out barrier returns an error rather than a stale report.
 
 ### [PROF-CPU-SESSIONS] Sessions
 
 `cpu.list` returns every active session with its ID, PID, runtime, version, start time, sample count and duration. A `duration` on start ends the session automatically. Its report is kept for the next `stop` or `list`.
+
+Recording operations serialize per session. A snapshot barrier releases the session registry before waiting, so another session's controls and progress remain available. A stop control does not wait for the recording lock before signalling its producer; stopping retires the recording exactly once, and a previously cloned request cannot resurrect it.
 
 ### [PROF-CPU-PROGRESS] Live progress
 
@@ -684,6 +686,8 @@ Every EventPipe session is stopped from the command's own thread, never from ins
 
 The exit code is 0 on success. On failure the engine writes exactly one `failure` message and exits 1. Stdout carries only protocol lines. Stderr is for humans and is never parsed.
 
+Explicit PID commands resolve only that target's diagnostics endpoint. They must not enumerate unrelated processes: an unrelated process can exit between discovery and reading its namespace metadata. Real syscall capture must prove that attachment does not read another live runtime's `/proc/<pid>/status`; real process-exit churn must preserve successful target operations and complete heap results. Missing targets, unavailable endpoints and permission failures retain their classified errors.
+
 ### [PROF-DOTNET-ENGINE-LOCATE] Locating the engine
 
 The crate looks for the engine in three places, in order:
@@ -703,6 +707,7 @@ The engine writes NDJSON, one object per line. Fields are snake_case, and a `kin
 | `attached` | `pid`, `runtime_version?` | The CPU session is recording |
 | `frames` | `items: [{name, file?, line?, module?}]` | New frame-table entries. IDs continue from the previous message |
 | `ticks` | `items: [{weight_ms, threads: [{tid, active, stack: [frame id, leaf first]}]}]` | A batch of ticks; always preceded by the frames they use |
+| `flushed` | — | Every tick preceding the CPU snapshot command has been sent |
 | `stopped` | `tick_count` | Every tick has been sent |
 | `snapshot` | `graph_path`, `live_bytes`, `live_objects`, `heap_bytes`, `generation_bytes[gen0, gen1, gen2, loh, poh]`, `types: [{type_name, count, size_bytes, file?, line?}]` | Heap summary |
 | `refs` | `nodes`, `edges`, `truncated` | Retention graph |
@@ -718,10 +723,10 @@ The engine opens an EventPipe session with rundown and a 256 MB buffer. It enabl
 
 Recording runs in segments, each its own session recorded to a temporary `.nettrace` that is deleted with its `.etlx` on every exit path. The first segment lasts 500 ms and each next one doubles, up to 10 s. A segment ends with its rundown, so its frames can be named. The next segment starts before the last one is symbolized, so the gap between them is only the rundown. Ticks therefore stream a segment behind:
 
-- `cpu.snapshot` sees every finished segment;
+- `cpu.snapshot` sends `snapshot` on stdin, closes the current segment, and drains through the engine's `flushed` acknowledgement; the next segment keeps recording while symbolization finishes;
 - a target that exits keeps every segment it finished. Its last segment never got a rundown, so its frames cannot be named and it is dropped.
 
-The backend reports `live_progress`: each finished segment's ticks advance the session's count, so the count runs a segment behind. A line or EOF on stdin ends the recording. The crate's finish timeout covers symbolizing the last segment.
+The backend reports `live_progress`: each finished segment's ticks advance the session's count, so the count runs a segment behind. `stop` or EOF on stdin ends the recording. The crate's finish timeout covers symbolizing the last segment and bounds an explicit snapshot barrier.
 
 ### [PROF-DOTNET-CPU-SYMBOLS] Symbolization
 

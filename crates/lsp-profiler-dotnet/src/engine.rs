@@ -190,15 +190,33 @@ pub struct StopSignal {
 }
 
 impl StopSignal {
+    /// Close the current CPU segment without ending the recording.
+    ///
+    /// # Errors
+    /// Returns an I/O error if the engine has stopped accepting commands.
+    pub async fn snapshot(&mut self) -> Result<(), EngineError> {
+        self.write(b"snapshot\n").await
+    }
+
     /// Tell the engine to end its recording; dropping the signal closes stdin.
     pub async fn send(mut self) {
-        let Some(stdin) = self.stdin.as_mut() else {
-            return;
-        };
-        if let Err(error) = stdin.write_all(b"stop\n").await {
+        if let Err(error) = self.write(b"stop\n").await {
             warn!(%error, "cannot signal the .NET profiling engine");
         }
-        let _ = stdin.flush().await;
+    }
+
+    async fn write(&mut self, command: &[u8]) -> Result<(), EngineError> {
+        let Some(stdin) = self.stdin.as_mut() else {
+            return Err(EngineError::Io("engine command input is closed".to_owned()));
+        };
+        stdin
+            .write_all(command)
+            .await
+            .map_err(|error| EngineError::Io(error.to_string()))?;
+        stdin
+            .flush()
+            .await
+            .map_err(|error| EngineError::Io(error.to_string()))
     }
 }
 

@@ -5,8 +5,8 @@
 // .nettrace, ended with a rundown so its frames can be named, and symbolized
 // while the next segment already records. Ticks therefore stream after every
 // segment instead of only at stop, so a mid-session snapshot has data and a
-// target that exits keeps every segment it finished. The language server ends
-// the recording with a line or EOF on stdin.
+// target that exits keeps every segment it finished. A snapshot command closes
+// and flushes the current segment; stop or EOF ends the recording.
 using System.Diagnostics.Tracing;
 using Microsoft.Diagnostics.NETCore.Client;
 
@@ -27,26 +27,27 @@ internal static class CpuCommand
             Emit.Message(failure!);
             return 1;
         }
-        var stop = Task.Run(Console.In.ReadLine);
+        var control = new CpuControl();
         var segment = CpuSegment.Start(client, pid);
         // The public diagnostics client exposes no process-info command; the version stays unknown.
         Emit.Message(new Attached("attached", pid, null));
         using var symbolizer = new Symbolizer(includeNative);
-        Record(client, pid, segment, stop, symbolizer);
+        Record(client, pid, segment, control, symbolizer);
         Emit.Message(new Stopped("stopped", symbolizer.TickCount));
         return 0;
     }
 
     /// <summary>Record segment after segment until stop is asked for or the target is gone.</summary>
-    private static void Record(DiagnosticsClient client, int pid, CpuSegment segment, Task stop, Symbolizer symbolizer)
+    private static void Record(DiagnosticsClient client, int pid, CpuSegment segment, CpuControl control, Symbolizer symbolizer)
     {
         var length = FirstSegment;
         for (CpuSegment? current = segment; current is not null; length = Next(length))
         {
-            var ended = current.WaitForEnd(stop, length);
+            var ended = current.WaitForEnd(control, length);
             current.Stop();
-            var next = ended ? null : CpuSegment.TryStart(client, pid);
+            var next = ended == CpuEnd.Stop ? null : CpuSegment.TryStart(client, pid);
             current.Symbolize(symbolizer);
+            if (ended == CpuEnd.Snapshot) Emit.Message(new Flushed("flushed"));
             current = next;
         }
     }
@@ -100,13 +101,11 @@ internal sealed class CpuSegment
     }
 
     /// <summary>
-    /// Wait out this segment. True when the recording is over: stop was asked
-    /// for, or the target exited and ended the stream.
+    /// Wait out this segment, or close it for a snapshot, stop or target exit.
     /// </summary>
-    public bool WaitForEnd(Task stop, TimeSpan length)
+    public CpuEnd WaitForEnd(CpuControl control, TimeSpan length)
     {
-        _ = Task.WaitAny([stop, _copy], length);
-        return stop.IsCompleted || _copy.IsCompleted;
+        return control.WaitForEnd(_copy, length);
     }
 
     /// <summary>

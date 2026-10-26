@@ -23,10 +23,10 @@ internal static class Errors
         {
             return (null, new Failure("failure", ErrorKind.ProcessNotFound, $"process {pid} is not running"));
         }
-        var published = DiagnosticsClient.GetPublishedProcesses().Contains(pid);
-        return published
-            ? (new DiagnosticsClient(pid), null)
-            : (null, new Failure("failure", ErrorKind.UnsupportedRuntime, $"process {pid} exposes no .NET diagnostics endpoint"));
+        // [PROF-DOTNET-ENGINE] Resolve only the requested endpoint. Enumerating published
+        // processes can fail when an unrelated /proc entry disappears during attachment.
+        // The actual operation preserves endpoint and permission failures through Classify.
+        return (new DiagnosticsClient(pid), null);
     }
 
     private static bool IsRunning(int pid)

@@ -27,6 +27,9 @@ internal sealed record FrameRecord(string Name, string? File, int? Line, string?
 /// <summary>A batch of sampling ticks.</summary>
 internal sealed record Ticks(string Kind, IReadOnlyList<TickRecord> Items);
 
+/// <summary>Every tick preceding a CPU snapshot request has been sent.</summary>
+internal sealed record Flushed(string Kind);
+
 /// <summary>Every thread sampled at one instant.</summary>
 internal sealed record TickRecord(double WeightMs, IReadOnlyList<TickThread> Threads);
 
@@ -91,6 +94,7 @@ internal sealed record GcDone(string Kind, bool Observed, long HeapBytesAfter, I
 [JsonSerializable(typeof(Attached))]
 [JsonSerializable(typeof(Frames))]
 [JsonSerializable(typeof(Ticks))]
+[JsonSerializable(typeof(Flushed))]
 [JsonSerializable(typeof(Stopped))]
 [JsonSerializable(typeof(Failure))]
 [JsonSerializable(typeof(Snapshot))]

@@ -49,7 +49,7 @@ export async function pickReferenceType(): Promise<string | undefined> {
   if (candidates.length === 0) { return await askForTypeName(); }
   const pick = await vscode.window.showQuickPick(
     [...candidates.map((type) => ({ label: type })), { label: OTHER_TYPE_LABEL }],
-    { placeHolder: "Inspect retainers of which type? (types in the latest snapshot)" },
+    { placeHolder: "Inspect retainers of which type? (types in the latest snapshot)", ignoreFocusOut: true },
   );
   if (pick === undefined) { return undefined; }
   return pick.label === OTHER_TYPE_LABEL ? await askForTypeName() : pick.label;

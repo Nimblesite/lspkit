@@ -25,9 +25,27 @@ internal static class Errors
         }
         // [PROF-DOTNET-ENGINE] Resolve only the requested endpoint. Enumerating published
         // processes can fail when an unrelated /proc entry disappears during attachment.
-        // The actual operation preserves endpoint and permission failures through Classify.
+        // [PROF-DOTNET-ENGINE-ENDPOINT] Decide "no endpoint" before building a client: on
+        // Windows a missing named pipe otherwise blocks until the client's connect timeout.
+        // Endpoint and permission failures stay on the attach path, where Classify keeps
+        // their classification.
+        if (MissingEndpoint(pid, DiagnosticsEndpoint.Exists(pid)) is { } refusal)
+        {
+            return (null, refusal);
+        }
         return (new DiagnosticsClient(pid), null);
     }
+
+    /// <summary>
+    /// The classified refusal when the target has no diagnostics endpoint, or
+    /// <see langword="null"/> when attaching may proceed: an endpoint exists, or
+    /// the endpoint namespace could not be enumerated so the attach itself must
+    /// classify the real error.
+    /// </summary>
+    internal static Failure? MissingEndpoint(int pid, bool? endpointExists) =>
+        endpointExists == false
+            ? new Failure("failure", ErrorKind.UnsupportedRuntime, $"process {pid} has no .NET diagnostics endpoint")
+            : null;
 
     private static bool IsRunning(int pid)
     {

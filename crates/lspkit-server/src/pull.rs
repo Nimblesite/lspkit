@@ -2,8 +2,8 @@
 //! [LSP-PULL-CONCURRENCY].
 //!
 //! Only Salsa retains computed diagnostics. The store retains input handles and
-//! a lock-free revision counter; protocol-side invalidation never waits behind
-//! a running compiler query.
+//! lock-free supersession/generation counters; protocol-side invalidation never
+//! waits behind a running compiler query.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -54,9 +54,14 @@ pub struct PullReport {
 
 impl PullReport {
     /// Pair successful analysis with the exact input identity that produced it.
-    fn computed(revision: u64, version: i32, result: Analysis) -> Result<Self, PullError> {
+    fn computed(
+        revision: u64,
+        version: i32,
+        generation: u64,
+        result: Analysis,
+    ) -> Result<Self, PullError> {
         Ok(Self {
-            result_id: identity(revision, version),
+            result_id: identity(revision, version, generation),
             items: result?,
         })
     }
@@ -122,12 +127,12 @@ fn analyze(db: &dyn DiagnosticDb, document: DocumentInput, workspace: WorkspaceI
 }
 
 /// Query state serialized behind one mutex. Diagnostics computation is the only
-/// accessor; revision changes stay outside so they never queue behind it.
+/// accessor; counter changes stay outside so they never queue behind it.
 #[derive(Clone)]
 struct QueryState {
     /// Single memo database serialized only for diagnostic computation.
     database: Database,
-    /// Workspace-wide revision input for inter-file invalidation.
+    /// Workspace-wide engine generation input for inter-file invalidation.
     workspace: WorkspaceInput,
     /// Reusable per-document Salsa inputs keyed by canonical URI.
     documents: HashMap<String, DocumentInput>,
@@ -146,15 +151,15 @@ impl QueryState {
         document
     }
 
-    /// Apply the pending revision to the workspace input only when changed,
+    /// Apply the pending engine generation to the workspace input only when changed,
     /// then return the refreshed document handle. [LSP-PULL-CONCURRENCY]
-    fn sync(&mut self, revision: u64, uri: &str, version: i32) -> DocumentInput {
+    fn sync(&mut self, generation: u64, uri: &str, version: i32) -> DocumentInput {
         let document = self.document(uri, version);
-        if *self.workspace.generation(&self.database) != revision {
+        if *self.workspace.generation(&self.database) != generation {
             let _previous_generation = self
                 .workspace
                 .set_generation(&mut self.database)
-                .to(revision);
+                .to(generation);
         }
         document
     }
@@ -172,30 +177,33 @@ impl QueryState {
         uri: &str,
         version: i32,
         revision: u64,
+        generation: u64,
         cancel: &CancellationToken,
     ) -> Result<PullReport, PullError> {
         uncancelled(cancel)?;
-        let document = self.sync(revision, uri, version);
+        let document = self.sync(generation, uri, version);
         self.database.cancellation = cancel.clone();
         let result = analyze(&self.database, document, self.workspace);
         if result.is_err() {
             self.retry(document);
         }
         uncancelled(cancel)?;
-        PullReport::computed(revision, version, result)
+        PullReport::computed(revision, version, generation, result)
     }
 }
 
 /// An analysis memo and the input identities for a single LSP connection.
 ///
-/// Cloning shares one Salsa database and one revision counter, so every clone
+/// Cloning shares one Salsa database and both snapshot counters, so every clone
 /// observes the same snapshot identity for the same connection state.
 #[derive(Clone)]
 pub struct PullStore {
     /// Serializes memo access while leaving foreground invalidation lock-free.
     query: Arc<Mutex<QueryState>>,
-    /// Shared snapshot identity advanced without waiting for compiler work.
+    /// Editor/input supersession revision, advanced without waiting for compiler work.
     revision: Arc<AtomicU64>,
+    /// Engine generation feeding Salsa without superseding in-flight snapshots.
+    generation: Arc<AtomicU64>,
 }
 
 impl PullStore {
@@ -221,15 +229,26 @@ impl PullStore {
                 documents: HashMap::new(),
             })),
             revision: Arc::new(AtomicU64::new(1)),
+            generation: Arc::new(AtomicU64::new(1)),
         }
     }
 
-    /// Invalidate inter-file dependencies with a lock-free revision bump.
+    /// Supersede in-flight work and invalidate inter-file dependencies.
     ///
-    /// The pending Salsa generation is applied lazily by the next query, so
-    /// invalidation never blocks behind a running computation. [LSP-PULL-CONCURRENCY]
+    /// Editor/input changes advance both counters. The pending Salsa generation
+    /// is applied lazily by the next query, so invalidation never blocks behind
+    /// a running computation. [LSP-PULL-CONCURRENCY]
     pub fn invalidate(&self) {
+        let _previous_generation = self.generation.fetch_add(1, Ordering::AcqRel);
         let _previous_revision = self.revision.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// Recompute future pulls without superseding work already in flight.
+    ///
+    /// Engine changes advance only the Salsa generation and result identity.
+    /// [LSP-PULL-CONCURRENCY]
+    pub fn engine_changed(&self) {
+        let _previous_generation = self.generation.fetch_add(1, Ordering::AcqRel);
     }
 
     /// Current snapshot revision; never touches the query mutex. [LSP-PULL-CONCURRENCY]
@@ -242,13 +261,17 @@ impl PullStore {
     /// never computes diagnostics nor waits on the query mutex. [LSP-PULL-SALSA]
     #[must_use]
     pub fn result_id(&self, version: i32) -> String {
-        identity(self.revision(), version)
+        identity(
+            self.revision(),
+            version,
+            self.generation.load(Ordering::Acquire),
+        )
     }
 
     /// Analyze the current snapshot through the single Salsa query. [LSP-PULL-SALSA]
     ///
-    /// Locks the query state, captures the revision *after* the lock, applies
-    /// that exact revision and document version, and runs the tracked query.
+    /// Locks the query state, captures both counters *after* the lock, applies
+    /// that exact generation and document version, and runs the tracked query.
     /// The returned identity and items come from the same captured snapshot;
     /// if the atomic revision moved while computing, the superseded report is
     /// discarded rather than paired with a newer identity. [LSP-PULL-CONCURRENCY]
@@ -274,7 +297,8 @@ impl PullStore {
         uncancelled(cancel)?;
         let mut query = self.query.lock().map_err(poisoned)?;
         let revision = self.revision();
-        let report = query.compute(uri, version, revision, cancel)?;
+        let generation = self.generation.load(Ordering::Acquire);
+        let report = query.compute(uri, version, revision, generation, cancel)?;
         if self.revision() != revision {
             return Err(PullError::Superseded);
         }
@@ -297,6 +321,6 @@ impl std::fmt::Debug for PullStore {
 }
 
 /// Snapshot identity in the wire-stable `p:…|d:…|g:…` form.
-fn identity(revision: u64, version: i32) -> String {
-    format!("p:{revision}|d:{version}|g:{revision}")
+fn identity(revision: u64, version: i32, generation: u64) -> String {
+    format!("p:{revision}|d:{version}|g:{generation}")
 }

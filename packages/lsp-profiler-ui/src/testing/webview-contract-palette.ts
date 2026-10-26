@@ -18,6 +18,7 @@ import { DEFAULT_PALETTE, inkFor, paletteCss, profilerPalette, type ProfilerPale
 import { FLAME_SCRIPT } from '../flame-script';
 import { buildFlamegraphHtml } from '../profiler-flamegraph-html';
 import { closeAllEditors, dashboardSnapshot, profileResult, removeTestDir } from './webview-contract-helpers';
+import { editorPathKey } from '../editor-path-key';
 
 /** A dark host palette that shares no colour with the default one. */
 const DARK_PALETTE: Required<ProfilerPalette> = {
@@ -94,7 +95,9 @@ async function leakColours(): Promise<string[]> {
         await vscode.window.showTextDocument(vscode.Uri.file(file));
         applyLeakDecorations({ totalGrowth: 0, totalFreed: 0, netGrowth: 0, suspectedLeaks: CONFIDENCES.map((confidence, i) => ({
             file, line: i + 1, sizeGrowth: 1024, countGrowth: 1, currentSize: 2048, confidence, reason: 'grows' })) });
-        return appliedMemoryDecorations().filter((entry) => entry.file === file).map((entry) => entry.color);
+        return appliedMemoryDecorations()
+            .filter((entry) => editorPathKey(entry.file) === editorPathKey(file))
+            .map((entry) => entry.color);
     } finally {
         clearMemoryDecorations();
         await closeAllEditors();

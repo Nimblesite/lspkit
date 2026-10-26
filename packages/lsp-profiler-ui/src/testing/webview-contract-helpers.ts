@@ -55,7 +55,7 @@ export function removeTestDir(dir: string): void {
   if (dir === '' || !fs.existsSync(dir)) {
     return;
   }
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 /** A CPU result, overriding the fields a test cares about. */

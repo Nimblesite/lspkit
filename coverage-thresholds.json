@@ -2,8 +2,8 @@
   "_agent_pmo": "74cf183",
   "_doc": "Single source of truth for per-crate line-coverage thresholds. Read by `_coverage_check` inside `make test`. Thresholds are monotonically increasing — only ratchet UP, never down. `make test` (and therefore CI) fails if ANY listed crate drops below its threshold.",
   "per_crate": {
-    "lsp-profiler": 90,
-    "lsp-profiler-dotnet": 90,
+    "lsp-profiler": 94,
+    "lsp-profiler-dotnet": 92,
     "lspkit": 100,
     "lspkit-config": 100,
     "lspkit-live": 94,

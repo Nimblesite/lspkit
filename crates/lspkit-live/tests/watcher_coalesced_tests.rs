@@ -25,7 +25,7 @@ fn write_sample(dir: &Path, name: &str) {
 fn assert_batch(batch: &Value, root: &Path) {
     assert_eq!(batch["kind"], "batch");
     let events = batch["events"].as_array().expect("native events");
-    assert_ne!(events.as_slice(), &[] as &[Value]);
+    assert_ne!(events, &Vec::<Value>::new());
     assert!(
         events
             .iter()

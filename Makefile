@@ -42,7 +42,7 @@ COVERAGE_THRESHOLDS_FILE = coverage-thresholds.json
 ## build: Compile/assemble all artifacts
 build:
 	@echo "==> Building..."
-	cargo build --release --workspace --features lspkit-server/pull --locked
+	cargo build --release --workspace --all-features --locked
 
 ## test: Fail-fast tests + coverage + threshold enforcement.
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].
@@ -65,7 +65,7 @@ endif
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
 	@echo "==> Linting..."
-	cargo clippy --release --workspace --all-targets --features lspkit-server/pull --locked -- -D warnings
+	cargo clippy --release --workspace --all-targets --all-features --locked -- -D warnings
 	$(MAKE) _profiler_spec_check
 	node scripts/link-skills.mjs --check
 	npm run lint --prefix packages/lsp-profiler-ui

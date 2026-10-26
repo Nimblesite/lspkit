@@ -48,6 +48,8 @@ const COMMANDS = [
   ["memoryDiff", "Compare Memory Snapshots", "$(diff)"],
   ["memoryGcCollect", "Force Garbage Collection", "$(trash)"],
   ["inspectVariable", "Inspect Variable in Profiler", "$(graph)"],
+  ["inspectVariableType", "Inspect Variable Type", "$(symbol-parameter)"],
+  ["watchVariable", "Add Variable to Watch", "$(eye)"],
   ["memoryReferences", "Show Reference Graph", "$(type-hierarchy)"],
   ["refreshProcesses", "Refresh Processes", "$(refresh)"],
   ["sortProcesses", "Sort Processes", "$(sort-precedence)"],

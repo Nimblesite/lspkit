@@ -48,7 +48,7 @@ pub enum DispatchError {
     /// a poisoned registry lock is reported instead of skipping registration.
     /// [LSP-PULL-CANCELLATION]
     #[error("cancellation registry lock poisoned; request {0:?} not registered")]
-    RegistrationPoisoned(RequestId, String),
+    RegistrationPoisoned(RequestId),
 }
 
 /// RAII registration: removes a request's cancellation token on drop, whether
@@ -164,9 +164,9 @@ impl Dispatcher {
         &self,
         id: RequestId,
     ) -> Result<(Arc<RequestControl>, RegistrationGuard), DispatchError> {
-        let mut registry = self.cancellations.write().map_err(|source| {
-            DispatchError::RegistrationPoisoned(id.clone(), source.to_string())
-        })?;
+        let Ok(mut registry) = self.cancellations.write() else {
+            return Err(DispatchError::RegistrationPoisoned(id));
+        };
         let control = Arc::clone(registry.entry(id.clone()).or_default());
         let guard = RegistrationGuard {
             id,

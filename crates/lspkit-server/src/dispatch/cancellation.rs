@@ -35,9 +35,9 @@ impl CancellationHandle {
         let Some(registry) = self.registry.upgrade() else {
             return Ok(());
         };
-        let mut guard = registry.write().map_err(|source| {
-            DispatchError::RegistrationPoisoned(id.clone(), source.to_string())
-        })?;
+        let Ok(mut guard) = registry.write() else {
+            return Err(DispatchError::RegistrationPoisoned(id));
+        };
         register(&mut guard, id, interest);
         Ok(())
     }

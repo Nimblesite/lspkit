@@ -103,19 +103,29 @@ async fn oversized_announced_length_is_rejected() {
     let err = read_frame(&mut server, 16)
         .await
         .expect_err("oversized frame must error");
-    match err {
-        TransportError::FrameTooLarge(observed, limit, None) => {
-            assert_eq!(
-                observed,
-                usize::try_from(announced).expect("announced length fits in usize")
-            );
-            assert_eq!(limit, 16);
-        }
-        other => assert!(
-            matches!(other, TransportError::FrameTooLarge(_, _, _)),
-            "expected FrameTooLarge, got {other:?}"
-        ),
-    }
+    let observed = usize::try_from(announced).expect("announced length fits in usize");
+    assert!(
+        matches!(err, TransportError::FrameTooLarge(len, 16) if len == observed),
+        "expected FrameTooLarge({observed}, 16), got {err:?}"
+    );
+}
+
+/// A payload whose length cannot fit the u32 prefix is refused before any byte is written.
+/// The zeroed allocation is only reserved, never touched, so the test stays cheap.
+#[tokio::test]
+async fn unframeable_payload_is_refused_before_writing() {
+    let limit = usize::try_from(u32::MAX).expect("u32 fits usize on supported targets");
+    let payload = vec![0_u8; limit + 1];
+    let mut sink: Vec<u8> = Vec::new();
+    let err = write_frame(&mut sink, &payload)
+        .await
+        .expect_err("a payload past u32::MAX must be refused");
+    assert!(
+        matches!(err, TransportError::FrameTooLarge(len, max) if len == limit + 1 && max == limit),
+        "expected FrameTooLarge({}, {limit}), got {err:?}",
+        limit + 1
+    );
+    assert_eq!(sink, Vec::<u8>::new(), "nothing reaches the writer");
 }
 
 /// An EOF before the 4-byte length prefix surfaces as an I/O error.
@@ -156,7 +166,7 @@ async fn truncated_payload_yields_io_error() {
 /// Error `Display` impls render the documented strings.
 #[test]
 fn error_display_strings_are_stable() {
-    let too_large = TransportError::FrameTooLarge(100, 50, None);
+    let too_large = TransportError::FrameTooLarge(100, 50);
     assert_eq!(
         too_large.to_string(),
         "frame too large: 100 bytes (limit 50)"

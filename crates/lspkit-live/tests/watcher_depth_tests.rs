@@ -3,31 +3,45 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-#[path = "../../../test-support/native_events.rs"]
-mod native_events;
+use common::at;
 use native_events::NativeEvents;
 
-type TestResult = Result<(), Box<dyn std::error::Error>>;
+mod common;
+#[path = "../../../test-support/native_events.rs"]
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "shared test-only module is outside Clippy's test-function detection"
+)]
+mod native_events;
 
+type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+type DepthRun = (TempDir, PathBuf, Vec<Value>);
+
+/// Flatten actual native event paths while checking the batch envelope.
 fn rendered_paths(batch: &Value) -> Vec<(&str, PathBuf)> {
-    assert_eq!(batch["kind"], "batch");
-    let events = batch["events"].as_array().expect("native events");
+    assert_eq!(at(batch, "/kind"), "batch");
+    let events = at(batch, "/events").as_array();
+    assert!(events.is_some(), "native events must be an array");
     assert!(
-        !events.is_empty(),
+        events.is_some_and(|items| !items.is_empty()),
         "a successful batch contains actual OS events"
     );
-    events.iter().flat_map(event_paths).collect()
+    events.into_iter().flatten().flat_map(event_paths).collect()
 }
 
+/// Associate every native path with its coarse event kind.
 fn event_paths(event: &Value) -> impl Iterator<Item = (&str, PathBuf)> {
-    let kind = event["kind"].as_str().expect("native event kind");
-    event["paths"]
-        .as_array()
-        .expect("native event paths")
-        .iter()
-        .map(move |path| (kind, PathBuf::from(path.as_str().expect("native path"))))
+    let kind = at(event, "/kind").as_str().unwrap_or_default();
+    let paths = at(event, "/paths").as_array();
+    assert!(paths.is_some(), "native event paths must be an array");
+    paths
+        .into_iter()
+        .flatten()
+        .map(move |path| (kind, PathBuf::from(path.as_str().unwrap_or_default())))
 }
 
+/// The expected lifecycle kind and target appear without escaping the watched scope.
 fn assert_batch(batch: &Value, root: &Path, child: &Path, recursive: bool, removed: bool) {
     let paths = rendered_paths(batch);
     let target = if recursive {
@@ -42,6 +56,7 @@ fn assert_batch(batch: &Value, root: &Path, child: &Path, recursive: bool, remov
     assert_scope(&paths, root, child, recursive);
 }
 
+/// Non-recursive watching excludes descendants; both modes retain root ownership.
 fn assert_scope(paths: &[(&str, PathBuf)], root: &Path, child: &Path, recursive: bool) {
     assert!(paths.iter().all(|(_, path)| path.starts_with(root)));
     if !recursive {
@@ -49,10 +64,15 @@ fn assert_scope(paths: &[(&str, PathBuf)], root: &Path, child: &Path, recursive:
             paths.iter().all(|(_, path)| path != child),
             "descendant files stay unwatched"
         );
-        assert!(paths.iter().all(|(_, path)| path.parent() == Some(root)));
+        assert!(
+            paths.iter().all(|(_, path)| path.parent() == Some(root)),
+            "every shallow event names a direct child of {}: {paths:?}",
+            root.display()
+        );
     }
 }
 
+/// Apply either removal or modification to a real watched file.
 fn change_file(path: &Path, removed: bool) -> std::io::Result<()> {
     if removed {
         std::fs::remove_file(path)
@@ -61,7 +81,8 @@ fn change_file(path: &Path, removed: bool) -> std::io::Result<()> {
     }
 }
 
-async fn exercise_depth(recursive: bool) -> TestResult {
+/// Drive both lifecycle changes and collect their real batches for assertions.
+async fn exercise_depth(recursive: bool) -> TestResult<DepthRun> {
     let (dir, child) = fixture()?;
     let root = dir.path();
     let mut watcher = if recursive {
@@ -69,17 +90,19 @@ async fn exercise_depth(recursive: bool) -> TestResult {
     } else {
         NativeEvents::with_depth(root, 2, false).await
     };
+    let mut batches = Vec::new();
     for removed in [false, true] {
         change_file(&child, removed)?;
         if !recursive {
             change_file(&root.join("config.json"), removed)?;
         }
-        assert_batch(&watcher.next().await, root, &child, recursive, removed);
+        batches.push(watcher.next().await);
     }
     watcher.finish().await;
-    Ok(())
+    Ok((dir, child, batches))
 }
 
+/// Construct a real nested source path beneath a temporary watched root.
 fn fixture() -> Result<(TempDir, PathBuf), std::io::Error> {
     let dir = TempDir::new()?;
     let nested = dir.path().join("child");
@@ -89,11 +112,17 @@ fn fixture() -> Result<(TempDir, PathBuf), std::io::Error> {
 }
 
 #[tokio::test]
-async fn shallow_watcher_observes_direct_lifecycle_and_excludes_descendants() -> TestResult {
-    exercise_depth(false).await
+async fn shallow_watcher_observes_direct_lifecycle_and_excludes_descendants() {
+    let (dir, child, batches) = exercise_depth(false).await.expect("shallow watcher run");
+    for (removed, batch) in [false, true].into_iter().zip(&batches) {
+        assert_batch(batch, dir.path(), &child, false, removed);
+    }
 }
 
 #[tokio::test]
-async fn recursive_watcher_preserves_descendant_lifecycle() -> TestResult {
-    exercise_depth(true).await
+async fn recursive_watcher_preserves_descendant_lifecycle() {
+    let (dir, child, batches) = exercise_depth(true).await.expect("recursive watcher run");
+    for (removed, batch) in [false, true].into_iter().zip(&batches) {
+        assert_batch(batch, dir.path(), &child, true, removed);
+    }
 }

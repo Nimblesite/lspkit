@@ -107,10 +107,11 @@ impl ProcessTable {
             exe: process.exe().map(Path::to_path_buf),
             cmd,
             cwd: process.cwd().map(Path::to_path_buf),
-            owned_by_other_user: match (process.user_id(), self.current_uid.as_ref()) {
-                (Some(owner), Some(current)) => owner != current,
-                _ => false,
-            },
+            // Unknown ownership on either side is never "another user".
+            owned_by_other_user: process
+                .user_id()
+                .zip(self.current_uid.as_ref())
+                .is_some_and(|(owner, current)| owner != current),
             child_of_current: process.parent().map(Pid::as_u32) == self.self_pid
                 && self.self_pid.is_some(),
         }

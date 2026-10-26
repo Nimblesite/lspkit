@@ -119,8 +119,8 @@ fn terminal_failure(events: &[Value]) -> &str {
     let message = errors[0]["message"]
         .as_str()
         .expect("visible failure message");
-    assert!(!message.is_empty());
-    assert!(responses(events).is_empty());
+    assert_ne!(message, "");
+    assert_eq!(responses(events), [] as [&serde_json::Value; 0]);
     assert_closed(events);
     message
 }
@@ -143,7 +143,7 @@ async fn oversized_frame_is_refused() {
 async fn stdin_eof_ends_the_backend_cleanly() {
     let events = client_events(&[], None).await;
     assert_eq!(events.len(), 1);
-    assert!(responses(&events).is_empty());
+    assert_eq!(responses(&events), [] as [&serde_json::Value; 0]);
     assert_closed(&events);
 }
 

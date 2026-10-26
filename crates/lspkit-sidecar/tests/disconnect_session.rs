@@ -43,10 +43,12 @@ fn assert_failure(events: &[Value]) {
         .filter(|event| event["kind"] == "error")
         .collect();
     assert_eq!(failures.len(), 1, "one terminal native read error");
-    assert!(!failures[0]["message"]
-        .as_str()
-        .expect("visible read failure")
-        .is_empty());
+    assert_ne!(
+        failures[0]["message"]
+            .as_str()
+            .expect("visible read failure"),
+        ""
+    );
     frame_events::assert_closed(events, None);
 }
 

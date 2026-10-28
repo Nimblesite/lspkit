@@ -2,31 +2,55 @@
 //
 // Decorates typeDiagram's TypeScript output: fields become `readonly`, an
 // `Option<T>` field (serialised by serde only when present) becomes an
-// optional `field?: T`, and every interface, alias and field carries the doc
-// comment written in the .td model.
+// optional `field?: T`, and every interface, alias, union variant and field
+// carries the doc comment written in the .td model, as the Rust side does.
 
+import { members } from "./members.mjs";
 import { requireDoc } from "./td-docs.mjs";
 
-/** Rewrite one interface field line. */
-function fieldLine(item, line, docs) {
-  const trimmed = line.trim().replace(/;$/u, "");
-  const colon = trimmed.indexOf(":");
-  const name = trimmed.slice(0, colon).trim();
-  const type = trimmed.slice(colon + 1).trim();
-  const optional = type.endsWith(" | undefined");
-  const bare = optional ? type.slice(0, -" | undefined".length) : type;
+const UNDEFINED = " | undefined";
+
+/** One documented, readonly member: an interface field or a variant field. */
+function memberLines(indent, key, name, type, docs) {
+  const optional = type.endsWith(UNDEFINED);
+  const bare = optional ? type.slice(0, -UNDEFINED.length) : type;
   return [
-    `  /** ${requireDoc(docs, `${item}.${name}`)} */`,
-    `  readonly ${name}${optional ? "?" : ""}: ${bare};`,
+    `${indent}/** ${requireDoc(docs, key)} */`,
+    `${indent}readonly ${name}${optional ? "?" : ""}: ${bare};`,
   ];
 }
 
-/** Make the inline fields of a union variant readonly and optional-aware. */
-function variantLine(line) {
-  return line
-    .replace(/(\w+): ([^;}]+) \| undefined/gu, "$1?: $2")
-    .replace(/\{ kind:/u, "{ readonly kind:")
-    .replace(/; (\w+)(\??):/gu, "; readonly $1$2:");
+/** Rewrite one interface field line. */
+function fieldLine(item, line, docs) {
+  const [[name, type]] = members(line.trim(), ";");
+  return memberLines("  ", `${item}.${name}`, name, type, docs);
+}
+
+/**
+ * One union member, `| { kind: "Attach"; pid: number }`, documented like the
+ * Rust variant it mirrors: the variant's doc above it and, when it carries
+ * fields, one documented readonly field per line. [PROF-WIRE-GEN-DOCS]
+ */
+function variantLines(alias, line, docs) {
+  const trimmed = line.trim();
+  const end = trimmed.endsWith(";") ? ";" : "";
+  const body = trimmed.slice(trimmed.indexOf("{") + 1, trimmed.lastIndexOf("}"));
+  const [[, tag], ...fields] = members(body, ";");
+  const variant = JSON.parse(tag);
+  const head = `  /** ${requireDoc(docs, `${alias}.${variant}`)} */`;
+  if (fields.length === 0) return [head, `  | { readonly kind: ${tag} }${end}`];
+  const lines = fields.flatMap(([name, type]) =>
+    memberLines("      ", `${alias}.${variant}.${name}`, name, type, docs),
+  );
+  return [head, "  | {", `      readonly kind: ${tag};`, ...lines, `    }${end}`];
+}
+
+/** The declaration a line opens: an interface, an alias, or neither. */
+function opened(line) {
+  const iface = line.match(/^export interface (\w+) \{$/u);
+  if (iface) return { kind: "interface", name: iface[1] };
+  const alias = line.match(/^export type (\w+) =/u);
+  return alias ? { kind: "alias", name: alias[1] } : null;
 }
 
 /**
@@ -38,20 +62,19 @@ export function decorateTs(raw, docs) {
   const out = [];
   let item = null;
   for (const line of raw.split("\n")) {
-    const iface = line.match(/^export interface (\w+) \{$/u);
-    const alias = line.match(/^export type (\w+) =/u);
-    if (iface) {
-      item = iface[1];
-      out.push(`/** ${requireDoc(docs, item)} */`, line);
-    } else if (alias) {
-      out.push(`/** ${requireDoc(docs, alias[1])} */`, line);
-    } else if (line === "}") {
+    const decl = opened(line);
+    if (decl) {
+      item = decl;
+      out.push(`/** ${requireDoc(docs, decl.name)} */`, line);
+    } else if (line === "" || line === "}") {
       out.push(line);
       item = null;
-    } else if (item && line.trim() !== "") {
-      out.push(...fieldLine(item, line, docs));
+    } else if (item?.kind === "interface") {
+      out.push(...fieldLine(item.name, line, docs));
+    } else if (item?.kind === "alias" && line.trim().startsWith("|")) {
+      out.push(...variantLines(item.name, line, docs));
     } else {
-      out.push(line.trim().startsWith("|") ? variantLine(line) : line);
+      out.push(line);
     }
   }
   return out.join("\n");

@@ -7,6 +7,7 @@
 // fields are omitted rather than serialised as `null`, and every item, field
 // and variant carries the doc comment written in the .td model.
 
+import { members } from "./members.mjs";
 import { requireDoc } from "./td-docs.mjs";
 
 const DERIVES = "#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]";
@@ -14,23 +15,7 @@ const OPTION_ATTR = '#[serde(default, skip_serializing_if = "Option::is_none")]'
 
 /** Split `a: A, b: Option<B<C, D>>` at top-level commas into [name, type] pairs. */
 function splitFields(blob) {
-  const parts = [];
-  let depth = 0;
-  let current = "";
-  for (const char of blob) {
-    depth += char === "<" ? 1 : char === ">" ? -1 : 0;
-    if (char === "," && depth === 0) {
-      parts.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  if (current.trim() !== "") parts.push(current);
-  return parts.map((part) => {
-    const colon = part.indexOf(":");
-    return [part.slice(0, colon).trim(), part.slice(colon + 1).trim()];
-  });
+  return members(blob, ",");
 }
 
 /** Emit one documented field line (struct field or variant field). */

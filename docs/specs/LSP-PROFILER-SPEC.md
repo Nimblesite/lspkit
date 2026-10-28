@@ -142,7 +142,7 @@ Serde structs and externally tagged enums.
 
 #### [PROF-WIRE-GEN-TS] TypeScript emission
 
-Readonly interfaces and discriminated unions.
+Readonly interfaces and discriminated unions. Each union member carries its variant's doc, and a member with fields lists them one per line, each readonly and documented, as the Rust variant does.
 
 #### [PROF-WIRE-GEN-DOCS] Doc comments
 

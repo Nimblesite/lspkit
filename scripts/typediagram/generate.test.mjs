@@ -33,14 +33,22 @@ test("variants that open a body are documented like the types around them", () =
   for (const doc of VARIANT_DOCS) assert.ok(rust.includes(`/// ${doc}`), `Rust documents "${doc}"`);
 });
 
-test(
-  "TypeScript documents union variants like Rust does",
-  { todo: "https://github.com/Nimblesite/lspkit/issues/8" },
-  () => {
-    const { ts } = generate();
-    for (const doc of VARIANT_DOCS) assert.ok(ts.includes(doc), `TypeScript documents "${doc}"`);
-  },
-);
+test("TypeScript documents union variants like Rust does", () => {
+  const { ts } = generate();
+  for (const doc of VARIANT_DOCS) assert.ok(ts.includes(`/** ${doc} */`), `TypeScript documents "${doc}"`);
+  const attach = [
+    '  /** Attach to a process and stream samples. */',
+    "  | {",
+    '      readonly kind: "Attach";',
+    "      /** Target process. */",
+    "      readonly pid: number;",
+    "      /** Samples per second. */",
+    "      readonly sample_rate: number;",
+  ].join("\n");
+  assert.ok(ts.includes(attach), "each variant field carries its own doc, readonly, one per line");
+  assert.ok(ts.includes('  /** Stop sampling and exit. */\n  | { readonly kind: "Stop" };'), "a unit variant closes the union");
+  assert.ok(!/\| \{ kind:/u.test(ts), "no variant keeps a writable discriminant");
+});
 
 test("generating again leaves the outputs byte for byte the same", () => {
   const first = generate();

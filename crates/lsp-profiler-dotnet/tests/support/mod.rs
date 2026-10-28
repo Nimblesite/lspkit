@@ -155,6 +155,10 @@ pub async fn call(service: &ProfilerService, method: &str, params: Value) -> Val
 /// the whole session, so its entry point is never hot, and the worker's hot
 /// function holds most of the share. Counting the idle thread caps that share
 /// at half, since the runtime samples both threads every tick.
+#[allow(
+    dead_code,
+    reason = "only the CPU suites sample; the held-step suite's crate never calls this"
+)]
 pub fn assert_only_busy_threads_count(report: &Value, entry_point: &str, hot_function: &str) {
     let functions = report["hot_functions"].as_array().expect("hot_functions");
     let named = |prefix: &str| {

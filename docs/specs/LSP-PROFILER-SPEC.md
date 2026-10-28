@@ -423,6 +423,12 @@ Runtimes use one of two modes:
 
 The `snapshot`, `diff`, `references`, `objectsByType`, `gcCollect` and `stop` commands each return a `MemoryStep`.
 
+### [PROF-MEMORY-STOP] Stop
+
+A step can wait on its target indefinitely: a direct runtime reads the live heap, which a frozen, paused or dying program never yields. `stop` never waits on that. It first ends every step in flight on the session, the way cancellation does ([PROF-HOST-CANCEL]): the step's future is dropped, which terminates every tool it started and leaves the target running. Each such step answers `OTHER`, "memory session `<id>` stopped before the step finished". `stop` answers only once every one of them has answered, then the runtime releases the session (the .NET runtime deletes its graphs) and the session closes. A step that arrives while the session is stopping is refused the same way; one that arrives after is an unknown session. Stopping one session never touches another's steps.
+
+An editor tracking on a timer ([PROF-UI-AUTOPILOT]) relies on this: a capture still in flight when tracking stops answers at once, so it never holds the next session's captures back.
+
 ### [PROF-MEMORY-INGEST] Ingest
 
 `memory.ingest { memory_session_id, output }` parses courier output with the runtime's `parse`. It scores the payload ([PROF-MEMORY-OUTCOME]) and returns a `MemoryResult`. These are errors:
@@ -750,6 +756,8 @@ Thread samples are grouped into ticks:
 
 A snapshot is an EventPipe session on `Microsoft-Windows-DotNETRuntime` at Verbose with the keywords `GC`, `Loader`, `Type`, `GCHeapDump`, `GCHeapCollect` and `GCHeapAndTypeNames`, plus rundown. Enabling them makes the runtime perform a full collection and report every surviving object (`GCBulkNode`), reference (`GCBulkEdge`, in node order), root (`GCBulkRootEdge`, `GCBulkRootStaticVar`) and type (`TypeBulkType`); module load and rundown events give each type's assembly path. The engine waits for the induced collection's `GCStop` and the `GCHeapStats` after it (generation sizes), then stops the session. No pause, no dump and no debugger permission are involved, which keeps the capture identical on macOS, Linux and Windows.
 
+The engine stops waiting as soon as the event stream ends, whatever it was waiting for: a stream that ends took its session with it, because the target exited, and nothing is left to stop. Waiting on would only sit out the deadline. Any failure of a command whose target is no longer running is `ProcessNotFound` ("process `<pid>` is not running"), whatever broke first: a stream cut off mid-read, or a session that ended before its collection.
+
 The runtime emits the whole heap in one burst during that collection, faster than any reader drains it, so the session buffer must hold the burst. It is 1024 MB, which holds about fourteen million objects. The 256 MB default lost events from about six million. If EventPipe still reports lost events, the snapshot fails (`Failed`) with a message naming how many events were dropped and the buffer size, and no graph is kept. Lost edges cut live objects off from their roots, so a partial graph would report a leaking heap as nearly empty.
 
 ### [PROF-DOTNET-HEAP-GRAPH] Heap graph
@@ -787,7 +795,7 @@ Graphs live under `<output_dir>/heap-<session>/snapshot-<n>.heapgraph.json`. A g
 
 ### [PROF-DOTNET-GC] Induced collection
 
-An EventPipe session with the GC keyword plus `GCHeapCollect` makes the runtime perform a full blocking collection. The engine waits for the collection's `GCStop` and the `GCHeapStats` after it (two seconds of grace), then reports the generation sizes. `observed: false` means no collection completed before the timeout.
+An EventPipe session with the GC keyword plus `GCHeapCollect` makes the runtime perform a full blocking collection. The engine waits for the collection's `GCStop` and the `GCHeapStats` after it (two seconds of grace), then reports the generation sizes. `observed: false` means no collection completed before the timeout. A stream that ends first, because the target exited, is `ProcessNotFound`, not an unobserved collection ([PROF-DOTNET-HEAP-CAPTURE]).
 
 ### [PROF-DOTNET-PERMISSIONS] Permissions
 

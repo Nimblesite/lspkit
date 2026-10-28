@@ -20,26 +20,22 @@ use crate::diagnostics::DiagnosticStyle;
 use crate::error::ProfilerError;
 use crate::memory::diagnostics::MemoryHotspotConfig;
 use crate::memory::session::{MemorySessionManager, MemorySettings};
-use crate::memory::{MemoryAction, MemoryError};
 use crate::presets::{resolve, SamplingRequest};
 use crate::report::build_report;
-use crate::runtime::{MemoryBackend, Runtime, TypeQuery};
+use crate::runtime::Runtime;
 use crate::session::CpuSessionManager;
 use crate::wire::{
     methods, CooperativeAttachParams, CooperativeScript, CooperativeScriptParams,
-    KillProcessParams, KillProcessResult, MemoryIngestParams, MemoryResult, MemorySessionParams,
-    MemoryStartParams, MemoryStartResult, MemoryStep, MemoryTypeParams, ProcessList,
-    ProcessListParams, ProfileReport, ProfileSessionList, ProfileSessionParams,
-    ProfilerCapabilities, StartProfileParams, StartProfileResult,
+    KillProcessParams, KillProcessResult, ProcessList, ProcessListParams, ProfileReport,
+    ProfileSessionList, ProfileSessionParams, ProfilerCapabilities, StartProfileParams,
+    StartProfileResult,
 };
 use crate::{cooperative, process};
 
+mod memory_steps;
+
 /// How often live progress is pushed while a CPU session runs.
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
-/// Default retention-graph node budget.
-const DEFAULT_GRAPH_LIMIT: u32 = 200;
-/// Default retention-graph depth.
-const DEFAULT_GRAPH_DEPTH: u32 = 6;
 
 /// Delivers server-to-client notifications for the host's transport.
 #[async_trait]
@@ -396,125 +392,6 @@ impl ProfilerService {
         Ok(started)
     }
 
-    /// Begin memory tracking. Implements [PROF-MEMORY-START].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when no runtime with memory support recognises the process.
-    pub async fn memory_start(
-        &self,
-        request: MemoryStartParams,
-    ) -> Result<MemoryStartResult, ProfilerError> {
-        let pid = pid_of(request.pid)?;
-        // Refuse a PID no runtime recognises before any session exists, so a
-        // refused start never leaves a session for a process that is not there.
-        let _owner = self.recognise(pid).await?;
-        let runtime = self.memory_runtime(request.runtime.as_deref(), pid).await?;
-        let backend = memory_backend(runtime.as_ref())?;
-        let depth = request.traceback_depth.and_then(|d| u32::try_from(d).ok());
-        let context = self
-            .inner
-            .memory
-            .open(Arc::clone(&runtime), pid, depth)
-            .await;
-        let action = backend.start(&context).await?;
-        Ok(MemoryStartResult {
-            memory_session_id: context.session_id.clone(),
-            runtime: runtime.id().to_owned(),
-            mode: backend.capabilities().mode,
-            step: self.to_step(&context.session_id, action).await?,
-        })
-    }
-
-    /// Dispatch a parameter-free memory operation and normalize its next step.
-    async fn memory_step(
-        &self,
-        method: &str,
-        request: MemorySessionParams,
-    ) -> Result<MemoryStep, ProfilerError> {
-        let (context, runtime) = self.inner.memory.lookup(&request.memory_session_id).await?;
-        let backend = memory_backend(runtime.as_ref())?;
-        let action = match method {
-            methods::MEMORY_SNAPSHOT => backend.snapshot(&context).await?,
-            methods::MEMORY_DIFF => backend.diff(&context).await?,
-            methods::MEMORY_GC_COLLECT => backend.gc_collect(&context).await?,
-            methods::MEMORY_STOP => backend.stop(&context).await?,
-            other => {
-                return Err(ProfilerError::InvalidParams(format!(
-                    "unknown method {other}"
-                )))
-            }
-        };
-        let step = self.to_step(&context.session_id, action).await?;
-        if method == methods::MEMORY_STOP && matches!(step, MemoryStep::Completed { .. }) {
-            self.inner.memory.close(&context.session_id).await;
-        }
-        Ok(step)
-    }
-
-    /// Run a bounded type query for references or live-object inspection.
-    async fn memory_type_step(
-        &self,
-        method: &str,
-        request: MemoryTypeParams,
-    ) -> Result<MemoryStep, ProfilerError> {
-        let (context, runtime) = self.inner.memory.lookup(&request.memory_session_id).await?;
-        let backend = memory_backend(runtime.as_ref())?;
-        let query = TypeQuery {
-            type_name: request.type_name,
-            limit: request
-                .limit
-                .and_then(|l| u32::try_from(l).ok())
-                .unwrap_or(DEFAULT_GRAPH_LIMIT),
-            max_depth: request
-                .max_depth
-                .and_then(|d| u32::try_from(d).ok())
-                .unwrap_or(DEFAULT_GRAPH_DEPTH),
-        };
-        let action = if method == methods::MEMORY_REFERENCES {
-            backend.references(&context, &query).await?
-        } else {
-            backend.objects_by_type(&context, &query).await?
-        };
-        self.to_step(&context.session_id, action).await
-    }
-
-    /// Score courier output. Implements [PROF-MEMORY-INGEST].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error for an unknown session or unrecognised output.
-    pub async fn memory_ingest(
-        &self,
-        request: MemoryIngestParams,
-    ) -> Result<MemoryResult, ProfilerError> {
-        Ok(self
-            .inner
-            .memory
-            .ingest(&request.memory_session_id, &request.output)
-            .await?)
-    }
-
-    /// Convert runtime instructions into evaluation or a scored completed result.
-    async fn to_step(
-        &self,
-        session_id: &str,
-        action: MemoryAction,
-    ) -> Result<MemoryStep, ProfilerError> {
-        Ok(match action {
-            MemoryAction::Evaluate {
-                script,
-                output_marker,
-            } => MemoryStep::Evaluate {
-                script,
-                output_marker,
-            },
-            MemoryAction::Payload(payload) => MemoryStep::Completed {
-                result: self.inner.memory.apply(session_id, payload).await?,
-            },
-        })
-    }
-
     /// Stop every CPU session. Call on shutdown.
     pub async fn shutdown(&self) {
         self.inner.cpu.stop_all().await;
@@ -612,20 +489,4 @@ impl ProfilerService {
     ) -> Result<Arc<dyn Runtime>, ProfilerError> {
         self.pick(id, pid, |r| r.cpu().is_some()).await
     }
-
-    /// Select a runtime with memory support using the standard resolution order.
-    async fn memory_runtime(
-        &self,
-        id: Option<&str>,
-        pid: u32,
-    ) -> Result<Arc<dyn Runtime>, ProfilerError> {
-        self.pick(id, pid, |r| r.memory().is_some()).await
-    }
-}
-
-/// Require memory support after runtime selection, with a classified error.
-fn memory_backend(runtime: &dyn Runtime) -> Result<&dyn MemoryBackend, ProfilerError> {
-    runtime.memory().ok_or_else(|| {
-        MemoryError::Unsupported(format!("memory profiling of {}", runtime.display_name())).into()
-    })
 }

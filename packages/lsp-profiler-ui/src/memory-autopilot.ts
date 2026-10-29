@@ -21,7 +21,6 @@
 
 import * as vscode from "vscode";
 import { cmd, brand, configSection } from "./ids";
-import * as path from "path";
 import { effect } from "@preact/signals-core";
 import { Logger } from "./logger";
 import type { ProfilerStore as Store } from "./store";
@@ -29,12 +28,8 @@ import type { ProfilerActivity } from "./profiler-state";
 import { withUserProgress } from "./progress-ops";
 import { captureSnapshotAndDiff, isDirectMemorySession, isMemoryOperationInFlight } from "./memory-capture";
 import { isDebuggeePaused, onDebuggeePaused } from "./debuggee-pause";
-import {
-  confidenceRank,
-  type LeakConfidence,
-  type MemoryDiffResult,
-  type SuspectedLeak,
-} from "./memory-decorations";
+import { confidenceRank, type LeakConfidence, type MemoryDiffResult } from "./memory-decorations";
+import { describeLeak, leakToOffer } from "./memory-leak-offer";
 
 /** Progress title for an automatic capture (visible feedback each pass). */
 function autoCaptureTitle(): string {
@@ -69,9 +64,15 @@ export interface AutopilotCapture {
 
 /** One recorded proactive leak-action offer. */
 export interface LeakActionOffer {
+  /** Source file, or empty when the runtime placed the leak on no line. */
   readonly file: string;
+  /** 1-based line, or 0 when the runtime placed the leak on no line. */
   readonly line: number;
+  /** The growing type, or empty when the runtime named none. */
+  readonly typeName: string;
   readonly confidence: LeakConfidence;
+  /** The notification the user was shown. */
+  readonly message: string;
 }
 
 let autopilotCaptures: AutopilotCapture[] = [];
@@ -168,11 +169,17 @@ function autopilotLifecycle(store: Store): void {
   prevMemoryState = state;
 }
 
+/** Seconds between interval captures, or undefined while interval mode is off. */
+export function captureIntervalSeconds(): number | undefined {
+  const config = vscode.workspace.getConfiguration(`${configSection()}.profiler`);
+  if (!config.get<boolean>("autoSnapshot", false)) { return undefined; }
+  return Math.max(MIN_INTERVAL_SECS, config.get<number>("autoSnapshotInterval", DEFAULT_INTERVAL_SECS));
+}
+
 /** Arm the interval timer if interval mode is enabled in settings. */
 function armIntervalIfEnabled(store: Store): void {
-  const config = vscode.workspace.getConfiguration(`${configSection()}.profiler`);
-  if (!config.get<boolean>("autoSnapshot", false)) { return; }
-  const seconds = Math.max(MIN_INTERVAL_SECS, config.get<number>("autoSnapshotInterval", DEFAULT_INTERVAL_SECS));
+  const seconds = captureIntervalSeconds();
+  if (seconds === undefined) { return; }
   stopInterval();
   intervalTimer = setInterval(() => { void onIntervalTick(store); }, seconds * MS_PER_SECOND);
   Logger.info(`[Memory] autopilot interval armed: every ${String(seconds)}s`);
@@ -221,7 +228,7 @@ async function runAutoCapture(store: Store, trigger: "pause" | "interval"): Prom
 /** Record a capture's diff into the ledger (the e2e seam). */
 function recordCapture(trigger: "pause" | "interval", diff: MemoryDiffResult | null): void {
   const leaks = diff?.suspectedLeaks ?? [];
-  const worst = worstLeak(leaks);
+  const worst = leakToOffer(leaks);
   autopilotCaptures.push({
     trigger,
     suspectedLeakCount: leaks.length,
@@ -234,43 +241,32 @@ function recordCapture(trigger: "pause" | "interval", diff: MemoryDiffResult | n
   );
 }
 
-/** The highest-confidence leak in a list, or undefined when there are none. */
-function worstLeak(leaks: readonly SuspectedLeak[]): SuspectedLeak | undefined {
-  return leaks.reduce<SuspectedLeak | undefined>((worst, leak) => {
-    if (worst === undefined || confidenceRank(leak.confidence) > confidenceRank(worst.confidence)) {
-      return leak;
-    }
-    return worst;
-  }, undefined);
-}
-
 /**
  * Offer the proactive leak action the first time a site reaches the threshold
  * confidence this session ([PROF-UI-MEMORY]) — at most once, so the
  * Continue loop is never spammed.
  */
 function maybeOfferLeakActions(store: Store, diff: MemoryDiffResult | null): void {
-  const worst = worstLeak(diff?.suspectedLeaks ?? []);
-  if (worst === undefined || confidenceRank(worst.confidence) < confidenceRank(ACTION_THRESHOLD)) {
+  const leak = leakToOffer(diff?.suspectedLeaks ?? []);
+  if (leak === undefined || confidenceRank(leak.confidence) < confidenceRank(ACTION_THRESHOLD)) {
     return;
   }
   const sessionId = store.profiler.value.memorySessionId;
   if (sessionId === undefined || leakOfferedForSession === sessionId) { return; }
   leakOfferedForSession = sessionId;
-  leakActionOffers.push({ file: worst.file, line: worst.line, confidence: worst.confidence });
-  Logger.warn(`[Memory] autopilot: suspected leak ${path.basename(worst.file)}:${String(worst.line)} (${worst.confidence})`);
-  void offerLeakActions(worst);
+  const named = `${describeLeak(leak)} (${leak.confidence})`;
+  const message = `${brand()}: Suspected memory leak: ${named}. ${leak.reason}`;
+  const { file, line, typeName, confidence } = leak;
+  leakActionOffers.push({ file, line, typeName, confidence, message });
+  Logger.warn(`[Memory] autopilot: suspected leak ${named}`);
+  void offerLeakActions(message);
 }
 
 /** Show the one-click leak-action notification (Reference Graph / Force GC). */
-async function offerLeakActions(leak: SuspectedLeak): Promise<void> {
+async function offerLeakActions(message: string): Promise<void> {
   const showGraph = "Show Reference Graph";
   const forceGc = "Force Garbage Collection";
-  const choice = await vscode.window.showWarningMessage(
-    `${brand()}: Suspected memory leak at ${path.basename(leak.file)}:${String(leak.line)} (${leak.confidence}). ${leak.reason}`,
-    showGraph,
-    forceGc,
-  );
+  const choice = await vscode.window.showWarningMessage(message, showGraph, forceGc);
   if (choice === showGraph) {
     await vscode.commands.executeCommand(cmd("memoryReferences"));
   } else if (choice === forceGc) {

@@ -94,7 +94,7 @@ async function leakColours(): Promise<string[]> {
     try {
         await vscode.window.showTextDocument(vscode.Uri.file(file));
         applyLeakDecorations({ totalGrowth: 0, totalFreed: 0, netGrowth: 0, suspectedLeaks: CONFIDENCES.map((confidence, i) => ({
-            file, line: i + 1, sizeGrowth: 1024, countGrowth: 1, currentSize: 2048, confidence, reason: 'grows' })) });
+            file, line: i + 1, sizeGrowth: 1024, countGrowth: 1, currentSize: 2048, confidence, reason: 'grows', typeName: '' })) });
         return appliedMemoryDecorations()
             .filter((entry) => editorPathKey(entry.file) === editorPathKey(file))
             .map((entry) => entry.color);

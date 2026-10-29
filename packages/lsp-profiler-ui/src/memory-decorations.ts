@@ -58,6 +58,8 @@ export interface SuspectedLeak {
   currentSize: number;
   confidence: LeakConfidence;
   reason: string;
+  /** The runtime's own name for the growing type, or empty when it reports none. */
+  typeName: string;
 }
 
 /** Memory diff result from the LSP. */

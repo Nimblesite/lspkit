@@ -3,12 +3,14 @@
 //! stops in-flight scans, request ids are reusable, `exit` cancels everything
 //! outstanding, and a terminal reply closes the partial stream.
 
+use super::common::held_source::{release_original, HeldSource};
 use super::common::{
     assert_partial_document, bulk_workspace, clean_exit, error_of, identity, initialize_session,
     result_of, uri_for, ReferenceClient, StepResult, SCAN_FILES,
 };
 use lspkit_server::{JsonRpcError, Message, RequestId};
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use tempfile::TempDir;
 
 /// Preserve cancellation, zero streamed reports and zero actual analysis work.
@@ -55,13 +57,69 @@ async fn cancel_before_the_first_poll_never_runs_the_backend() {
     clean_exit!(client);
 }
 
-/// A cancel arriving mid-scan (after the first streamed partial) stops the
-/// scan and answers the standard cancellation error.
+/// The document a streamed partial reports.
+fn partial_uri(partial: &Value) -> Option<&str> {
+    partial
+        .get(0)
+        .and_then(|report| report.get("uri"))
+        .and_then(Value::as_str)
+}
+
+/// The uris of the scan documents, which all sort before the held one.
+fn scan_uris(fixture: &HeldSource) -> StepResult<BTreeSet<String>> {
+    (0..SCAN_FILES)
+        .map(|index| {
+            uri_for(
+                fixture
+                    .workspace
+                    .path()
+                    .join(format!("scan-{index:04}.json")),
+            )
+        })
+        .collect()
+}
+
+/// Every scanned document before the held one streamed exactly once, and the
+/// held one never did: the cancel stopped the scan where it was held.
+fn assert_streamed_up_to_the_hold(
+    fixture: &HeldSource,
+    expected: &BTreeSet<String>,
+    barrier: &Value,
+    partials: &[Value],
+) {
+    let streamed: Vec<&Value> = std::iter::once(barrier).chain(partials).collect();
+    for partial in &streamed {
+        assert_partial_document(partial);
+    }
+    let uris: Vec<&str> = streamed
+        .iter()
+        .filter_map(|partial| partial_uri(partial))
+        .collect();
+    let unique: BTreeSet<String> = uris.iter().map(|uri| (*uri).to_owned()).collect();
+    assert_eq!(
+        uris.len(),
+        SCAN_FILES,
+        "one partial per document before the hold: {uris:?}"
+    );
+    assert_eq!(
+        &unique, expected,
+        "exactly the documents before the hold streamed"
+    );
+    assert!(
+        !unique.contains(&fixture.source_uri),
+        "the held document never streamed"
+    );
+}
+
+/// A cancel arriving mid-scan stops the scan and answers the standard
+/// cancellation error. The scan is held on the native read of its last
+/// document, so the cancel lands mid-scan by construction, never by timing: a
+/// cancel racing the first partial left nothing more streamed some runs.
 #[tokio::test]
 async fn cancel_during_a_scan_stops_the_stream_with_the_standard_error() {
-    let workspace = bulk_workspace(SCAN_FILES).expect("scan workspace fixture");
+    let mut fixture = HeldSource::new(SCAN_FILES).expect("held-source fixture");
     let mut client = ReferenceClient::spawn().expect("spawn reference server");
-    initialize_session!(client, workspace.path());
+    initialize_session!(client, fixture.workspace.path());
 
     let token = json!("cancel-mid-scan");
     let id = client.start_scan(&token).await.expect("start the mid-scan");
@@ -71,6 +129,10 @@ async fn cancel_during_a_scan_stops_the_stream_with_the_standard_error() {
         .await
         .expect("first streamed partial");
     assert_partial_document(&barrier);
+    // Returns once the scan waits on its last document, which sorts after them all.
+    let held = fixture
+        .writer()
+        .expect("hold the scan on its last document");
     client
         .notify("$/cancelRequest", json!({ "id": id }))
         .await
@@ -82,10 +144,9 @@ async fn cancel_during_a_scan_stops_the_stream_with_the_standard_error() {
         .expect("collect the cancelled scan");
     let error = error_of(&terminal).expect("cancelled scan answers an error");
     assert_eq!(error.code, -32800, "standard cancellation error: {error:?}");
-    assert!(
-        !partials.is_empty(),
-        "the scan had already streamed documents"
-    );
+    let expected = scan_uris(&fixture).expect("scan document uris");
+    assert_streamed_up_to_the_hold(&fixture, &expected, &barrier, &partials);
+    release_original(held).expect("release the held read");
     clean_exit!(client);
 }
 

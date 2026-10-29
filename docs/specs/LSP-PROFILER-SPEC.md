@@ -531,6 +531,7 @@ The library imports no editor API statically. The host passes in:
 - the editor API object;
 - the LSP client: `sendRequest` for executeCommand, `onProgress`, and the initialize result;
 - the ID prefix and the display name;
+- the languages it can run and profile: their editor IDs, and the names a message shows a user (`F#`, never `fsharp`);
 - the debug types it may courier through.
 
 The same code then runs in any VS Code-family editor and under test fakes.
@@ -619,7 +620,7 @@ The type picker offers the server's ranked type names (the latest snapshot's top
 
 ### [PROF-UI-AUTOPILOT] Autopilot
 
-Autopilot runs interval capture (default 30 s) in either mode. With `autoSnapshotOnPause`, a courier runtime is also captured at each genuine debug pause. A direct runtime is never captured around a pause: its heap cannot be read while paused, and a read begun just after a Continue blocks at the next pause, so it is captured on the interval only, and a tick is skipped while the debugger holds the program paused ([PROF-MEMORY-MODE]). The UI reads pauses and resumptions off the host debug adapter's own messages. It reuses snapshot-then-compare and updates the open views in place. The first high-confidence leak in a session offers the retention graph once.
+Autopilot runs interval capture (default 30 s) in either mode. With `autoSnapshotOnPause`, a courier runtime is also captured at each genuine debug pause. A direct runtime is never captured around a pause: its heap cannot be read while paused, and a read begun just after a Continue blocks at the next pause, so it is captured on the interval only, and a tick is skipped while the debugger holds the program paused ([PROF-MEMORY-MODE]). The UI reads pauses and resumptions off the host debug adapter's own messages. It reuses snapshot-then-compare and updates the open views in place. The first high-confidence leak in a session offers the retention graph once. The offer names the leak by its type and source line, as far as the runtime reported them, and never by an empty location; among equally confident leaks it offers one with a source line. The toast that opens tracking says what happens next in the runtime's own mode: a courier runtime is captured at each pause, and a direct runtime only while it runs, on the interval when that is on.
 
 ### [PROF-UI-WEBVIEW] Webview host
 

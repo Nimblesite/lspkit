@@ -332,7 +332,7 @@ function registerRowCommands(store: Store, provider: ProcessesProvider): vscode.
     vscode.commands.registerCommand(cmd("copyProcessPid"), (item?: ProcessTreeItem) => {
       if (item !== undefined) {
         void vscode.env.clipboard.writeText(String(item.process.pid));
-        vscode.window.showInformationMessage(`Copied PID ${String(item.process.pid)}`);
+        vscode.window.showInformationMessage(`${brand()}: Copied PID ${String(item.process.pid)}`);
       }
     }),
     vscode.commands.registerCommand(cmd("revealProcessScript"), (item?: ProcessTreeItem) => { revealProcessScript(store, item); }),
@@ -344,7 +344,7 @@ function revealProcessScript(store: Store, item?: ProcessTreeItem): void {
   if (typeof scriptPath === "string" && store.sourceEntries(item?.process.runtime ?? "")) {
     void vscode.window.showTextDocument(vscode.Uri.file(scriptPath));
   } else {
-    vscode.window.showInformationMessage(`${brand()}: This process has no resolvable script file.`);
+    vscode.window.showInformationMessage(`${brand()}: This process has no entry file to reveal.`);
   }
 }
 

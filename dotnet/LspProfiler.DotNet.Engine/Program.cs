@@ -24,7 +24,8 @@ namespace LspProfiler.DotNet.Engine
             }
             catch (Exception error) when (error is not OutOfMemoryException)
             {
-                return Emit.Fail(Errors.Classify(error), error.Message);
+                Emit.Message(Errors.Describe(error, options.Target));
+                return 1;
             }
         }
 
@@ -73,5 +74,11 @@ namespace LspProfiler.DotNet.Engine
         public int Int(string name, int fallback) => _values.ContainsKey(name) ? Int(name) : fallback;
 
         public bool Flag(string name) => _values.ContainsKey(name);
+
+        /// <summary>The process a command works on: its <c>--pid</c>, when it names one.</summary>
+        public int? Target =>
+            _values.TryGetValue("pid", out var text) && int.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var pid)
+                ? pid
+                : null;
     }
 }

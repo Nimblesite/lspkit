@@ -32,7 +32,12 @@ internal static class GcCommand
         using var source = new EventPipeEventSource(session.EventStream);
         using var watch = new GcWatch();
         watch.Attach(source);
-        SessionRun.Until(session, source, watch, Deadline);
+        // A stream that ended took the target with it: that is a failure, not an
+        // unobserved collection ([PROF-DOTNET-GC]).
+        if (SessionRun.Until(session, source, watch, Deadline) == SessionEnd.StreamEnded && !watch.Collected)
+        {
+            throw SessionRun.Unobserved(SessionEnd.StreamEnded, "the collection");
+        }
         var generations = watch.Generations();
         Emit.Message(new GcDone("gc", watch.Collected, generations.Sum(), generations));
         return 0;

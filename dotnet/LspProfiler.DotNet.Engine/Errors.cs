@@ -16,12 +16,22 @@ internal static class Errors
         _ => ErrorKind.Failed,
     };
 
+    /// <summary>
+    /// The failure a command reports for <paramref name="error"/>. When the process it works
+    /// on, <paramref name="target"/>, is gone, that is the cause whatever broke first: a stream
+    /// cut off mid-read or a session that ended early ([PROF-DOTNET-HEAP-CAPTURE]).
+    /// </summary>
+    public static Failure Describe(Exception error, int? target) =>
+        target is { } pid && !IsRunning(pid)
+            ? NotRunning(pid)
+            : new("failure", Classify(error), error.Message);
+
     /// <summary>A client for <paramref name="pid"/>, or the reason there cannot be one.</summary>
     public static (DiagnosticsClient? Client, Failure? Failure) Connect(int pid)
     {
         if (!IsRunning(pid))
         {
-            return (null, new Failure("failure", ErrorKind.ProcessNotFound, $"process {pid} is not running"));
+            return (null, NotRunning(pid));
         }
         // [PROF-DOTNET-ENGINE] Resolve only the requested endpoint. Enumerating published
         // processes can fail when an unrelated /proc entry disappears during attachment.
@@ -46,6 +56,9 @@ internal static class Errors
         endpointExists == false
             ? new Failure("failure", ErrorKind.UnsupportedRuntime, $"process {pid} has no .NET diagnostics endpoint")
             : null;
+
+    private static Failure NotRunning(int pid) =>
+        new("failure", ErrorKind.ProcessNotFound, $"process {pid} is not running");
 
     private static bool IsRunning(int pid)
     {

@@ -43,11 +43,11 @@ internal static class HeapCapture
         watch.Attach(source);
         events.Attach(source);
         Emit.Trace("session started; processing events");
-        SessionRun.Until(session, source, watch, Deadline);
+        var end = SessionRun.Until(session, source, watch, Deadline);
         Emit.Trace($"event stream ended; lost={source.EventsLost} collected={watch.Collected} nodes={events.NodeCount} edges={events.EdgeCount} roots={events.RootCount} types={events.TypeCount}");
         if (!watch.Collected)
         {
-            throw new TimeoutException("the runtime did not complete the heap snapshot collection");
+            throw SessionRun.Unobserved(end, "the heap snapshot collection");
         }
         if (source.EventsLost > 0)
         {

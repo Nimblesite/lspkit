@@ -10,6 +10,7 @@
 
 pub mod compare;
 pub mod diagnostics;
+mod gate;
 pub mod heapprofile;
 pub mod leaks;
 pub mod session;
@@ -58,6 +59,9 @@ pub enum MemoryError {
     /// No such memory session.
     #[error("unknown memory session: {0}")]
     UnknownSession(String),
+    /// The session stopped before the step answered ([PROF-MEMORY-STOP]).
+    #[error("memory session {0} stopped before the step finished")]
+    Stopped(String),
     /// The runtime does not support the requested step.
     #[error("{0} is not supported by this runtime")]
     Unsupported(String),

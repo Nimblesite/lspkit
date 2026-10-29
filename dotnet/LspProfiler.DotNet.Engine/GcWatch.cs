@@ -74,18 +74,59 @@ internal sealed class GcWatch : IDisposable
     }
 }
 
-/// <summary>Runs an event source until the watcher is done or the deadline passes, then stops the session.</summary>
+/// <summary>How a watched session ended.</summary>
+internal enum SessionEnd
+{
+    /// <summary>The watcher saw what it waits for.</summary>
+    Watched,
+
+    /// <summary>The event stream ended first, so the target took the session with it.</summary>
+    StreamEnded,
+
+    /// <summary>Neither happened before the deadline.</summary>
+    DeadlinePassed,
+}
+
+/// <summary>Runs an event source until the watcher is done, the stream ends or the deadline passes.</summary>
 internal static class SessionRun
 {
-    public static void Until(Microsoft.Diagnostics.NETCore.Client.EventPipeSession session, EventPipeEventSource source, GcWatch watch, TimeSpan deadline)
+    public static SessionEnd Until(Microsoft.Diagnostics.NETCore.Client.EventPipeSession session, EventPipeEventSource source, GcWatch watch, TimeSpan deadline)
     {
         var processing = Task.Run(source.Process);
-        var finished = watch.Done.Wait(deadline);
-        Emit.Trace(finished ? "watch done; stopping session" : "deadline passed; stopping session");
-        session.Stop();
-        if (!processing.Wait(deadline))
-        {
-            throw new TimeoutException("the event stream did not end after the session was stopped");
-        }
+        var end = Await(watch.Done.WaitHandle, processing, session.Stop, deadline);
+        Emit.Trace(processing.IsFaulted
+            ? $"session ended: {end}; the stream failed: {processing.Exception?.GetBaseException().Message}"
+            : $"session ended: {end}");
+        return end;
     }
+
+    /// <summary>
+    /// Wait for <paramref name="done"/> or the end of the stream <paramref name="processing"/>
+    /// reads, whichever comes first. A stream that ended took its session with it: the target
+    /// exited, and waiting on would only sit out the deadline. Only a session still streaming
+    /// is stopped, then drained.
+    /// </summary>
+    public static SessionEnd Await(WaitHandle done, Task processing, Action stop, TimeSpan deadline)
+    {
+        var end = WaitHandle.WaitAny([done, ((IAsyncResult)processing).AsyncWaitHandle], deadline) switch
+        {
+            0 => SessionEnd.Watched,
+            1 => SessionEnd.StreamEnded,
+            _ => SessionEnd.DeadlinePassed,
+        };
+        if (!processing.IsCompleted)
+        {
+            stop();
+            if (!processing.Wait(deadline))
+            {
+                throw new TimeoutException("the event stream did not end after the session was stopped");
+            }
+        }
+        return end;
+    }
+
+    /// <summary>Why <paramref name="collection"/> was not seen, as the command fails with it.</summary>
+    public static Exception Unobserved(SessionEnd end, string collection) => end == SessionEnd.StreamEnded
+        ? new InvalidOperationException($"the event stream ended before {collection} completed")
+        : new TimeoutException($"the runtime did not complete {collection}");
 }

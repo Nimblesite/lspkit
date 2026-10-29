@@ -16,6 +16,7 @@ use tracing::info;
 
 use super::compare::{compare, from_changes};
 use super::diagnostics::{allocation_diagnostics, leak_diagnostics, MemoryHotspotConfig};
+use super::gate::{StepGate, StepPass};
 use super::leaks::LeakTracker;
 use super::timeline::{MemoryTimeline, TREND_POINTS};
 use super::{heapprofile, MemoryError, MemoryPayload};
@@ -46,6 +47,8 @@ struct MemorySession {
     timeline: MemoryTimeline,
     /// Monotonic counter that gives snapshots session-unique identifiers.
     snapshot_count: u64,
+    /// Admits steps until the session stops ([PROF-MEMORY-STOP]).
+    gate: StepGate,
 }
 
 /// How results are scored and where exports go.
@@ -110,6 +113,7 @@ impl MemorySessionManager {
             leaks: LeakTracker::default(),
             timeline: MemoryTimeline::default(),
             snapshot_count: 0,
+            gate: StepGate::new(),
         };
         let mut sessions = self.sessions.lock().await;
         let _ = sessions.insert(context.session_id.clone(), session);
@@ -131,6 +135,45 @@ impl MemorySessionManager {
             .get(session_id)
             .ok_or_else(|| MemoryError::UnknownSession(session_id.to_owned()))?;
         Ok((session.context.clone(), Arc::clone(&session.runtime)))
+    }
+
+    /// The context and runtime of a session, and the step's admission to it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MemoryError::UnknownSession`] for an unknown ID and
+    /// [`MemoryError::Stopped`] once the session is stopping.
+    pub(crate) async fn enter(
+        &self,
+        session_id: &str,
+    ) -> Result<(MemoryContext, Arc<dyn Runtime>, StepPass), MemoryError> {
+        let (context, runtime, gate) = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| MemoryError::UnknownSession(session_id.to_owned()))?;
+            let runtime = Arc::clone(&session.runtime);
+            (session.context.clone(), runtime, session.gate.clone())
+        };
+        Ok((context, runtime, gate.admit(session_id).await?))
+    }
+
+    /// End every step in flight on a session and wait until each has answered
+    /// ([PROF-MEMORY-STOP]). An unknown session has none.
+    pub(crate) async fn stop_steps(&self, session_id: &str) {
+        let gate = self
+            .sessions
+            .lock()
+            .await
+            .get(session_id)
+            .map(|session| session.gate.clone());
+        if let Some(gate) = gate {
+            gate.stop().await;
+            info!(
+                session_id,
+                "memory session stopping: every step in flight has answered"
+            );
+        }
     }
 
     /// Close a session.

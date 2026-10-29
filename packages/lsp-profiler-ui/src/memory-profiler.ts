@@ -45,7 +45,7 @@ import {
   showActionableToast,
 } from "./memory-finalize";
 import { handleMemoryStart, trackMemoryOnLaunch } from "./memory-start";
-import { trackingGuidance } from "./memory-guidance";
+import { stoppedWithoutSnapshot, trackingGuidance } from "./memory-guidance";
 import { captureIntervalSeconds } from "./memory-autopilot";
 import { pickReferenceType, walkReferences } from "./memory-ref-picker";
 
@@ -113,6 +113,7 @@ async function runMemoryStartCommand(store: Store, report: (message: string) => 
  */
 async function runMemoryStopCommand(store: Store): Promise<void> {
   const hadSnapshot = hasCapturedSnapshot();
+  const direct = isDirectMemorySession();
   scheduleSnapshotCleanup(store);
   await endServerSession(store);
   handleMemoryStop(store);
@@ -122,11 +123,7 @@ async function runMemoryStopCommand(store: Store): Promise<void> {
   }
   // The toast tells the user to take a snapshot, so it offers the way there
   // (the quick-pick action menu), never an invisible palette ([PROF-UI-MEMORY], #263).
-  showActionableToast(
-    `${brand()}: Memory tracking stopped — no snapshot was taken. Take a snapshot while paused, or let the program finish, to inspect allocations.`,
-    "Memory Actions…",
-    cmd("memoryMenu"),
-  );
+  showActionableToast(stoppedWithoutSnapshot(direct), "Memory Actions…", cmd("memoryMenu"));
 }
 
 /** Whether memory tracking is currently live, per the store. */

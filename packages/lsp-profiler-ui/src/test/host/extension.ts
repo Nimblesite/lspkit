@@ -52,6 +52,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<TestHo
     configSection: "lspui",
     debugType: "lspui-debug",
     languageIds: ["plaintext"],
+    languageNames: ["Plain Text"],
     client: clientSignal,
     logger: consoleSink,
     sessionIdToPid,

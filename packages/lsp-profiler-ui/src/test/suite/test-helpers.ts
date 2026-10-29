@@ -146,6 +146,7 @@ export function fakeHost(overrides: Partial<ProfilerHost> = {}): ProfilerHost {
     configSection: "lspui",
     debugType: "lspui-debug",
     languageIds: ["plaintext"],
+    languageNames: ["Plain Text"],
     client: signal<LanguageClient | undefined>(undefined),
     logger: nullSink,
     sessionIdToPid: signal<ReadonlyMap<string, number>>(new Map()),

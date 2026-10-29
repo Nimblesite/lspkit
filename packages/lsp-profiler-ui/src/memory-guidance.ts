@@ -27,3 +27,11 @@ function directNext(intervalSecs: number | undefined): string {
     : `It is captured every ${String(intervalSecs)} s while it runs`;
   return `${reads}, never while paused; when it ends, its last snapshot opens.`;
 }
+
+/** The toast when tracking stops before any snapshot: how to get one next time. */
+export function stoppedWithoutSnapshot(direct: boolean): string {
+  const next = direct
+    ? "Take a snapshot while the program runs, never while paused"
+    : "Take a snapshot while paused, or let the program finish";
+  return `${brand()}: Memory tracking stopped — no snapshot was taken. ${next}, to inspect allocations.`;
+}

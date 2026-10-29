@@ -194,11 +194,16 @@ function metricBusy(store: Store, metric: LaunchMetric): boolean {
   return busy;
 }
 
+/** What to open before "run & profile", naming the host's languages as a user knows them ([PROF-UI-HOST]). */
+export function openFileToProfile(languageNames: readonly string[]): string {
+  return `${brand()}: Open a file in ${languageNames.join(" or ")} to run and profile.`;
+}
+
 /** The active editor's file when it is in one of the host's languages; otherwise say what to open. */
 function profilableFile(store: Store): vscode.Uri | undefined {
   const editor = vscode.window.activeTextEditor;
   if (editor === undefined || !store.host.languageIds.includes(editor.document.languageId)) {
-    vscode.window.showWarningMessage(`${brand()}: Open a ${store.host.languageIds.join("/")} file to run and profile.`);
+    vscode.window.showWarningMessage(openFileToProfile(store.host.languageNames));
     return undefined;
   }
   return editor.document.uri;

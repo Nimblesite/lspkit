@@ -10,7 +10,7 @@
 
 import * as assert from 'assert';
 import { describeLeak, isLocated, leakToOffer } from '../../memory-leak-offer';
-import { trackingGuidance } from '../../memory-guidance';
+import { stoppedWithoutSnapshot, trackingGuidance } from '../../memory-guidance';
 import { toDiffResult } from '../../memory-dashboard-mapping';
 import { toMemoryIngestResult } from '../../wire-adapters';
 import type { SuspectedLeak } from '../../memory-decorations';
@@ -119,5 +119,14 @@ suite('[PROF-UI-AUTOPILOT] the tracking toast says what the runtime does next', 
             assert.ok(said.includes('Press Continue to auto-capture each pause'), said);
             assert.ok(said.includes('automatic final snapshot'), said);
         }
+    });
+
+    test('stopped before any snapshot, a direct runtime is told to snapshot while it runs, a courier one while paused', () => {
+        const direct = stoppedWithoutSnapshot(true);
+        assert.ok(direct.includes('no snapshot was taken'), direct);
+        assert.ok(direct.includes('Take a snapshot while the program runs, never while paused'), direct);
+        assert.ok(!direct.includes('snapshot while paused'), `a paused direct runtime refuses a snapshot: ${direct}`);
+        const courier = stoppedWithoutSnapshot(false);
+        assert.ok(courier.includes('Take a snapshot while paused, or let the program finish'), courier);
     });
 });

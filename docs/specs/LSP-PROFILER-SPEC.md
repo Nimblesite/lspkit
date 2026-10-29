@@ -531,6 +531,7 @@ The library imports no editor API statically. The host passes in:
 - the editor API object;
 - the LSP client: `sendRequest` for executeCommand, `onProgress`, and the initialize result;
 - the ID prefix and the display name;
+- the languages it can run and profile: their editor IDs, and the names a message shows a user (`F#`, never `fsharp`);
 - the debug types it may courier through.
 
 The same code then runs in any VS Code-family editor and under test fakes.

@@ -24,6 +24,8 @@ export interface ProfilerHost {
   readonly debugType: string;
   /** Language IDs of files the host can "run & profile". */
   readonly languageIds: readonly string[];
+  /** Those languages as a message names them to a user, e.g. `F#`, `C#`. */
+  readonly languageNames: readonly string[];
   /** The live language client; `undefined` until the server starts. */
   readonly client: ReadonlySignal<LanguageClient | undefined>;
   /** Where the library logs. */

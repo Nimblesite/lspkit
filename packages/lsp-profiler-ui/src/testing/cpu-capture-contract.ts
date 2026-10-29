@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import type { ProfileResult } from "../profiler-decorations";
 import { buildFlamegraphHtml, openFlamegraphWebview, flamegraphPanelState } from "../profiler-flamegraph-html";
 import { configSection } from "../ids";
+import { editorPathKey } from "../editor-path-key";
 import { handleSourceNavigation, SingletonWebviewPanel, buildWebviewDocument } from "../profiler-webview";
 import { parseSpeedscope } from "../flame-model";
 import { isRecord } from "../unknown-shape";
@@ -58,8 +59,12 @@ async function hotLinesNavigateToTheirSource(result: ProfileResult): Promise<voi
   const line = result.hotLines.find(item => item.line > 0 && fs.existsSync(item.file));
   assert.ok(line !== undefined, "capture must attribute a real source line");
   assert.equal(handleSourceNavigation({ type: "navigateToSource", file: line.file, line: line.line }), true);
+  // The editor spells a Windows drive in lower case; the runtime reports it as built.
+  const opened = (active: vscode.TextEditor | undefined): boolean =>
+    active !== undefined && editorPathKey(active.document.uri.fsPath) === editorPathKey(line.file);
   const editor = await pollUntilResult(() => vscode.window.activeTextEditor,
-    active => active?.document.uri.fsPath === line.file && active.selection.active.line === line.line - 1);
+    active => opened(active) && active?.selection.active.line === line.line - 1);
+  assert.ok(opened(editor), `the hot line's own file opens: ${line.file}`);
   assert.equal(editor?.selection.active.line, line.line - 1);
 }
 

@@ -13,6 +13,8 @@ import { acquireStoppedFrame, evaluateInDebugSession, waitForStoppedFrame } from
 import { errorText } from "./failure";
 import { withUserProgress } from "./progress-ops";
 import { waitForDebuggeePid } from "./profiler-launch";
+import { trackingGuidance } from "./memory-guidance";
+import { captureIntervalSeconds } from "./memory-autopilot";
 import { executeServerCommand } from "./server-command";
 import type { MemoryStartResult } from "./wire-generated";
 import {
@@ -200,8 +202,6 @@ async function startDirectTrackingOnLaunch(store: Store, session: vscode.DebugSe
     }
     if (!(await handleMemoryStart(store, report, pid))) { return; }
     await captureSnapshotAndDiff(store, report);
-    void vscode.window.showInformationMessage(
-      `${brand()}: Tracking memory — press Continue at a breakpoint and each pass is captured automatically.`,
-    );
+    void vscode.window.showInformationMessage(trackingGuidance(true, captureIntervalSeconds()));
   });
 }

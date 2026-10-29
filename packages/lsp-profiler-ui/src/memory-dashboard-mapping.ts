@@ -104,6 +104,7 @@ export function toDiffResult(result: MemoryIngestResult): MemoryDiffResult {
       currentSize: asNumber(leak.currentSize),
       confidence: toLeakConfidence(asString(leak.confidence, "LOW")),
       reason: asString(leak.reason),
+      typeName: asString(leak.typeName),
     })),
   };
 }

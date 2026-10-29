@@ -31,6 +31,7 @@ import {
   memStartTitle,
   endServerSession,
   hasCapturedSnapshot,
+  isDirectMemorySession,
   presentDiff,
   presentSnapshot,
   resetCaptureState,
@@ -44,6 +45,8 @@ import {
   showActionableToast,
 } from "./memory-finalize";
 import { handleMemoryStart, trackMemoryOnLaunch } from "./memory-start";
+import { trackingGuidance } from "./memory-guidance";
+import { captureIntervalSeconds } from "./memory-autopilot";
 import { pickReferenceType, walkReferences } from "./memory-ref-picker";
 
 // Re-exported so tests keep one import site for the memory profiler's seams.
@@ -91,14 +94,11 @@ function memoryCommandDisposables(store: Store): vscode.Disposable[] {
 /** The `<prefix>.profiler.memoryStart` body: start tracking, then narrate what comes next. */
 async function runMemoryStartCommand(store: Store, report: (message: string) => void, pid?: number): Promise<void> {
   if (await handleMemoryStart(store, report, pid)) {
-    // With the autopilot on ([PROF-UI-AUTOPILOT]), the user just sets
-    // breakpoints and presses Continue — each pause is captured automatically;
-    // and even a breakpoint-free run captures a final snapshot at exit
-    // ([PROF-PY-MEMORY-FINAL]) — so this is never a dead end. The moment of
-    // disorientation is right here (the user just landed in the Debug view),
-    // so the toast carries the action ([PROF-UI-MEMORY], #263).
+    // The moment of disorientation is right here (the user just landed in the
+    // Debug view), so the toast says what happens next in the tracked runtime's
+    // own mode ([PROF-UI-AUTOPILOT]) and carries the action ([PROF-UI-MEMORY], #263).
     showActionableToast(
-      `${brand()}: Memory tracking started. Press Continue to auto-capture each pause, or let the program finish for an automatic final snapshot.`,
+      trackingGuidance(isDirectMemorySession(), captureIntervalSeconds()),
       "Take Snapshot",
       cmd("memorySnapshot"),
     );

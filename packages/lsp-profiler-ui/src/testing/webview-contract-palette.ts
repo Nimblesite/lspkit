@@ -71,9 +71,14 @@ function inkContrastsWithItsFill(): void {
     assert.ok(paletteCss(DARK_PALETTE).includes(`--prof-hot-ink: ${inkFor(DARK_PALETTE.hot)};`), 'the hot accent declares its ink');
 }
 
+/** The body of every `.toggle.active` rule, read up to its closing brace. A plain split, not a regex, keeps the scan linear (CodeQL js/polynomial-redos). */
+function activeToggleRules(css: string): string[] {
+    return css.split('.toggle.active {').slice(1).map((rest) => rest.split('}')[0] ?? '');
+}
+
 async function textOnAnAccentReadsItsInk(): Promise<void> {
     const results = (await viewsUnder(DARK_PALETTE))['results panel'] ?? '';
-    assert.ok(/\.toggle\.active \{[^}]*color: var\(--prof-hot-ink\)/.test(results), 'the active toggle writes in the hot accent\'s ink');
+    assert.ok(activeToggleRules(results).some((rule) => rule.includes('color: var(--prof-hot-ink)')), 'the active toggle writes in the hot accent\'s ink');
     assert.ok(FLAME_SCRIPT.includes('ctx.fillStyle = inkFor(model.frames[r.frameIdx].color)'), 'a slab label is inked against its own slab');
     assert.ok(FLAME_SCRIPT.includes(inkFor.toString()), 'the canvas runs the tested ink rule');
 }

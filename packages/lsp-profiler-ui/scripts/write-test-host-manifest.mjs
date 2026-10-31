@@ -16,7 +16,7 @@ const manifest = {
   version: "0.0.1",
   engines: { vscode: "^1.99.0" },
   main: "../../../out/src/test/host/extension.js",
-  activationEvents: ["*"],
+  activationEvents: ["onStartupFinished"],
   contributes: {
     commands: contributes.commands,
     viewsContainers: { activitybar: [{ id: host.container, title: "LspUi", icon: "$(pulse)" }] },

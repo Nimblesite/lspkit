@@ -92,6 +92,9 @@ class ProsePages(unittest.TestCase):
             self.assertTrue(media, (route, "needs a screenshot"))
         for path in OUTPUT.rglob("*.html"):
             self.check_links(path, self.check_page(path))
+        home = self.check_page(OUTPUT / "index.html")
+        self.assertEqual(len(home.attributes("video")), 1, "Homepage leads with the profiler running")
+        self.assertIn("/docs/examples/", [a.get("href") for a in home.attributes("a")])
         blog = Document(OUTPUT / "blog/index.html")
         self.assertIn("/blog/one-engine/", [a.get("href") for a in blog.attributes("a")])
 

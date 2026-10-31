@@ -29,7 +29,7 @@ function journalIndex(config) {
   template.data = {
     layout: "layouts/base.njk",
     title: "Journal — lspkit",
-    description: "Notes on building better language servers and developer tools.",
+    description: "Building language servers and MCP servers in Rust: notes from the lspkit workbench.",
     permalink: "/blog/",
   };
 }

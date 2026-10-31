@@ -1,7 +1,7 @@
 ---
 layout: docs.njk
 title: A small foundation.
-description: The architectural basics of the LSP Toolkit.
+description: One engine behind your language server and MCP server, with a profiler built into VS Code.
 eleventyNavigation:
   key: Overview
   order: 1

@@ -14,6 +14,15 @@ title: lspkit — The foundation for any language's tooling.
       <a class="text-link" href="/docs/getting-started/">Get started <span aria-hidden="true">↗</span></a>
     </div>
   </section>
+  {# [WEB-CONTENT] Every published crate and npm package, linked to its registry. #}
+  <section class="registries" aria-label="Packages">
+    {% for registry in packages.registries %}
+    <div class="registry">
+      <span class="registry-name">{% include "icons/" + registry.id + ".svg" %}{{ registry.name }}</span>
+      <ul>{% for name in registry.packages %}<li><a href="{{ registry.url }}{{ name }}">{{ name }} <span aria-hidden="true">↗</span></a></li>{% endfor %}</ul>
+    </div>
+    {% endfor %}
+  </section>
   <section class="prose home-proof" aria-labelledby="proof-heading">
     <h2 id="proof-heading">See it running.</h2>
     <p>SharpLsp and Osprey ship the lspkit profiler in VS Code today: hot lines in the source, a flame graph beside it, and ranked memory leak suspects. <a href="/docs/examples/">See both examples</a>.</p>

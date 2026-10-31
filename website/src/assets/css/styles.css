@@ -60,11 +60,17 @@ h3 { font-size: 25px; line-height: 1.25; letter-spacing: -.025em; }
 .eyebrow { font: 12px/1.5 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--color-muted); }
 .hero .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
 .signal { height: 7px; width: 7px; background: var(--color-primary); }
-.hero h1 { font-size: clamp(52px, 7.5vw, 104px); line-height: .96; letter-spacing: -.065em; }
+.hero h1 { font-size: clamp(44px, 5.6vw, 80px); line-height: .96; letter-spacing: -.065em; }
 .hero h1 span { color: var(--color-primary); }
 .hero-aside { padding-bottom: 6px; }
 .hero-aside p { color: var(--color-muted); font-size: 17px; line-height: 1.6; margin-bottom: 24px; }
 .text-link { display: inline-flex; gap: 28px; align-items: center; min-height: 44px; font-size: 14px; font-weight: bold; }
+.registries { display: flex; flex-wrap: wrap; gap: 0 56px; padding: 20px 0; border-top: 1px solid var(--color-border); }
+.registry, .registry ul { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 0; list-style: none; }
+.registry-name { display: inline-flex; align-items: center; gap: 10px; font: 12px/1.5 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--color-muted); }
+.registry svg { width: 22px; height: 22px; }
+.registry a { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; font: 14px var(--font-mono); text-decoration: none; }
+.registry a span { color: var(--color-primary); }
 .engineering-plate { border-top: 1px solid var(--color-border); }
 .engineering-plate img { width: 100%; height: auto; display: block; }
 .engineering-plate figcaption { display: flex; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--color-border); font: 10px/1.5 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--color-muted); }

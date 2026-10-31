@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="600" viewBox="0 0 1440 600" fill="none">
+  <title>One engine, two surfaces</title>
+  <desc>An architectural drawing of an orange core connected to two dark terminals.</desc>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" stroke="#8c9780" stroke-opacity=".2"/></pattern>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse"><path d="m0 8 8-8" stroke="#202720" stroke-opacity=".2"/></pattern>
+    <g id="terminal">
+      <path d="m0 0 235-50 130 76-235 53Z" fill="#444e3f" stroke="#202720" stroke-width="2"/>
+      <path d="m0 0 130 79v100L0 100Z" fill="#202720" stroke="#202720" stroke-width="2"/>
+      <path d="m130 79 235-53v100l-235 53Z" fill="#303b2d" stroke="#202720" stroke-width="2"/>
+      <path d="m155 104 179-40m-179 62 103-23m-103 45 142-32" stroke="#a6b591" stroke-width="3"/>
+      <path d="m24 36 16 9m-16 12 40 24" stroke="#ee795c" stroke-width="3"/>
+    </g>
+  </defs>
+  <path fill="#e3e8d9" d="M0 0h1440v600H0z"/>
+  <path fill="url(#grid)" d="M0 0h1440v600H0z"/>
+  <ellipse cx="740" cy="361" rx="510" ry="172" stroke="#8c9780" stroke-dasharray="4 8"/>
+  <path d="m105 403 367-84 240 140 515-119M138 433l327-75 240 140 531-123" stroke="#7b896f" stroke-width="2"/>
+  <path d="m596 298 129-30 97-123 156-36M595 322l156-34 101 112 160-36" stroke="#ad321e" stroke-width="3"/>
+  <path d="m596 310 145-33 98-120 146-35M595 334l146-32 107 112 169-38" stroke="#202720" stroke-width="2"/>
+  <path d="m344 342 205-47 154 89-205 47Z" fill="url(#hatch)"/>
+  <path d="m344 231 205-47 154 89-205 47Z" fill="#ef7856" stroke="#202720" stroke-width="2"/>
+  <path d="m344 231 154 89v111l-154-89Z" fill="#ad321e" stroke="#202720" stroke-width="2"/>
+  <path d="m498 320 205-47v111l-205 47Z" fill="#e34b31" stroke="#202720" stroke-width="2"/>
+  <path d="m391 232 149-34 115 67-149 34Z" fill="#202720"/>
+  <path d="m422 233 110-25 82 47-110 25Z" stroke="#f4f1e9"/>
+  <path d="m370 278 97 56m-97-36 97 56m64-7 143-33m-143 54 143-33" stroke="#202720" stroke-opacity=".5" stroke-width="2"/>
+  <use href="#terminal" x="876" y="126"/>
+  <use href="#terminal" x="856" y="369"/>
+  <g stroke="#7b896f"><path d="M64 64h24m-12-12v24M1352 64h24m-12-12v24M64 536h24m-12-12v24M1352 536h24m-12-12v24"/><path d="M284 176v233m-8-233h16m-16 233h16M344 154l205-47m-205 40v14m205-61v14"/></g>
+  <g fill="#ad321e"><circle cx="726" cy="268" r="5"/><circle cx="751" cy="288" r="5"/></g>
+</svg>

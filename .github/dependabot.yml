@@ -6,13 +6,17 @@ version: 2
 # codeql.yml skip Dependabot PRs, so the batch reaches `main` through ONE
 # consolidation PR where CI runs once. Each language ecosystem collapses all
 # version bumps into one group and all security bumps into a `*-security`
-# group. [REL-DEPENDABOT] [GITHUB-DEPENDABOT] [SWR-SEC-ACTION-PINNING]
+# group. A 7-day cooldown keeps a freshly published (possibly hijacked)
+# release out until the ecosystem has had a week to flag it.
+# [REL-DEPENDABOT] [GITHUB-DEPENDABOT] [SWR-SEC-ACTION-PINNING]
 updates:
   - package-ecosystem: github-actions
     directory: /
     target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies"]
     groups:
@@ -24,6 +28,8 @@ updates:
     target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies"]
     groups:
@@ -40,6 +46,8 @@ updates:
     target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies"]
     groups:
@@ -55,6 +63,8 @@ updates:
     target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: ["dependencies"]
     groups:

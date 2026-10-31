@@ -12,7 +12,7 @@ Say all three together on first mention, in this order.
 - **Every surface.** The LSP server and the MCP adapter consume the same engine. Editors and AI agents see the same answers, with no second analysis pipeline to drift.
 - **A profiler that ships.** `lsp-profiler` and `@nimblesite/lsp-profiler-ui` give any language server hot lines in the source, flame graphs, a live heap timeline and ranked leak suspects inside VS Code. A language plugs in a runtime crate; everything else is shared.
 
-Short form: **One engine. Every surface.** Longer form: **lspkit is the language server toolkit: write your analysis once behind `EngineApi`, serve it over LSP and MCP, and profile it with a CPU and memory profiler built into VS Code.**
+Short form: **One engine. Every surface.** Longer form: **lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and MCP, and profile it with a CPU and memory profiler built into VS Code.**
 
 ## Proof first
 
@@ -26,7 +26,7 @@ Use their videos and screenshots, credited and linked to their own sites. On the
 ## Message order
 
 1. **The profiler, running.** A video or screenshot of hot lines in real source code is the hook.
-2. **One engine.** `EngineApi`: one implementation, two surfaces.
+2. **One engine.** One Rust implementation, two surfaces. Name `EngineApi` only in the docs.
 3. **The crates.** What each crate gives you and how to add it (`cargo add lspkit lspkit-server`).
 4. **Bring your language.** A runtime crate is all a new language needs to get the profiler.
 

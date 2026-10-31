@@ -5,7 +5,7 @@
 
 <!-- [WEB-DESIGN] Fieldwork design system: paper, ink, one vermilion signal. GitHub strips CSS, so the styling lives in the SVG banner. -->
 <p align="center">
-  <a href="https://lspkit.dev"><img src="website/src/assets/images/readme-hero.svg" width="100%" alt="lspkit — One engine. Every surface. One Rust engine feeds LSP, MCP and the profiler."></a>
+  <a href="https://lspkit.dev"><img src="website/src/assets/images/readme-hero.svg" width="100%" alt="lspkit — The foundation for any language's tooling. One Rust engine feeds LSP, MCP and the profiler."></a>
 </p>
 
 <p align="center">

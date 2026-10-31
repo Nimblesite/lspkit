@@ -1,18 +1,27 @@
 ---
 layout: layouts/base.njk
-title: lspkit — One engine. Every surface.
+title: lspkit — The foundation for any language's tooling.
 ---
 {# [WEB-DESIGN] Fieldwork: editorial hierarchy and an engineering plate. #}
 <div class="home-shell">
   <section class="hero" aria-labelledby="hero-title">
     <div>
       <p class="eyebrow"><span class="signal" aria-hidden="true"></span> The language server toolkit</p>
-      <h1 id="hero-title">One engine.<br><span>Every surface.</span></h1>
+      <h1 id="hero-title">The foundation for<br><span>any language's tooling.</span></h1>
     </div>
     <div class="hero-aside">
       <p>Write your language analysis once, as one Rust trait. lspkit serves it to your VS Code extension over the Language Server Protocol and to Claude Code, Cursor and Codex as an MCP server. Find the hot path and the memory leak with a profiler built into VS Code.</p>
       <a class="text-link" href="/docs/getting-started/">Get started <span aria-hidden="true">↗</span></a>
     </div>
+  </section>
+  {# [WEB-CONTENT] Every published crate and npm package, linked to its registry. #}
+  <section class="registries" aria-label="Packages">
+    {% for registry in packages.registries %}
+    <div class="registry">
+      <span class="registry-name">{% include "icons/" + registry.id + ".svg" %}{{ registry.name }}</span>
+      <ul>{% for name in registry.packages %}<li><a href="{{ registry.url }}{{ name }}">{{ name }} <span aria-hidden="true">↗</span></a></li>{% endfor %}</ul>
+    </div>
+    {% endfor %}
   </section>
   <section class="prose home-proof" aria-labelledby="proof-heading">
     <h2 id="proof-heading">See it running.</h2>

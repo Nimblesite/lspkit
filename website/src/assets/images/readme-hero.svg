@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 440" width="1280" height="440" role="img" aria-labelledby="t d">
-  <title id="t">lspkit — One engine. Every surface.</title>
+  <title id="t">lspkit — The foundation for any language's tooling.</title>
   <desc id="d">The lspkit wordmark and headline beside an engineering plate: one vermilion engine routes to two terminal surfaces, LSP and MCP.</desc>
   <!-- [WEB-DESIGN-COLOR] Fieldwork tokens; follows the reader's colour scheme. -->
   <style>
@@ -24,8 +24,9 @@
 
   <text class="ink" x="56" y="70" font-size="29" font-weight="800" letter-spacing="-1.7">lspkit</text>
   <text class="muted mono" x="56" y="138">THE LANGUAGE SERVER TOOLKIT</text>
-  <text class="ink" x="52" y="232" font-size="92" font-weight="700" letter-spacing="-6">One engine.</text>
-  <text class="ink" x="52" y="324" font-size="92" font-weight="700" letter-spacing="-6">Every surface.</text>
+  <text class="ink" x="52" y="214" font-size="64" font-weight="700" letter-spacing="-3.5">The foundation</text>
+  <text class="ink" x="52" y="282" font-size="64" font-weight="700" letter-spacing="-3.5">for any language's</text>
+  <text class="ink" x="52" y="350" font-size="64" font-weight="700" letter-spacing="-3.5">tooling.</text>
   <text class="muted mono" x="56" y="422">RUST · LSP · MCP · PROFILER</text>
   <text class="muted mono" x="1224" y="422" text-anchor="end">FIG. 01 — ONE ENGINE, TWO SURFACES</text>
 

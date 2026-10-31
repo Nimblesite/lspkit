@@ -6,7 +6,7 @@ A compact design system for the toolkit's documentation and engineering journal.
 
 **Confident, precise, open.** Oversized headlines establish a point of view; small monospaced labels supply context. Space is the primary organising device. Thin rules separate sections. Avoid decorative cards, soft shadows, gradients, pill-shaped navigation and marketing statistics.
 
-Use the existing `lspkit` wordmark in lowercase, accompanied by the approved charcoal-and-vermilion PNG brace mark. Headlines use sentence case. Copy is direct and technical, with no invented adoption claims. The homepage leads with “One engine. Every surface.” and a short explanation of the toolkit.
+Use the existing `lspkit` wordmark in lowercase, accompanied by the approved charcoal-and-vermilion PNG brace mark. Headlines use sentence case. Copy is direct and technical, with no invented adoption claims. The homepage leads with “The foundation for any language’s tooling.” and a short explanation of the toolkit.
 
 ### [WEB-DESIGN-LOGO] Approved mark
 

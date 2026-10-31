@@ -1,0 +1,6 @@
+{
+  "registries": [
+    { "id": "crates", "name": "crates.io", "url": "https://crates.io/crates/", "packages": ["lspkit", "lspkit-server", "lsp-profiler", "lsp-profiler-dotnet"] },
+    { "id": "npm", "name": "npm", "url": "https://www.npmjs.com/package/", "packages": ["@nimblesite/lsp-profiler-ui"] }
+  ]
+}

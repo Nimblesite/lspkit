@@ -53,6 +53,14 @@ Content spans at most 1200 px, with 32 px desktop gutters and 20 px mobile gutte
 
 The canonical origin defaults to `http://localhost:8080` for this local sketch and is configured with `SITE_URL` before a production build. Do not invent a live domain or publish through a new workflow.
 
+### [WEB-EXAMPLES] Built with lspkit
+
+`/docs/examples/` shows the real integrations: SharpLsp and Osprey running the profiler in VS Code. Videos, posters and captions are embedded from each project's own site; Osprey screenshots are frames cropped from its profiler video. The README carries the same showcase as poster images that link to each project's profiler page, and a design-system SVG banner (`readme-hero.svg`) because GitHub strips CSS.
+
+### [WEB-SEO-KEYWORDS] Search keywords
+
+Blog posts target Google Trends keywords, recorded at the top of each post. The current keyword table lives in [messaging](../messaging.md#keywords-web-seo-keywords).
+
 ## [WEB-ACCESS] Interaction and acceptance
 
 All actions are real links or buttons. Keep the plugin's skip link, semantic headings and keyboard-operable navigation. Focus uses a visible 3 px outline with an offset. Controls have a minimum 44 px target. Links in prose are underlined. Images have meaningful alternatives; the diagram is also described in the article text. No animation is required.

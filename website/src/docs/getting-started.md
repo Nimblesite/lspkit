@@ -7,6 +7,10 @@ eleventyNavigation:
   order: 2
 ---
 <!-- [WEB-CONTENT] -->
+This is what you are building toward: your language server, profiled inside VS Code.
+
+{% video "osprey-profiler" %}
+
 ## Add the crates
 
 ```sh
@@ -50,6 +54,8 @@ pub trait EngineApi: Send + Sync + 'static {
 ## Serve it
 
 Hand one engine instance to the `lspkit-server` scaffolding for the editor and, with the `mcp` feature, to the MCP adapter for agents. Both read the same snapshots.
+
+{% shots "osprey-heatmap", "sharplsp-heatmap" %}
 
 ## Learn more
 

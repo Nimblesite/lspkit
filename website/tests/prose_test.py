@@ -9,7 +9,7 @@ from urllib.parse import unquote, urlsplit
 
 SITE = Path(__file__).resolve().parents[1]
 OUTPUT = SITE / "_site"
-DOCS = ("docs/getting-started", "docs/crates", "docs/profiler")
+DOCS = ("docs/getting-started", "docs/crates", "docs/profiler", "docs/examples")
 
 
 class Document(HTMLParser):
@@ -69,6 +69,27 @@ class ProsePages(unittest.TestCase):
             page = self.check_page(OUTPUT / route / "index.html")
             for tag in tags:
                 self.assertTrue(page.attributes(tag), (route, tag))
+        examples = self.check_page(OUTPUT / "docs/examples/index.html")
+        videos = examples.attributes("video")
+        self.assertEqual(len(videos), 3)
+        for video in videos:
+            self.assertTrue(video.get("poster", "").startswith("https://"))
+            self.assertTrue(video.get("aria-label"))
+        self.assertEqual(len(examples.attributes("track")), 3)
+        self.assertGreaterEqual(len(examples.attributes("img")), 6)
+        hrefs = [a.get("href") for a in examples.attributes("a")]
+        for link in ("https://sharplsp.dev/docs/profiler/", "https://www.ospreylang.dev/docs/tutorials/profiler/"):
+            self.assertIn(link, hrefs)
+        for route in ("docs", *DOCS, "blog/one-engine"):
+            page = Document(OUTPUT / route / "index.html")
+            for video in page.attributes("video"):
+                self.assertTrue(video.get("poster", "").startswith("https://"), route)
+                self.assertTrue(video.get("aria-label"), route)
+            for source in page.attributes("source"):
+                self.assertTrue(source["src"].startswith("https://"), route)
+            media = [a for a in page.attributes("img") if a.get("src") != "/assets/images/engine.svg"]
+            self.assertTrue(page.attributes("video") or media, (route, "needs a video or screenshot"))
+            self.assertTrue(media, (route, "needs a screenshot"))
         for path in OUTPUT.rglob("*.html"):
             self.check_links(path, self.check_page(path))
         blog = Document(OUTPUT / "blog/index.html")

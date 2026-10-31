@@ -14,6 +14,8 @@ eleventyNavigation:
 | [`lsp-profiler`](https://crates.io/crates/lsp-profiler) | Language-neutral CPU and memory profiler for language servers. |
 | [`lsp-profiler-dotnet`](https://crates.io/crates/lsp-profiler-dotnet) | The profiler's .NET runtime, using EventPipe. |
 
+{% shots "sharplsp-processes", "sharplsp-results" %}
+
 ## Features
 
 | Crate | Feature | Adds |
@@ -30,3 +32,5 @@ eleventyNavigation:
 ```sh
 npm install @nimblesite/lsp-profiler-ui
 ```
+
+{% shots "sharplsp-memory", "osprey-flamegraph" %}

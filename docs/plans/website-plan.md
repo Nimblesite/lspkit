@@ -1,5 +1,12 @@
 # Website sketch
 
+## Approved PNG logo [WEB-DESIGN-LOGO]
+
+- [x] Extract the selected first raster mark onto transparency and save a project-local PNG.
+- [x] Apply it to the shared website masthead, favicon, Apple touch icon, README and repository documentation.
+- [x] Delete the entire `logo-options` directory and obsolete SVG favicon; preserve content illustrations.
+- [x] Verify all generated pages reference the new favicon and Apple touch icon; validate PNG dimensions/alpha and all three ICO sizes. Website lint and all three generated-site tests pass; commit on the existing `docs-basics` branch.
+
 ## Navigation, journal and branch consolidation
 
 - [x] Consolidate `gh-pages-deploy` into `release-wire-model`, preserving PR #40 and both NuGet publishing and wire-model generation; resolve release comments/spec conflicts using the current main release policy.

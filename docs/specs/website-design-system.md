@@ -6,7 +6,15 @@ A compact design system for the toolkit's documentation and engineering journal.
 
 **Confident, precise, open.** Oversized headlines establish a point of view; small monospaced labels supply context. Space is the primary organising device. Thin rules separate sections. Avoid decorative cards, soft shadows, gradients, pill-shaped navigation and marketing statistics.
 
-Use the existing `lspkit` wordmark in lowercase, accompanied by a small vermilion square. Headlines use sentence case. Copy is direct and technical, with no invented adoption claims. The homepage leads with “One engine. Every surface.” and a short explanation of the toolkit.
+Use the existing `lspkit` wordmark in lowercase, accompanied by the approved charcoal-and-vermilion PNG brace mark. Headlines use sentence case. Copy is direct and technical, with no invented adoption claims. The homepage leads with “One engine. Every surface.” and a short explanation of the toolkit.
+
+### [WEB-DESIGN-LOGO] Approved mark
+
+<img src="../../website/src/assets/images/logo.png" width="96" height="96" alt="Approved lspkit logo: charcoal and vermilion braces around an angular opening">
+
+The first approved raster concept is the only logo: two opposing code braces, charcoal on the left and vermilion on the right, with an angular opening and restrained shading. `website/src/assets/images/logo.png` is the transparent 512 px master used by the masthead, root README and repository docs. `favicon.ico` contains 16, 32 and 48 px variants; `apple-touch-icon.png` is 180 px. Small browser icons use a warm ivory background for contrast. The dark website masthead also supplies an ivory backing. All discarded logo options and the old `mark.svg` are removed.
+
+Created with the built-in image generator by isolating option 01 without redesigning it, removing the labels and backdrop, and preserving the exact shape, colours and subtle shading. Icon sizes are derived from the approved PNG.
 
 ### [WEB-DESIGN-COLOR] Semantic palette
 

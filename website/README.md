@@ -1,5 +1,7 @@
 # lspkit website
 
+<img src="src/assets/images/logo.png" width="64" height="64" alt="lspkit logo: charcoal and vermilion code braces">
+
 Docs live in `src/docs/` (overview, getting started, crates, profiler) and share the `.prose` stylesheet with `/blog/one-engine/`. All reading pages include responsive header illustrations. Run `make website-test` (Python 3 required) for lint and generated-site regression checks; PR CI runs the same target.
 
 From the repository root, `make website-build` installs locked dependencies and builds the static site; `make website-run` installs them and starts the live-reloading development server. Stop the server with Ctrl+C.

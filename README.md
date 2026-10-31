@@ -1,3 +1,8 @@
+<!-- [WEB-DESIGN-LOGO] The approved PNG mark is shared with the website and docs. -->
+<p align="center">
+  <a href="https://lspkit.dev"><img src="website/src/assets/images/logo.png" width="96" height="96" alt="lspkit logo: charcoal and vermilion code braces"></a>
+</p>
+
 <!-- [WEB-DESIGN] Fieldwork design system: paper, ink, one vermilion signal. GitHub strips CSS, so the styling lives in the SVG banner. -->
 <p align="center">
   <a href="https://lspkit.dev"><img src="website/src/assets/images/readme-hero.svg" width="100%" alt="lspkit — One engine. Every surface. One EngineApi feeds LSP, MCP and the profiler."></a>

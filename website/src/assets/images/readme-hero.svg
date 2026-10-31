@@ -5,11 +5,11 @@
   <style>
     .bg { fill: #f4f1e9; } .ink { fill: #202720; } .muted { fill: #60665b; }
     .rule { stroke: #c9ccbf; } .grid { stroke: #e3e1d6; } .wire { stroke: #202720; }
-    .term { fill: #202720; } .term-text { fill: #f4f1e9; } .core { fill: #e34b31; } .mark { fill: #ad321e; }
+    .term { fill: #202720; } .term-text { fill: #f4f1e9; } .core { fill: #e34b31; }
     @media (prefers-color-scheme: dark) {
       .bg { fill: #191c19; } .ink { fill: #f4f1e9; } .muted { fill: #b3b9ac; }
       .rule { stroke: #454b41; } .grid { stroke: #232823; } .wire { stroke: #f4f1e9; }
-      .term { fill: #f4f1e9; } .term-text { fill: #191c19; } .mark { fill: #ff997f; }
+      .term { fill: #f4f1e9; } .term-text { fill: #191c19; }
     }
     text { font-family: Arial, Helvetica, sans-serif; }
     .mono { font-family: SFMono-Regular, Consolas, monospace; font-size: 13px; letter-spacing: 1.3px; }
@@ -22,8 +22,7 @@
   <line class="rule" x1="760" y1="0" x2="760" y2="440" stroke-width="1"/>
   <line class="rule" x1="0" y1="392" x2="1280" y2="392" stroke-width="1"/>
 
-  <rect class="mark" x="56" y="52" width="18" height="18"/>
-  <text class="ink" x="86" y="70" font-size="29" font-weight="800" letter-spacing="-1.7">lspkit</text>
+  <text class="ink" x="56" y="70" font-size="29" font-weight="800" letter-spacing="-1.7">lspkit</text>
   <text class="muted mono" x="56" y="138">THE LANGUAGE SERVER TOOLKIT</text>
   <text class="ink" x="52" y="232" font-size="92" font-weight="700" letter-spacing="-6">One engine.</text>
   <text class="ink" x="52" y="324" font-size="92" font-weight="700" letter-spacing="-6">Every surface.</text>

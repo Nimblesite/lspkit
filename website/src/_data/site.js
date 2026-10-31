@@ -6,7 +6,9 @@ const site = {
   url: process.env.SITE_URL || "http://localhost:8080",
   stylesheet: "/assets/css/styles.css",
   themeColor: "#f4f1e9",
-  favicon: "/assets/images/mark.svg",
+  favicon: "/assets/images/favicon.ico",
+  appleTouchIcon: "/assets/images/apple-touch-icon.png",
+  logo: "/assets/images/logo.png",
 };
 
 export default site;

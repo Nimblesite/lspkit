@@ -1,6 +1,6 @@
 # Writing about lspkit
 
-**One engine. Every surface.** This is the brief for the README, website, journal, release notes and videos. Pair it with the [design system](specs/website-design-system.md) before writing or rendering.
+**The foundation for any language's tooling.** This is the brief for the README, website, journal, release notes and videos. Pair it with the [design system](specs/website-design-system.md) before writing or rendering.
 
 lspkit is a set of Rust crates for building language servers. Lead with what a language server author gets: analysis written once, served to the editor over LSP and to agents over MCP, and profiled with the same CPU and memory profiler that real language servers already ship. Show the profiler running before explaining the crates.
 
@@ -9,10 +9,10 @@ lspkit is a set of Rust crates for building language servers. Lead with what a l
 Say all three together on first mention, in this order.
 
 - **One engine.** `EngineApi` is the single boundary between analysis and protocols. State is computed once; every report carries a generation number, so a client knows which workspace state produced an answer.
-- **Every surface.** The LSP server and the MCP adapter consume the same engine. Editors and AI agents see the same answers, with no second analysis pipeline to drift.
+- **Two surfaces.** The LSP server and the MCP adapter consume the same engine. Editors and AI agents see the same answers, with no second analysis pipeline to drift.
 - **A profiler that ships.** `lsp-profiler` and `@nimblesite/lsp-profiler-ui` give any language server hot lines in the source, flame graphs, a live heap timeline and ranked leak suspects inside VS Code. A language plugs in a runtime crate; everything else is shared.
 
-Short form: **One engine. Every surface.** Longer form: **lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and MCP, and profile it with a CPU and memory profiler built into VS Code.**
+Short form: **The foundation for any language's tooling.** Longer form: **lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and MCP, and profile it with a CPU and memory profiler built into VS Code.**
 
 ## Proof first
 

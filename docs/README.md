@@ -2,7 +2,7 @@
 
 # lspkit documentation
 
-One engine. Every surface.
+The foundation for any language's tooling.
 
 - [Published documentation](https://lspkit.dev/docs/)
 - [Toolkit specification](specs/lspkit-spec.md)

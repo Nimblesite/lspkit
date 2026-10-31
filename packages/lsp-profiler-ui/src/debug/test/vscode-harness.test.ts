@@ -2,13 +2,13 @@ import * as assert from "node:assert";
 import {
   makeBreakpointTools,
   makeSessionWaiters,
-} from "../src/testing/vscode-harness";
+} from "../testing/vscode-harness";
 import type {
   BreakpointSpec,
   DebugSessionHandle,
   VscodeBreakpointApi,
   VscodeSessionApi,
-} from "../src/testing/vscode-harness";
+} from "../testing/vscode-harness";
 
 /** True when a breakpoint condition is actually set. */
 function hasCondition(condition: string | undefined): condition is string {

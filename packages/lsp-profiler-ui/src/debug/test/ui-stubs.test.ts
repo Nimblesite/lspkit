@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
-import { installUiStubs } from "../src/ui-stubs";
-import type { WindowLike } from "../src/ui-stubs";
+import { installUiStubs } from "../ui-stubs";
+import type { WindowLike } from "../ui-stubs";
 
 function fakeWindow(): WindowLike & { calls: string[] } {
   const calls: string[] = [];

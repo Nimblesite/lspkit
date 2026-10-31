@@ -82,9 +82,7 @@ jobs:
           npm run test:paths --prefix packages/lsp-profiler-ui
 
       - name: Lint
-        run: |
-          npm ci --prefix packages/lspkit-debug
-          make lint
+        run: make lint
 
       # make test = fail-fast + coverage + threshold enforcement.
       # Thresholds live in coverage-thresholds.json.

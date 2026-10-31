@@ -4,8 +4,8 @@ import {
   isProfilingLaunch,
   launchMetric,
   suppressBreakpointsForProfiling,
-} from "../src/profiling";
-import type { DapMessage } from "../src/dap-messages";
+} from "../profiling";
+import type { DapMessage } from "../dap-messages";
 
 suite("isProfilingLaunch / launchMetric", () => {
   test("plain debug launch is not profiling", () => {

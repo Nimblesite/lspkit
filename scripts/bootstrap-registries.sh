@@ -23,7 +23,7 @@ export_head() {
 }
 
 prepare() {
-    (cd "$work" && npm ci --prefix packages/lsp-profiler-ui && npm ci --prefix packages/lspkit-debug)
+    (cd "$work" && npm ci --prefix packages/lsp-profiler-ui)
     shipwright-version-stamp --tag "$tag" --root "$work"
     (cd "$work" && cargo update --workspace && node scripts/typediagram/generate.mjs)
 }
@@ -36,10 +36,8 @@ publish_crates() {
 
 publish_npm() {
     mkdir -p "$work/dist"
-    for package in lsp-profiler-ui lspkit-debug; do
-        npm run build --prefix "$work/packages/$package"
-        npm pack "$work/packages/$package" --pack-destination "$work/dist"
-    done
+    npm run build --prefix "$work/packages/lsp-profiler-ui"
+    npm pack "$work/packages/lsp-profiler-ui" --pack-destination "$work/dist"
     for tarball in "$work"/dist/*.tgz; do
         bash "$work/scripts/npm-publish-or-skip.sh" "$tarball"
     done

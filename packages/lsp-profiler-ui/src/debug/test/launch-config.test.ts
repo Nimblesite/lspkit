@@ -5,12 +5,12 @@ import {
   defaultDebugOutputPath,
   defaultLaunchConfigForEditor,
   isBlankConfig,
-} from "../src/launch-config";
+} from "../launch-config";
 import type {
   ActiveEditorLike,
   DebugDocumentLike,
   LaunchConfigPolicy,
-} from "../src/launch-config";
+} from "../launch-config";
 
 const policy: LaunchConfigPolicy = {
   type: "osprey",

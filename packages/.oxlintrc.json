@@ -1,7 +1,7 @@
 {
   // The one lint config for every TypeScript package in lspkit. Every category is
   // an error. A rule is off or reshaped only with the reason beside it.
-  "$schema": "./lspkit-debug/node_modules/oxlint/configuration_schema.json",
+  "$schema": "./lsp-profiler-ui/node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise", "node"],
   "categories": {
     "correctness": "error",
@@ -17,7 +17,7 @@
     "oxc/no-async-await": "off",
     "oxc/no-optional-chaining": "off",
     "oxc/no-rest-spread-properties": "off",
-    // Both packages compile to CommonJS for the VS Code extension host, where `__dirname` is the API.
+    // The package compiles to CommonJS for the VS Code extension host, where `__dirname` is the API.
     "unicorn/prefer-module": "off",
     // Named exports are the module contract; default exports stay banned.
     "import/no-named-export": "off",
@@ -29,7 +29,7 @@
     "import/exports-last": "off",
     // `import * as vscode` is the VS Code API convention.
     "import/no-namespace": "off",
-    // These packages run on Node and in the VS Code extension host.
+    // This package runs on Node and in the VS Code extension host.
     "import/no-nodejs-modules": "off",
     // Tests and shared modules import from parent directories by design.
     "import/no-relative-parent-imports": "off",
@@ -70,7 +70,7 @@
   "overrides": [
     {
       // Long user-interaction tests with many assertions are the house style.
-      "files": ["**/test/**/*.ts", "**/*.test.ts", "**/src/testing/**/*.ts"],
+      "files": ["**/test/**/*.ts", "**/*.test.ts", "**/src/**/testing/**/*.ts"],
       "rules": {
         "eslint/max-lines-per-function": "off",
         "eslint/max-statements": "off",

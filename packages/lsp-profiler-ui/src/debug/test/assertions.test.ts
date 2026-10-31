@@ -5,8 +5,8 @@ import {
   assertLocalVariable,
   assertWatch,
   matchValue,
-} from "../src/testing/assertions";
-import type { DapSessionLike } from "../src/testing/dap-client";
+} from "../testing/assertions";
+import type { DapSessionLike } from "../testing/dap-client";
 
 /** True when `value` is a non-null object whose fields can be inspected. */
 function isRecord(value: unknown): value is Record<string, unknown> {

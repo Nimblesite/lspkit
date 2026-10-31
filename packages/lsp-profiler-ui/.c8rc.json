@@ -1,7 +1,7 @@
 {
   "all": true,
-  "include": ["out/src/**/*.js"],
-  "exclude": ["**/index.js", "**/index.ts", "**/*.d.ts", "out/test/**", "test/**"],
+  "include": ["out/src/debug/**/*.js"],
+  "exclude": ["**/index.js", "**/*.d.ts", "out/src/debug/test/**"],
   "reporter": ["text", "text-summary", "json-summary"],
   "check-coverage": true,
   "branches": 90,

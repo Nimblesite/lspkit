@@ -11,9 +11,9 @@ Values used in every Trusted Publisher form below:
 | Workflow | `release.yml` |
 | Environment | `release` |
 
-## 1. Bootstrap the 4 new packages (one command)
+## 1. Bootstrap the 3 new packages (one command)
 
-Trusted Publishing can only be set on a package that already exists. These 4 don't exist yet: `lsp-profiler`, `lsp-profiler-dotnet`, `@nimblesite/lsp-profiler-ui` and `@nimblesite/lspkit-debug`.
+Trusted Publishing can only be set on a package that already exists. These 3 don't exist yet: `lsp-profiler`, `lsp-profiler-dotnet` and `@nimblesite/lsp-profiler-ui`.
 
 ```bash
 cargo login            # token from crates.io/settings/tokens (scope: publish-new); your current one is rejected
@@ -29,11 +29,11 @@ For each crate, go to `https://crates.io/crates/<crate>/settings`, open **Truste
 
 Then revoke the token from step 1.
 
-## 3. npm: add the Trusted Publisher to both packages
+## 3. npm: add the Trusted Publisher to the package
 
-For each package, go to `https://www.npmjs.com/package/<pkg>/access`, open **Trusted Publisher**, choose **GitHub Actions**, and enter the table values. On the same page, set **Require 2FA and disallow tokens**.
+Go to `https://www.npmjs.com/package/<pkg>/access`, open **Trusted Publisher**, choose **GitHub Actions**, and enter the table values. On the same page, set **Require 2FA and disallow tokens**.
 
-`@nimblesite/lsp-profiler-ui` `@nimblesite/lspkit-debug`
+`@nimblesite/lsp-profiler-ui`
 
 ## 4. GitHub (Settings)
 

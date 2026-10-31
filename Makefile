@@ -61,7 +61,8 @@ endif
 # thresholds all have to fail closed). This regression cannot be dropped.
 	$(MAKE) _coverage_check_test
 	$(MAKE) _typediagram_test
-	npm test --prefix packages/lspkit-debug
+	npm run build --prefix packages/lsp-profiler-ui
+	npm run test:debug --prefix packages/lsp-profiler-ui
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
@@ -70,7 +71,6 @@ lint:
 	$(MAKE) _profiler_spec_check
 	node scripts/link-skills.mjs --check
 	npm run lint --prefix packages/lsp-profiler-ui
-	npm run lint --prefix packages/lspkit-debug
 	$(MAKE) _dotnet_build
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).

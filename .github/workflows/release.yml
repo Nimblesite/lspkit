@@ -105,7 +105,6 @@ jobs:
       - name: Install npm packages (frozen)
         run: |
           npm ci --prefix packages/lsp-profiler-ui
-          npm ci --prefix packages/lspkit-debug
 
       # Stamp the tag into every version carrier (Cargo.toml, package.json,
       # *.csproj, build-info.json) in the runner working tree only. The tagged
@@ -143,7 +142,6 @@ jobs:
       - name: npm audit (runtime dependencies)
         run: |
           npm audit --omit=dev --audit-level=high --prefix packages/lsp-profiler-ui
-          npm audit --omit=dev --audit-level=high --prefix packages/lspkit-debug
 
       # Package every crate and verify each tarball builds on its own, against
       # the other just-packaged crates. The tarballs are checksummed, attested
@@ -159,10 +157,8 @@ jobs:
       - name: Package npm packages
         run: |
           set -euo pipefail
-          for package in packages/lsp-profiler-ui packages/lspkit-debug; do
-            npm run build --prefix "${package}"
-            npm pack "./${package}" --pack-destination "${DIST}"
-          done
+          npm run build --prefix packages/lsp-profiler-ui
+          npm pack ./packages/lsp-profiler-ui --pack-destination "${DIST}"
 
       # One CycloneDX SBOM over the whole dependency graph. [SWR-SEC-SBOM]
       - name: Generate SBOM

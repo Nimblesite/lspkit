@@ -1,12 +1,12 @@
 import * as assert from "node:assert";
-import type { AdapterResolutionRequest } from "../src/adapter-resolution";
+import type { AdapterResolutionRequest } from "../adapter-resolution";
 import {
   findExecutableOnPath,
   looksLikePath,
   missingAdapterMessage,
   resolveAdapterCommand,
   resolveAdapterPath,
-} from "../src/adapter-resolution";
+} from "../adapter-resolution";
 
 function req(overrides: Partial<AdapterResolutionRequest>): AdapterResolutionRequest {
   return {

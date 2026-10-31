@@ -12,8 +12,8 @@ import {
   threads,
   variables,
   waitForStop,
-} from "../src/testing/dap-client";
-import type { DapSessionLike } from "../src/testing/dap-client";
+} from "../testing/dap-client";
+import type { DapSessionLike } from "../testing/dap-client";
 
 /** True when `value` is a non-null object whose fields can be inspected. */
 function isRecord(value: unknown): value is Record<string, unknown> {

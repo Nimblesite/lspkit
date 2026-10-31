@@ -1,4 +1,4 @@
-// @nimblesite/lspkit-debug/testing — the shared DAP integration-test harness:
+// @nimblesite/lsp-profiler-ui/out/src/debug/testing — the shared DAP integration-test harness:
 // a session-injected DAP client, high-level assertions, and VS Code-bound
 // breakpoint/session helpers. Re-exports poll + ui-stubs so a test file needs a
 // single import.

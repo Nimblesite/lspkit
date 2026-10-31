@@ -50,7 +50,6 @@ jobs:
           scan-args: |-
             --lockfile=Cargo.lock
             --lockfile=packages/lsp-profiler-ui/package-lock.json
-            --lockfile=packages/lspkit-debug/package-lock.json
 
   # Workflow static analysis: unpinned actions, over-broad tokens, template
   # injection, cache poisoning, spoofable bot checks. Same settings as

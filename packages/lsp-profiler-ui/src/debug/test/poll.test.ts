@@ -3,7 +3,7 @@ import {
   pollUntilResult,
   sleep,
   waitForCondition,
-} from "../src/poll";
+} from "../poll";
 
 suite("sleep", () => {
   test("resolves after the delay", async () => {

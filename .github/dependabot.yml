@@ -37,7 +37,6 @@ updates:
   - package-ecosystem: npm
     directories:
       - /packages/lsp-profiler-ui
-      - /packages/lspkit-debug
     target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly

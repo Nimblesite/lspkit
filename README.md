@@ -21,8 +21,7 @@ Reusable editor-side building blocks that are not Rust crates live under `packag
 
 | Package | Responsibility |
 |---|---|
-| [`@nimblesite/lspkit-debug`](packages/lspkit-debug) | Language-neutral VS Code **Debug Adapter Protocol** glue + integration-test harness (adapter resolution, zero-config launch defaults, save-or-reject, profiling-launch hooks, and a `customRequest`-driven DAP test client/assertions). Written once for every Nimblesite language extension (Osprey · `lldb-dap`, SharpLsp · `netcoredbg`, Basilisk · `debugpy`) instead of per-language. Fully dependency-injected (no static `import "vscode"`), 100% unit-test coverage. |
-| [`@nimblesite/lsp-profiler-ui`](packages/lsp-profiler-ui) | Editor-neutral VS Code UI for the profiler protocol: processes view, CPU heat map, flame graph, memory dashboard, retention graph, autopilot. |
+| [`@nimblesite/lsp-profiler-ui`](packages/lsp-profiler-ui) | Editor-neutral VS Code UI for the profiler protocol: processes view, CPU heat map, flame graph, memory dashboard, retention graph, autopilot. Its [`debug`](packages/lsp-profiler-ui/src/debug) module is the language-neutral **Debug Adapter Protocol** glue and integration-test harness (adapter resolution, zero-config launch defaults, save-or-reject, profiling-launch hooks, a `customRequest`-driven DAP test client and assertions), dependency-injected with no static `import "vscode"`. |
 
 ## Status
 

@@ -2,7 +2,7 @@ import * as assert from "node:assert";
 import {
   runPreLaunchBuild,
   saveDirtyOrReject,
-} from "../src/launch-lifecycle";
+} from "../launch-lifecycle";
 
 /** A rejection handler for cases where the launch must not be rejected. */
 function recordNothing(): void {

@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { summarizeArgs, summarizeBody } from "../src/dap-messages";
+import { summarizeArgs, summarizeBody } from "../dap-messages";
 
 suite("summarizeArgs", () => {
   test("renders known scalar fields and breakpoint counts", () => {

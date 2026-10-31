@@ -3,17 +3,11 @@ resolver = "2"
 members = [
     "crates/lspkit",
     "crates/lspkit-server",
-    "crates/lspkit-vfs",
-    "crates/lspkit-live",
-    "crates/lspkit-mcp",
-    "crates/lspkit-config",
-    "crates/lspkit-treesitter",
-    "crates/lspkit-sidecar",
     "crates/lsp-profiler",
     "crates/lsp-profiler-dotnet",
 ]
-# Parked profiler runtimes: kept with the profiler, not built yet.
-exclude = ["crates/lsp-profiler-helper", "crates/lsp-profiler-python"]
+# Parked profiler runtime: kept with the profiler, not built yet.
+exclude = ["crates/lsp-profiler-python"]
 
 [workspace.package]
 version = "0.0.0-dev"
@@ -140,6 +134,9 @@ ropey = "1"
 # Filesystem
 notify = "8"
 
+# Config
+toml = "1.1"
+
 # Errors / tracing
 thiserror = "2"
 tracing = "0.1"
@@ -153,7 +150,7 @@ sysinfo = { version = "0.39.3", default-features = false, features = ["system", 
 tempfile = "3"
 url = "2"
 
-# Tree-sitter (optional, in lspkit-treesitter only)
+# Tree-sitter (optional: the `treesitter` feature of lspkit)
 tree-sitter = "0.27"
 
 # Internal workspace dependencies.
@@ -161,11 +158,5 @@ tree-sitter = "0.27"
 # both `[workspace.package].version` and these requirements. [SWR-VERSION-BUILD-STAMPING]
 lspkit = { version = "0.0.0-dev", path = "crates/lspkit" }
 lspkit-server = { version = "0.0.0-dev", path = "crates/lspkit-server" }
-lspkit-vfs = { version = "0.0.0-dev", path = "crates/lspkit-vfs" }
-lspkit-live = { version = "0.0.0-dev", path = "crates/lspkit-live" }
-lspkit-mcp = { version = "0.0.0-dev", path = "crates/lspkit-mcp" }
-lspkit-config = { version = "0.0.0-dev", path = "crates/lspkit-config" }
-lspkit-treesitter = { version = "0.0.0-dev", path = "crates/lspkit-treesitter" }
-lspkit-sidecar = { version = "0.0.0-dev", path = "crates/lspkit-sidecar" }
 lsp-profiler = { version = "0.0.0-dev", path = "crates/lsp-profiler" }
 lsp-profiler-dotnet = { version = "0.0.0-dev", path = "crates/lsp-profiler-dotnet" }

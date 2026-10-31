@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use lspkit_vfs::PositionEncoding;
+use lspkit::vfs::PositionEncoding;
 
 /// Decode standard initialize capabilities despite lsp-types 0.97's singular field.
 ///

@@ -3,7 +3,7 @@
 
 use crate::client::{self, ClientError};
 use crate::client_wire::{self, Closed};
-use lspkit_sidecar::{inbound, DEFAULT_MAX_FRAME};
+use lspkit::sidecar::{inbound, DEFAULT_MAX_FRAME};
 use std::process::ExitCode;
 
 /// Open the caller's capture as a real native asynchronous file.

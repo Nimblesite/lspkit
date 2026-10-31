@@ -1,6 +1,6 @@
 # lspkit
 
-A generic Rust workspace of cross-cutting building blocks for LSP and MCP servers, published as `lspkit-*` crates.
+A generic Rust workspace of cross-cutting building blocks for LSP and MCP servers, published as four crates: `lspkit`, `lspkit-server`, `lsp-profiler` and `lsp-profiler-dotnet`.
 
 ## What it is
 
@@ -8,16 +8,12 @@ The headline contribution is the **"one engine, two surfaces"** contract: a sing
 
 | Crate | Responsibility |
 |---|---|
-| `lspkit` | Façade. `EngineApi` trait + supporting types. Optional `tracing-setup` feature. |
-| `lspkit-server` | Hand-rolled JSON-RPC LSP server scaffolding built on `lsp-types`. Capability builder, URI helpers, diagnostics fan-out, progress, cancellation. |
-| `lspkit-vfs` | Concurrent open-document store with rope-based incremental edits and position-encoding negotiation. |
-| `lspkit-live` | File-watcher → debouncer → single-flight scheduler → session lifecycle. |
-| `lspkit-mcp` | `rmcp` adapter that mounts an `EngineApi` impl as MCP tools, resources, and prompts. |
-| `lspkit-config` | Layered TOML loader generic over the consumer's config struct. |
-| `lspkit-treesitter` | `LanguageParser` trait + content-hash-keyed parse cache. Bundles no grammars. |
-| `lspkit-sidecar` | Framed-IPC primitives + lifecycle/health/respawn. Pure transport. |
+| `lspkit` | Façade. `EngineApi` trait + supporting types, plus the `config`, `vfs` and `sidecar` modules and the `treesitter` module behind the `treesitter` feature. Optional `tracing-setup` feature. |
+| `lspkit-server` | Hand-rolled JSON-RPC LSP server scaffolding built on `lsp-types`, plus the `live` module and the `mcp` adapter behind the `mcp` feature. Capability builder, URI helpers, diagnostics fan-out, progress, cancellation. |
 | `lsp-profiler` | Language-neutral CPU and memory profiler for language servers: sessions, hotspots, flame graphs, speedscope/V8 exports, heap snapshots, leak scoring, one JSON-RPC protocol. [Spec](docs/specs/LSP-PROFILER-SPEC.md). |
 | `lsp-profiler-dotnet` | The profiler's .NET runtime: EventPipe CPU sampling and heap snapshots through the engine in `dotnet/`. |
+
+`lsp-profiler-python` is parked and unpublished; it hosts the `lsp-profiler-helper` binary and depends on `lsp-profiler`.
 
 ## Editor packages
 

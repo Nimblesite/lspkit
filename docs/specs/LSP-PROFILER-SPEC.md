@@ -69,7 +69,7 @@ flowchart LR
 | `lsp-profiler-dotnet` | `crates/lsp-profiler-dotnet` | .NET runtime: process classification, engine driver, mapping engine output to the neutral model |
 | `lsp-profiler-dotnet-engine` | `dotnet/LspProfiler.DotNet.Engine` | C# tool that does the .NET capture and analysis ([PROF-DOTNET-ENGINE]) |
 | `lsp-profiler-python` | `crates/lsp-profiler-python` | Python runtime (parked, [PROF-PY]) |
-| `lsp-profiler-helper` | `crates/lsp-profiler-helper` | Elevated macOS sampling helper (parked with Python, [PROF-HELPER-PROTOCOL]) |
+| `lsp-profiler-helper` | `crates/lsp-profiler-python/src/bin/lsp-profiler-helper` | Elevated macOS sampling helper (parked with Python, [PROF-HELPER-PROTOCOL]) |
 | `lsp-profiler-ui` | `packages/lsp-profiler-ui` | TypeScript UI library for VS Code-family editors ([PROF-UI]) |
 
 ## [PROF-LSP] LSP mapping
@@ -808,7 +808,7 @@ Same-user processes attach through the diagnostics IPC without elevation. Anothe
 
 ## [PROF-PY] Python runtime (parked)
 
-Runtime ID `python`. The code moved from Basilisk into `crates/lsp-profiler-python` (with `crates/lsp-profiler-helper`). It is not a workspace member until it is un-parked. Its citations of the legacy Basilisk IDs map onto the IDs below when it rejoins.
+Runtime ID `python`. The code moved from Basilisk into `crates/lsp-profiler-python`, which also hosts the `lsp-profiler-helper` binary (see [Crate layout](lspkit-spec.md#crate-layout)). It is not a workspace member until it is un-parked. Its citations of the legacy Basilisk IDs map onto the IDs below when it rejoins.
 
 ### [PROF-PY-SCAFFOLD] Frame filter
 

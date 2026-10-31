@@ -149,6 +149,9 @@ _profiler_spec_check:
 _coverage_check_test:
 	node scripts/coverage-gate.test.mjs --make "$(MAKE)" --shell "$(POSIX_SHELL)"
 
+# A `<crate>::<module>` key (e.g. `lspkit::vfs`) gates one module of a crate:
+# `src/<module>.rs` plus `src/<module>/`, so absorbed crates keep their own
+# floors after consolidation. [CRATE-LAYOUT-MODULES]
 # Construct the escaped SF backslash from character codes so Windows argv
 # quoting cannot consume it before awk normalizes native source markers.
 _coverage_check: SHELL := $(POSIX_SHELL)
@@ -165,7 +168,7 @@ _coverage_check:
 	for CRATE in $$CRATES; do \
 	  THRESHOLD=$$(jq -r --arg c "$$CRATE" '.per_crate[$$c]' "$(COVERAGE_THRESHOLDS_FILE)" | tr -d '\r') || exit 1; \
 	  if [ -z "$$THRESHOLD" ] || [ "$$THRESHOLD" = "null" ]; then echo "FAIL: $$CRATE — threshold missing in $(COVERAGE_THRESHOLDS_FILE)"; exit 1; fi; \
-	  COV=$$(awk -v crate="$$CRATE" 'BEGIN{lh=0;lf=0;in_block=0} /^SF:/{gsub(sprintf("%c%c",92,92),"/"); sub(/^SF:/,"SF:/"); in_block=(index($$0,"/crates/" crate "/src/")>0)?1:0} in_block&&/^LH:/{sub(/^LH:/,""); lh+=$$0} in_block&&/^LF:/{sub(/^LF:/,""); lf+=$$0} /^end_of_record/{in_block=0} END{printf "%d %d", lh, lf}' lcov.info) || exit 1; \
+	  COV=$$(awk -v crate="$$CRATE" 'BEGIN{lh=0;lf=0;in_block=0;n=index(crate,"::");dir=(n>0)?substr(crate,1,n-1):crate;mod=(n>0)?substr(crate,n+2):"";gsub(/::/,"/",mod);tree="/crates/" dir "/src/" mod;file=(n>0)?tree ".rs":tree;tree=(n>0)?tree "/":tree} /^SF:/{gsub(sprintf("%c%c",92,92),"/"); sub(/^SF:/,"SF:/"); in_block=(index($$0,tree)>0||index($$0,file)>0)?1:0} in_block&&/^LH:/{sub(/^LH:/,""); lh+=$$0} in_block&&/^LF:/{sub(/^LF:/,""); lf+=$$0} /^end_of_record/{in_block=0} END{printf "%d %d", lh, lf}' lcov.info) || exit 1; \
 	  LH=$${COV% *}; LF=$${COV#* }; \
 	  if [ "$$LF" -eq 0 ]; then echo "FAIL: $$CRATE — no lines in lcov.info"; FAILED=1; continue; fi; \
 	  PCT=$$(awk "BEGIN{printf \"%.2f\", $$LH/$$LF*100}"); \

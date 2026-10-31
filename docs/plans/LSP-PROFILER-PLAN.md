@@ -119,7 +119,7 @@ Production fixes from the filming audit:
 - [x] Keep allocation sizes and object counts visible at narrow panel widths; verify rendered Chromium output using a real heap capture [PROF-UI-MEMORY].
 - [ ] Improve retention graph pixel density and label placement ([PROF-UI-REFGRAPH], issue #4).
 
-- **Python runtime** (`crates/lsp-profiler-python`, `crates/lsp-profiler-helper`): not workspace members, no `Cargo.toml` for the python crate; 30 legacy `PROFILE-*` citations to rename; must adopt the stop-drain and the executeCommand mapping.
+- **Python runtime** (`crates/lsp-profiler-python`, with the helper as its `[[bin]]`): excluded from the workspace, no `lib.rs` yet; 30 legacy `PROFILE-*` citations to rename; must adopt the stop-drain and the executeCommand mapping.
 - **Basilisk.** Its in-tree profiler, handlers, tests and VSIX were moved out of its working tree. **Basilisk has no profiler until it is rewired** onto this library and the Python runtime.
 - **Dart, Rust/native runtimes.** Not specified [PROF-SCOPE]. Each is one crate implementing `Runtime`; nothing above the trait changes.
 

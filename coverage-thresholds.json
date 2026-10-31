@@ -1,16 +1,16 @@
 {
   "_agent_pmo": "74cf183",
-  "_doc": "Single source of truth for per-crate line-coverage thresholds. Read by `_coverage_check` inside `make test`. Thresholds are monotonically increasing — only ratchet UP, never down. `make test` (and therefore CI) fails if ANY listed crate drops below its threshold.",
+  "_doc": "Single source of truth for per-crate line-coverage thresholds. Read by `_coverage_check` inside `make test`. Thresholds are monotonically increasing — only ratchet UP, never down. `make test` (and therefore CI) fails if ANY listed crate drops below its threshold. A `<crate>::<module>` key gates one module (`src/<module>.rs` + `src/<module>/`); each module absorbed by [CRATE-LAYOUT-MODULES] keeps its old crate's floor.",
   "per_crate": {
     "lsp-profiler": 94,
     "lsp-profiler-dotnet": 92,
-    "lspkit": 100,
-    "lspkit-config": 100,
-    "lspkit-live": 94,
-    "lspkit-mcp": 100,
-    "lspkit-server": 98,
-    "lspkit-sidecar": 99,
-    "lspkit-treesitter": 95,
-    "lspkit-vfs": 100
+    "lspkit": 99,
+    "lspkit::config": 100,
+    "lspkit::sidecar": 99,
+    "lspkit::treesitter": 95,
+    "lspkit::vfs": 100,
+    "lspkit-server": 97,
+    "lspkit-server::live": 94,
+    "lspkit-server::mcp": 100
   }
 }

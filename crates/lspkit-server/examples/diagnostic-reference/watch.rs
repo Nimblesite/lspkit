@@ -2,8 +2,8 @@
 
 use crate::client::{self, ClientError};
 use crate::client_wire;
-use lspkit_live::watcher::{ChangeEvent, CoalescedWatcher};
-use lspkit_live::{FileWatcher, ScheduleConfig};
+use lspkit_server::live::watcher::{ChangeEvent, CoalescedWatcher};
+use lspkit_server::live::{FileWatcher, ScheduleConfig};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 

@@ -3,7 +3,7 @@
 
 use std::process::{ExitCode, ExitStatus, Stdio};
 
-use lspkit_sidecar::{inbound, write_frame, TransportError, DEFAULT_MAX_FRAME};
+use lspkit::sidecar::{inbound, write_frame, TransportError, DEFAULT_MAX_FRAME};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::task::{JoinError, JoinHandle};
@@ -30,7 +30,7 @@ pub(super) enum ClientError {
     Limit(#[from] std::num::ParseIntError),
     /// The native filesystem watcher failed to start or run.
     #[error(transparent)]
-    Watch(#[from] lspkit_live::watcher::WatcherError),
+    Watch(#[from] lspkit_server::live::watcher::WatcherError),
     /// A required child-process pipe was unavailable.
     #[error("backend {0} pipe was unavailable")]
     Pipe(&'static str),

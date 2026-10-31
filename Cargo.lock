@@ -813,57 +813,22 @@ name = "lspkit"
 version = "0.0.0-dev"
 dependencies = [
  "async-trait",
+ "dashmap",
  "futures-core",
  "futures-util",
+ "rmp-serde",
+ "ropey",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "lspkit-config"
-version = "0.0.0-dev"
-dependencies = [
- "serde",
- "tempfile",
- "thiserror",
  "toml",
  "tracing",
-]
-
-[[package]]
-name = "lspkit-live"
-version = "0.0.0-dev"
-dependencies = [
- "async-trait",
- "futures-util",
- "lspkit",
- "notify",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "lspkit-mcp"
-version = "0.0.0-dev"
-dependencies = [
- "async-trait",
- "futures-core",
- "futures-util",
- "lspkit",
- "rmcp",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
+ "tracing-subscriber",
+ "tree-sitter",
+ "tree-sitter-rust",
 ]
 
 [[package]]
@@ -871,12 +836,12 @@ name = "lspkit-server"
 version = "0.0.0-dev"
 dependencies = [
  "async-trait",
+ "futures-core",
  "futures-util",
  "lsp-types",
  "lspkit",
- "lspkit-live",
- "lspkit-sidecar",
- "lspkit-vfs",
+ "notify",
+ "rmcp",
  "salsa",
  "serde",
  "serde_json",
@@ -886,39 +851,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "lspkit-sidecar"
-version = "0.0.0-dev"
-dependencies = [
- "rmp-serde",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "lspkit-treesitter"
-version = "0.0.0-dev"
-dependencies = [
- "dashmap",
- "thiserror",
- "tree-sitter",
- "tree-sitter-rust",
-]
-
-[[package]]
-name = "lspkit-vfs"
-version = "0.0.0-dev"
-dependencies = [
- "dashmap",
- "ropey",
- "thiserror",
 ]
 
 [[package]]

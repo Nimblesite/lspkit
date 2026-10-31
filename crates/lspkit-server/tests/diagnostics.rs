@@ -3,12 +3,12 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use lspkit::vfs::DocumentUri;
 use lspkit::Generation;
 use lspkit_server::{
     diagnostics::document_uri_from_path, Diagnostic, DiagnosticsBatch, DiagnosticsBus,
     DiagnosticsSink, Severity,
 };
-use lspkit_vfs::DocumentUri;
 
 /// Captures every batch a bus publishes, for whole-history assertions.
 struct Recorder {

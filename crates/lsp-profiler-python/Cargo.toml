@@ -1,0 +1,35 @@
+# Parked: not a workspace member and not built yet. The Python runtime's
+# library sources are still being ported; its elevated py-spy helper is a
+# `[[bin]]` of this crate. [CRATE-LAYOUT-HELPER]
+[package]
+name = "lsp-profiler-python"
+version.workspace = true
+edition.workspace = true
+description = "Python runtime for lsp-profiler, with the elevated py-spy helper binary for macOS"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "lsp-profiler-helper"
+path = "src/bin/lsp-profiler-helper/main.rs"
+
+[dependencies]
+basilisk-common.workspace = true
+lsp-profiler-protocol.workspace = true
+# Shipwright `--version` / `--version --json` contract emitter.
+shipwright          = "0.10.0"
+shipwright-manifest = "0.10.0"
+py-spy = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["net", "io-util", "rt", "macros", "sync", "time"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+
+[build-dependencies]
+basilisk-buildinfo.workspace = true
+
+[lints]
+workspace = true

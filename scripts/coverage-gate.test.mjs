@@ -63,14 +63,21 @@ const shellPath = resolveTool(values.shell, "COVERAGE_GATE_SHELL", shellDefault)
 const tempRoot = resolveTempRoot();
 
 // Real LCOV record shape; the SF marker is exactly what the checker's awk
-// accounting matches (`/crates/<crate>/src/`).
+// accounting matches (`/crates/<crate>/src/`, or `src/<module>.rs` for a
+// `<crate>::<module>` key). [CRATE-LAYOUT-MODULES]
+function sourceParts(key) {
+  const [crate, ...modules] = key.split("::");
+  return modules.length === 0 ? [crate, "src", "lib.rs"] : [crate, "src", ...modules.slice(0, -1), `${modules.at(-1)}.rs`];
+}
+
 function lcovFor(coverage, style = "posix") {
   let text = "";
-  for (const [crate, [hit, total]] of coverage) {
+  for (const [key, [hit, total]] of coverage) {
+    const parts = sourceParts(key);
     const source = style === "windows"
-      ? `E:\\lcov-fixture\\crates\\${crate}\\src\\lib.rs`
-      : style === "relative" ? `crates/${crate}/src/lib.rs`
-      : `/lcov-fixture/crates/${crate}/src/lib.rs`;
+      ? `E:\\lcov-fixture\\crates\\${parts.join("\\")}`
+      : style === "relative" ? `crates/${parts.join("/")}`
+      : `/lcov-fixture/crates/${parts.join("/")}`;
     text += `SF:${source}\nLH:${hit}\nLF:${total}\nend_of_record\n`;
   }
   return text;
@@ -142,15 +149,31 @@ test("coverage below a per-crate floor fails that crate and the whole gate", () 
   const gate = withTempGate(
     [
       ["coverage-thresholds.json", thresholdsJson({})],
-      ["lcov.info", lcovFor(new Map(configuredCrates.map((crate) => [crate, crate === "lspkit-live" ? [1, 2] : [2, 2]])))],
+      ["lcov.info", lcovFor(new Map(configuredCrates.map((crate) => [crate, crate === "lsp-profiler" ? [1, 2] : [2, 2]])))],
     ],
     (dir) => runGate(dir),
   );
   assert.notEqual(gate.status, 0, `expected failure, got:\n${gate.stdout}`);
-  assert.deepEqual(verdictCrates(gate.stdout, "FAIL"), new Set(["lspkit-live"]));
+  assert.deepEqual(verdictCrates(gate.stdout, "FAIL"), new Set(["lsp-profiler"]));
   assert.match(gate.stdout, /50\.00% < 94%/);
   assert.equal(verdictCrates(gate.stdout, "OK").size, configuredCrates.length - 1, "other crates stay reported OK");
   assert.match(gate.stdout, /below per-crate threshold/);
+});
+
+test("a module below its own floor fails that module and its crate, not its siblings", () => {
+  const gate = withTempGate(
+    [
+      ["coverage-thresholds.json", thresholdsJson({})],
+      ["lcov.info", lcovFor(new Map(configuredCrates.map((key) => [key, key === "lspkit::vfs" ? [1, 2] : [2, 2]])))],
+    ],
+    (dir) => runGate(dir),
+  );
+  assert.notEqual(gate.status, 0, `expected failure, got:\n${gate.stdout}`);
+  assert.deepEqual(verdictCrates(gate.stdout, "FAIL"), new Set(["lspkit::vfs", "lspkit"]));
+  assert.match(gate.stdout, /lspkit::vfs\s+50\.00% < 100%/);
+  assert.match(gate.stdout, /OK:\s+lspkit::config\s+100\.00%/);
+  assert.match(gate.stdout, /OK:\s+lspkit-server\s+100\.00%/);
+  assert.equal(verdictCrates(gate.stdout, "OK").size, configuredCrates.length - 2, "sibling modules and crates stay OK");
 });
 
 test("a missing lcov.info fails closed", () => {
@@ -208,7 +231,7 @@ test("an empty per_crate map fails closed", () => {
 
 for (const invalid of [
   { name: "nonnumeric", overrides: { lspkit: "high" } },
-  { name: "fractional", overrides: { "lspkit-live": 94.5 } },
+  { name: "fractional", overrides: { "lsp-profiler": 94.5 } },
   { name: "above 100", overrides: { lspkit: 150 } },
   { name: "negative", overrides: { "lspkit-server": -10 } },
   { name: "null", overrides: { lspkit: null } },

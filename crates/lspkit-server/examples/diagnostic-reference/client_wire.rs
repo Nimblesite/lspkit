@@ -1,7 +1,7 @@
 //! Typed backend envelopes and rendered consumer events. [LSP-PULL-TRANSPORT]
 
+use lspkit::sidecar::inbound::Inbound;
 use lspkit_server::RequestId;
-use lspkit_sidecar::inbound::Inbound;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::io::AsyncWriteExt;

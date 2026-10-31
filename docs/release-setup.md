@@ -21,11 +21,11 @@ npm login              # needs npm >= 11.5.1: npm i -g npm@latest
 scripts/bootstrap-registries.sh v0.0.1
 ```
 
-## 2. crates.io: add the Trusted Publisher to all 10 crates
+## 2. crates.io: add the Trusted Publisher to all 4 crates
 
 For each crate, go to `https://crates.io/crates/<crate>/settings`, open **Trusted Publishing**, choose **Add**, then **GitHub**, and enter the table values.
 
-`lspkit` `lspkit-vfs` `lspkit-config` `lspkit-sidecar` `lspkit-treesitter` `lspkit-server` `lspkit-mcp` `lspkit-live` `lsp-profiler` `lsp-profiler-dotnet`
+`lsp-profiler` `lsp-profiler-dotnet` `lspkit` `lspkit-server`
 
 Then revoke the token from step 1.
 

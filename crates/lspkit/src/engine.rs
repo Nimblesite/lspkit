@@ -181,7 +181,7 @@ pub type GenerationEventStream = Pin<Box<dyn Stream<Item = GenerationEvent> + Se
 /// The contract every engine implementation satisfies.
 ///
 /// One implementation is consumed by both the LSP server scaffolding in
-/// `lspkit-server` and the MCP adapter in `lspkit-mcp`. See `spec.md` for the
+/// `lspkit-server` and the MCP adapter in `lspkit_server::mcp`. See `spec.md` for the
 /// full behavioral contract.
 #[async_trait]
 pub trait EngineApi: Send + Sync + 'static {

@@ -1,6 +1,6 @@
 # Plan — release-only publishing for crates.io and npm
 
-Implements `[REL-REGIME]`, `[REL-TRIGGER]`, `[REL-VERSION]`, `[REL-GATES]`, `[REL-GITHUB]`, `[REL-OIDC]`, `[REL-ORDER]`, `[REL-METADATA]`, `[REL-PACKAGED-BUILD]` and `[REL-DEPENDABOT]` from [docs/specs/lspkit-spec.md](../specs/lspkit-spec.md#release--publishing). The model is Shipwright's deployment contract plus the AgentPMO `[CI-WORKFLOWS]` standard: CI gates pull requests, and only a version tag ships.
+Implements `[REL-REGIME]`, `[REL-TRIGGER]`, `[REL-VERSION]`, `[REL-GATES]`, `[REL-GITHUB]`, `[REL-OIDC]`, `[REL-ORDER]`, `[REL-METADATA]`, `[REL-PACKAGED-BUILD]`, `[REL-PAGES]` and `[REL-DEPENDABOT]` from [docs/specs/lspkit-spec.md](../specs/lspkit-spec.md#release--publishing). The model is Shipwright's deployment contract plus the AgentPMO `[CI-WORKFLOWS]` standard: CI gates pull requests, and only a version tag ships.
 
 One-time setup and the release command live in [docs/release-setup.md](../release-setup.md).
 

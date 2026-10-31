@@ -221,7 +221,7 @@ website-build: _website_setup
 website-run: _website_setup
 	npm run dev --prefix website
 
-## website-test: Check the shared prose pages and all generated local links.
+## website-test: Check the docs and blog pages and all generated local links.
 website-test: _website_setup
 	npm run lint --prefix website
 	npm test --prefix website

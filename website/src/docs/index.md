@@ -6,23 +6,24 @@ eleventyNavigation:
   key: Overview
   order: 1
 ---
-<!-- [WEB-CONTENT] Deliberately brief starter documentation. -->
-Reusable Rust components for building language servers, with shared infrastructure for LSP and MCP.
-
-[Explore the prose example →](/docs/prose/)
+<!-- [WEB-CONTENT] Starter documentation: overview, setup, crates, profiler. -->
+lspkit is a set of Rust crates for building language servers. Your analysis runs once, in one engine, and both an LSP server and an MCP server read from it.
 
 ## One engine
 
-`EngineApi` defines the shared analysis boundary. Reports carry a generation, so consumers can identify the state behind an answer.
+`EngineApi` is the boundary between your analysis and the protocols. Every report carries a generation number, so a client always knows which state of the workspace produced an answer.
 
 ## Two surfaces
 
-The language server and MCP adapter consume the same engine. Keep protocol handling at the edges and analysis in one place.
+The LSP server and the MCP adapter consume the same engine. Protocol handling stays at the edges; analysis lives in one place.
 
 ## Shared plumbing
 
-Use the toolkit's file tracking, configuration, transport and profiling components where they fit your server.
+File tracking, configuration, sidecar processes, tree-sitter parsing, transport and profiling are ready-made. Use the parts that fit your server.
 
-[Read the architectural field note →](/blog/one-engine/)
+## Next steps
 
-[Explore the source and setup instructions ↗](https://github.com/Nimblesite/lspkit)
+- [Getting started](/docs/getting-started/): add the crates and implement `EngineApi`.
+- [Crates](/docs/crates/): what each crate and feature provides.
+- [Profiler](/docs/profiler/): CPU and memory profiling for any language server.
+- [The architectural field note](/blog/one-engine/): why one engine serves two surfaces.

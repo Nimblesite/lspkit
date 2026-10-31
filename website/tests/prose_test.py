@@ -2,12 +2,14 @@
 
 from html.parser import HTMLParser
 from pathlib import Path
+import shutil
 import subprocess
 import unittest
 from urllib.parse import unquote, urlsplit
 
 SITE = Path(__file__).resolve().parents[1]
 OUTPUT = SITE / "_site"
+DOCS = ("docs/getting-started", "docs/crates", "docs/profiler", "docs/examples")
 
 
 class Document(HTMLParser):
@@ -26,6 +28,7 @@ class Document(HTMLParser):
 class ProsePages(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        shutil.rmtree(OUTPUT, ignore_errors=True)
         subprocess.run(["npm", "run", "build"], cwd=SITE, check=True)
 
     def check_page(self, path):
@@ -55,21 +58,48 @@ class ProsePages(unittest.TestCase):
                 ids = [attrs.get("id") for _, attrs in Document(target).elements]
                 self.assertIn(unquote(url.fragment), ids, (path, value))
 
-    def test_docs_blog_and_prose_examples_share_a_complete_reading_surface(self):
+    def test_docs_and_blog_share_a_complete_reading_surface(self):
         docs = self.check_page(OUTPUT / "docs/index.html")
-        self.assertIn("/docs/prose/", [a.get("href") for a in docs.attributes("a")])
+        links = [a.get("href") for a in docs.attributes("a")]
+        for route in DOCS:
+            self.assertIn(f"/{route}/", links)
         for route in ("docs/prose", "prose"):
+            self.assertFalse((OUTPUT / route).exists(), route)
+        for route, tags in (("docs/getting-started", ("h2", "ul", "pre", "code")), ("docs/crates", ("h2", "table", "pre")), ("docs/profiler", ("h2", "ul", "ol", "pre"))):
             page = self.check_page(OUTPUT / route / "index.html")
-            for tag in ("h2", "h3", "h4", "ul", "ol", "blockquote", "pre", "code", "table", "figure", "figcaption", "details"):
+            for tag in tags:
                 self.assertTrue(page.attributes(tag), (route, tag))
-            self.assertTrue(page.attributes("table")[0].get("aria-label"), route)
+        examples = self.check_page(OUTPUT / "docs/examples/index.html")
+        videos = examples.attributes("video")
+        self.assertEqual(len(videos), 3)
+        for video in videos:
+            self.assertTrue(video.get("poster", "").startswith("https://"))
+            self.assertTrue(video.get("aria-label"))
+        self.assertEqual(len(examples.attributes("track")), 3)
+        self.assertGreaterEqual(len(examples.attributes("img")), 6)
+        hrefs = [a.get("href") for a in examples.attributes("a")]
+        for link in ("https://sharplsp.dev/docs/profiler/", "https://www.ospreylang.dev/docs/tutorials/profiler/"):
+            self.assertIn(link, hrefs)
+        for route in ("docs", *DOCS, "blog/one-engine"):
+            page = Document(OUTPUT / route / "index.html")
+            for video in page.attributes("video"):
+                self.assertTrue(video.get("poster", "").startswith("https://"), route)
+                self.assertTrue(video.get("aria-label"), route)
+            for source in page.attributes("source"):
+                self.assertTrue(source["src"].startswith("https://"), route)
+            media = [a for a in page.attributes("img") if a.get("src") != "/assets/images/engine.svg"]
+            self.assertTrue(page.attributes("video") or media, (route, "needs a video or screenshot"))
+            self.assertTrue(media, (route, "needs a screenshot"))
         for path in OUTPUT.rglob("*.html"):
             self.check_links(path, self.check_page(path))
+        home = self.check_page(OUTPUT / "index.html")
+        self.assertEqual(len(home.attributes("video")), 1, "Homepage leads with the profiler running")
+        self.assertIn("/docs/examples/", [a.get("href") for a in home.attributes("a")])
         blog = Document(OUTPUT / "blog/index.html")
         self.assertIn("/blog/one-engine/", [a.get("href") for a in blog.attributes("a")])
 
     def test_reading_pages_have_header_images_and_explicit_prose_classes(self):
-        for route in ("docs", "docs/prose", "prose", "blog/one-engine"):
+        for route in ("docs", *DOCS, "blog/one-engine"):
             page = Document(OUTPUT / route / "index.html")
             classes = [attrs.get("class", "").split() for _, attrs in page.elements]
             self.assertTrue(any("prose" in names for names in classes), route)

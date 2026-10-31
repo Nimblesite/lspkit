@@ -1,33 +1,44 @@
 ---
 layout: post.njk
-title: Build the engine. Share the intelligence.
-description: A small architectural idea that keeps language tools working from the same picture.
+title: Build an MCP server and a language server from one Rust engine.
+description: How to give Claude Code, Cursor and Codex the same live code intelligence as your VS Code extension, with one Rust engine behind an MCP server and a language server.
 date: 2026-10-31
 author: lspkit
-tags: [posts, architecture]
+tags: [posts, mcp-server, language-server-protocol, rust, vscode-extension]
 category: field-notes
-excerpt: One source of analysis. Two ways to use it. A quieter foundation for developer tools.
+excerpt: Your editor speaks the Language Server Protocol. Claude Code, Cursor and Codex speak MCP. lspkit serves both from one Rust engine, and profiles it too.
 ---
-<!-- [WEB-CONTENT] The single example journal post. -->
-The editor and the assistant should see the same project. That sounds obvious, until each grows its own caches, background jobs and interpretation of what changed.
+<!-- [WEB-CONTENT] [WEB-SEO-KEYWORDS] Keywords from Google Trends, 12 months to 2026-10: "mcp server", "what is mcp server", "claude code", "cursor", "codex", "language server protocol", "rust language server", "vscode extension", "memory leak". -->
+Your VS Code extension talks to a **language server** over the **Language Server Protocol** (LSP). AI coding agents such as **Claude Code**, **Cursor** and **Codex** talk to tools over the **Model Context Protocol** (MCP). If you build developer tools, you now need both, and they should give the same answers.
 
-## Start with one source of truth
+## What is an MCP server?
 
-In lspkit, a shared engine owns analysis. The language server and the MCP surface consume it. A change enters once; the resulting knowledge can serve both.
+An MCP server exposes tools and data to an AI agent over a small JSON-RPC protocol. Where a language server answers "what's the type at this cursor?" for an editor, an MCP server answers "find every caller of this function" for an agent. Both need the same thing underneath: a live, accurate model of the code.
 
-The diagram above is the whole idea: one engine at the centre, with two distinct interfaces connected to the same foundation.
+## The trap: two pipelines
 
-## Make freshness explicit
+The obvious build is a language server with its own caches, then an MCP server bolted on with another set. Now two pipelines parse the same files, watch the same folders and drift apart. The agent sees stale results the editor has already fixed.
 
-An analysis result carries a generation. Consumers can tell which state produced it, rather than guessing whether a cached answer is still current. Cancellation and progress belong at this shared boundary too.
+## One engine, two surfaces
 
-> A useful abstraction makes the important thing visible.
+lspkit puts analysis behind one Rust trait, `EngineApi`. The `lspkit-server` crate serves it over LSP to VS Code; its `mcp` feature serves the same engine over MCP to Claude Code, Cursor or Codex.
 
-## Leave room for the interesting work
+```sh
+cargo add lspkit lspkit-server --features lspkit-server/mcp
+```
 
-Framing messages, tracking open files and coordinating background work are necessary infrastructure. Sharing those pieces leaves more room for the language-specific features people actually use.
+Every report carries a **generation** number, so the editor and the agent can both tell which state of the workspace produced an answer. Cancellation and progress live at the same boundary, so a slow query from the agent never blocks the editor.
 
-That's the starting point. A small foundation, with room to build.
+## Find the memory leak before your users do
 
-[Explore the toolkit →](/docs/)
+Long-running language servers leak. lspkit ships `lsp-profiler`, a CPU and memory profiler that runs inside VS Code: hot lines painted in your source, a flame graph beside it, and a live heap timeline that ranks **memory leak** suspects. [SharpLsp](https://sharplsp.dev/docs/profiler/) uses it for C# and F#; [Osprey](https://www.ospreylang.dev/docs/tutorials/profiler/) uses it for a native functional language. [Watch both on the examples page](/docs/examples/).
 
+{% video "sharplsp-leak" %}
+
+{% shots "sharplsp-leaks", "osprey-heatmap" %}
+
+## Start building
+
+- [Getting started](/docs/getting-started/): add the crates and implement `EngineApi`.
+- [Crates](/docs/crates/): what each crate and feature gives you.
+- [Source on GitHub ↗](https://github.com/Nimblesite/lspkit)

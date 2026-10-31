@@ -10,13 +10,19 @@ title: lspkit — One engine. Every surface.
       <h1 id="hero-title">One engine.<br><span>Every surface.</span></h1>
     </div>
     <div class="hero-aside">
-      <p>Good tools start with solid foundations. Shared infrastructure for language servers, built to get out of your way.</p>
-      <a class="text-link" href="/docs/">Explore the toolkit <span aria-hidden="true">↗</span></a>
+      <p>Write your language analysis once, as one Rust trait. lspkit serves it to your VS Code extension over the Language Server Protocol and to Claude Code, Cursor and Codex as an MCP server. Find the hot path and the memory leak with a profiler built into VS Code.</p>
+      <a class="text-link" href="/docs/getting-started/">Get started <span aria-hidden="true">↗</span></a>
     </div>
+  </section>
+  <section class="prose home-proof" aria-labelledby="proof-heading">
+    <h2 id="proof-heading">See it running.</h2>
+    <p>SharpLsp and Osprey ship the lspkit profiler in VS Code today: hot lines in the source, a flame graph beside it, and ranked memory leak suspects. <a href="/docs/examples/">See both examples</a>.</p>
+    {% video "sharplsp-profiler" %}
+    {% shots "sharplsp-heatmap", "osprey-heatmap" %}
   </section>
   <figure class="engineering-plate">
     <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange engine connects through precise circuit paths to two dark terminal surfaces, representing LSP and MCP.">
-    <figcaption><span>FIG. A — Shared foundations, connected surfaces.</span><span>LSP / MCP / RUST</span></figcaption>
+    <figcaption><span>FIG. A — One engine, two surfaces.</span><span>LSP / MCP / PROFILER</span></figcaption>
   </figure>
   <section class="journal-preview" aria-labelledby="journal-heading">
     <div class="section-heading"><h2 id="journal-heading">From the workbench.</h2><a class="text-link" href="/blog/">All notes <span aria-hidden="true">↗</span></a></div>

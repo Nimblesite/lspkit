@@ -37,7 +37,8 @@ h3 { font-size: 25px; line-height: 1.25; letter-spacing: -.025em; }
 .site-header { background: var(--color-bg); border-bottom: 1px solid var(--color-border); }
 .nav { min-height: var(--header-height); padding: 20px 32px; }
 .logo { display: flex; align-items: center; gap: 12px; font-size: 29px; font-weight: 800; letter-spacing: -.06em; text-decoration: none; }
-.logo::before { content: ""; width: 18px; height: 18px; background: var(--color-primary); }
+.logo::before { content: ""; flex: 0 0 44px; width: 44px; height: 44px; background: url("/assets/images/logo.png") center / contain no-repeat; }
+[data-theme="dark"] .logo::before { background-color: #f4f1e9; background-size: 40px; border-radius: 6px; }
 .nav-links { margin-left: auto; gap: 32px; }
 .nav-link { display: inline-flex; min-height: 44px; align-items: center; font-size: 14px; text-decoration: none; }
 .nav-link.active { color: var(--color-primary); text-decoration: underline; }
@@ -134,7 +135,17 @@ main > .blog-post, .article-shell { width: 100%; max-width: 960px; margin-inline
 .prose :is(th, td) { padding: 16px; vertical-align: top; border-bottom: 1px solid var(--color-border); }
 .prose thead { background: var(--color-panel); }
 .prose img { display: block; max-width: 100%; height: auto; }
+/* [WEB-EXAMPLES] Example videos and screenshot grid. */
+.home-proof { max-width: none; padding: 48px 0; border-top: 1px solid var(--color-border); }
+.prose .example-video { margin: 32px 0; }
+.prose video { display: block; width: 100%; height: auto; background: var(--color-panel); border: 1px solid var(--color-border); }
+.prose .example-shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 32px 0; }
+.prose .example-shots img { border: 1px solid var(--color-border); }
+.prose .example-shots figure:only-child { grid-column: 1 / -1; }
+@media (max-width: 768px) { .prose .example-shots { grid-template-columns: 1fr; } }
 .prose figcaption { margin-top: 12px; color: var(--color-muted); font: 12px/1.6 var(--font-mono); }
+.prose .example-project { display: block; margin-bottom: 4px; color: var(--color-text); font: 15px/1.5 Arial, Helvetica, sans-serif; text-decoration: none; }
+.prose .example-project strong { color: var(--color-primary); }
 .prose hr { margin-block: 40px; border: 0; border-top: 1px solid var(--color-border); }
 .prose details { padding: 16px 20px; border-block: 1px solid var(--color-border); }
 .prose summary { cursor: pointer; font-weight: bold; min-height: 44px; padding-block: 8px; }

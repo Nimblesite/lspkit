@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <title>lspkit — Syntax tree</title>
-  <path d="M32 18v15M12 45V33h40v12" stroke="#202720" stroke-width="6"/>
-  <path d="M23 3h18v18H23z" fill="#ad321e"/>
-  <path d="M4 43h16v16H4zM44 43h16v16H44z" fill="#202720"/>
-</svg>

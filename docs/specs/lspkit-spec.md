@@ -153,7 +153,7 @@ A patch is acceptable iff:
 2. `cargo test --workspace` runs to completion.
 3. `cargo doc --workspace --no-deps` produces docs with zero `missing_docs` warnings.
 4. `cargo clippy --workspace -- -D warnings` is clean.
-5. `rg -i -e 'basilisk' -e 'deslop' -e 'sharplsp' -e 'lql' -e 'tower-lsp' -e 'roslyn' -e 'pyright' crates/ README.md` returns **zero hits**.
+5. `rg -i -e 'basilisk' -e 'deslop' -e 'sharplsp' -e 'lql' -e 'tower-lsp' -e 'roslyn' -e 'pyright' crates/` returns **zero hits**. The crates stay generic; the README and website name consumers only as showcased examples.
 6. `grep -R 'tower_lsp\|rmcp::' crates/*/src/lib.rs` returns **zero hits** in `pub` signatures (manual review against the rule).
 7. The `EngineApi` trait skeleton compiles and is exercised by a smoke test that constructs a no-op implementation and calls each method.
 8. Each of the four source repos has a "Migration to `lspkit`" section in its AI-guidance file.

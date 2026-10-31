@@ -1,0 +1,149 @@
+{
+  "projects": {
+    "sharplsp": {
+      "name": "SharpLsp",
+      "url": "https://sharplsp.dev",
+      "blurb": "C# and F# language server for VS Code"
+    },
+    "osprey": {
+      "name": "Osprey",
+      "url": "https://www.ospreylang.dev",
+      "blurb": "native functional language with a VS Code extension"
+    }
+  },
+  "videos": {
+    "sharplsp-profiler": {
+      "base": "https://sharplsp.dev/assets/videos/profiler-csharp",
+      "webm": true,
+      "captions": true,
+      "width": 1920,
+      "height": 1200,
+      "label": "Profiling a C# app in VS Code with SharpLsp: CPU heat on hot lines, a flame graph and live memory tracking",
+      "caption": "SharpLsp profiling a real .NET app in VS Code.",
+      "page": "https://sharplsp.dev/docs/profiler/",
+      "project": "sharplsp"
+    },
+    "sharplsp-cpu": {
+      "base": "https://sharplsp.dev/assets/videos/profiler-cpu-recording",
+      "webm": false,
+      "captions": false,
+      "width": 1920,
+      "height": 1200,
+      "label": "Unedited screen recording of a CPU profiling session in VS Code",
+      "caption": "Unedited, in real time: Profile CPU on a running process, then the results open.",
+      "page": "https://sharplsp.dev/docs/profiler/",
+      "project": "sharplsp"
+    },
+    "sharplsp-memory": {
+      "base": "https://sharplsp.dev/assets/videos/profiler-memory-timelapse",
+      "webm": false,
+      "captions": false,
+      "width": 1920,
+      "height": 1200,
+      "label": "Screen recording of memory tracking in VS Code at three times speed",
+      "caption": "Memory tracking, sped up three times: the heap timeline climbs and leak suspects appear.",
+      "page": "https://sharplsp.dev/docs/profiler/",
+      "project": "sharplsp"
+    },
+    "sharplsp-leak": {
+      "base": "https://sharplsp.dev/assets/videos/profiler-fix-memory-leak",
+      "webm": true,
+      "captions": true,
+      "width": 1920,
+      "height": 1200,
+      "label": "Fixing a C# memory leak in VS Code with the SharpLsp memory profiler, from leak suspects to the retaining path",
+      "caption": "Finding and fixing a memory leak in a running C# app.",
+      "page": "https://sharplsp.dev/docs/memory-leaks/",
+      "project": "sharplsp"
+    },
+    "sharplsp-fsharp": {
+      "base": "https://sharplsp.dev/assets/videos/profiler-fsharp",
+      "webm": true,
+      "captions": true,
+      "width": 1920,
+      "height": 1200,
+      "label": "Profiling an F# app in VS Code with SharpLsp, from hot pipeline stages to leaks",
+      "caption": "The same profiler on F#: pipeline stages keep their compiler names.",
+      "page": "https://sharplsp.dev/docs/fsharp-profiling/",
+      "project": "sharplsp"
+    },
+    "osprey-profiler": {
+      "base": "https://www.ospreylang.dev/assets/videos/osprey-profiler",
+      "poster": "https://www.ospreylang.dev/assets/videos/osprey-profiler-poster.jpg",
+      "webm": false,
+      "captions": true,
+      "width": 1920,
+      "height": 1080,
+      "label": "Profiling Osprey in VS Code: CPU, memory and leaks",
+      "caption": "Osprey's VS Code extension running the lspkit profiler.",
+      "page": "https://www.ospreylang.dev/docs/tutorials/profiler/",
+      "project": "osprey"
+    }
+  },
+  "shots": {
+    "sharplsp-processes": {
+      "src": "https://sharplsp.dev/assets/screenshots/profiler/profiler-processes.webp",
+      "width": 2400,
+      "height": 1500,
+      "alt": "SharpLsp sidebar with the Processes view listing a running .NET process with Profile CPU and Track Memory actions",
+      "caption": "Processes view: profile any running process.",
+      "project": "sharplsp"
+    },
+    "sharplsp-heatmap": {
+      "src": "https://sharplsp.dev/assets/screenshots/profiler/profiler-heatmap.webp",
+      "width": 2400,
+      "height": 1500,
+      "alt": "CheckoutPipeline.cs with inline heat bars: ParseCatalog 66.8 percent, PriceBasket 25.1 percent, RenderInvoice 7.6 percent",
+      "caption": "Hot lines, painted in the source.",
+      "project": "sharplsp"
+    },
+    "sharplsp-results": {
+      "src": "https://sharplsp.dev/assets/screenshots/profiler/profiler-results.webp",
+      "width": 2400,
+      "height": 1500,
+      "alt": "SharpLsp Profiler results panel with summary cards, an embedded flame graph and the hot functions table",
+      "caption": "Results panel, flame graph and hot functions.",
+      "project": "sharplsp"
+    },
+    "sharplsp-flamegraph": {
+      "src": "https://sharplsp.dev/assets/screenshots/profiler/profiler-flamegraph-zoom.webp",
+      "width": 2400,
+      "height": 393,
+      "alt": "Flame graph zoomed into ParseCatalog, showing the System.Text.Json deserialization stack",
+      "caption": "Zoom the flame graph into one call.",
+      "project": "sharplsp"
+    },
+    "sharplsp-memory": {
+      "src": "https://sharplsp.dev/assets/screenshots/profiler/profiler-memory.webp",
+      "width": 2400,
+      "height": 1500,
+      "alt": "Memory dashboard with a steadily climbing heap timeline flagged as a possible leak, beside SessionCache.cs",
+      "caption": "Live heap timeline.",
+      "project": "sharplsp"
+    },
+    "sharplsp-leaks": {
+      "src": "https://sharplsp.dev/assets/screenshots/profiler/profiler-leaks.webp",
+      "width": 2400,
+      "height": 1500,
+      "alt": "Suspected leaks ranked HIGH with growth in megabytes and object counts, and an inline leak marker on the CustomerSession declaration",
+      "caption": "Ranked leak suspects, marked in the source.",
+      "project": "sharplsp"
+    },
+    "osprey-heatmap": {
+      "src": "/assets/images/examples/osprey-heatmap.webp",
+      "width": 1276,
+      "height": 714,
+      "alt": "busy.osp in VS Code with inline heat bars: collatz 76.4 percent, longest 73.0 percent, fib 22.5 percent",
+      "caption": "Heat on Osprey source.",
+      "project": "osprey"
+    },
+    "osprey-flamegraph": {
+      "src": "/assets/images/examples/osprey-flamegraph.webp",
+      "width": 1276,
+      "height": 714,
+      "alt": "Osprey Profiler panel: 812 samples over 8 seconds, 5 functions, 6 hot lines, above a left-heavy flame graph",
+      "caption": "Osprey results panel and flame graph.",
+      "project": "osprey"
+    }
+  }
+}

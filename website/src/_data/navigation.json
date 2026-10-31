@@ -3,7 +3,7 @@
     { "text": "Docs", "url": "/docs/" },
     { "text": "Journal", "url": "/blog/" }
   ],
-  "footer": [{ "title": "Tools for thoughtful engineering.", "items": [
+  "footer": [{ "title": "One engine. Every surface.", "items": [
     { "text": "GitHub ↗", "url": "https://github.com/Nimblesite/lspkit" }
   ] }]
 }

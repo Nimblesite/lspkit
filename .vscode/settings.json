@@ -1,0 +1,19 @@
+{
+  // [WEB-DESIGN-COLOR] Fieldwork tokens: vermilion signal, ink, paper.
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#ad321e",
+    "titleBar.activeForeground": "#f4f1e9",
+    "titleBar.inactiveBackground": "#202720",
+    "titleBar.inactiveForeground": "#f4f1e9cc",
+    "activityBar.background": "#202720",
+    "activityBar.foreground": "#f4f1e9",
+    "activityBar.inactiveForeground": "#b3b9ac",
+    "activityBar.activeBorder": "#ff997f",
+    "activityBarBadge.background": "#e34b31",
+    "activityBarBadge.foreground": "#f4f1e9",
+    "statusBar.background": "#202720",
+    "statusBar.foreground": "#f4f1e9",
+    "statusBarItem.remoteBackground": "#ad321e",
+    "statusBarItem.remoteForeground": "#f4f1e9"
+  }
+}

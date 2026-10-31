@@ -1,5 +1,22 @@
 # Website sketch
 
+## Responsive prose follow-up [WEB-ACCESS-PROSE]
+
+- [x] Inspect techdoc layouts and identify missing shared prose coverage and off-canvas mobile docs navigation.
+- [x] Add and run a failing generated-site regression for prose examples and navigable docs/blog pages: missing `/docs/prose/` link reproduced before the fix.
+- [x] Apply shared `.prose` styling, in-flow mobile docs navigation, header illustrations and linked docs/standalone specimens from one Markdown source.
+- [ ] Run regression, lint, build and repository tests; record environment limits.
+- [ ] Review duplication and remove temporary build output.
+
+Website checks: both generated-site regressions pass; Oxlint and `git diff --check` pass. The final Deslop scan found no website duplication clusters. CSS is 172 lines, below the 2,000-line budget. Browser viewport verification remains unavailable: the computer-use host reports no browsers or native apps. Kimi's read-only review identified overlapping mobile menus, long-token overflow, table containment and landscape menu scrolling; the changes address these without adding runtime JavaScript.
+
+Branch: `website` created directly from fetched `origin/main`; all pending changes are website-related. The previous `updates` tree matches `origin/main` exactly.
+
+- [x] Remove the Atom subscription footer link [WEB-CONTENT]: the plugin generates URL-encoded article markup instead of HTML content and omits feed/entry authors. Feed generation remains upstream; the footer no longer promotes it.
+
+- [x] Add root `website-build` and `website-run` Make targets with shared locked dependency setup [WEB-CONTENT].
+- [x] Verify the Make build, Oxlint, and HTTP response from the Make development server; stop the verification server afterward.
+
 - [x] Read the repository spec and techdoc package contract.
 - [x] Define the design system [WEB-DESIGN].
 - [x] Build the Eleventy shell and one illustrated example post [WEB-CONTENT].

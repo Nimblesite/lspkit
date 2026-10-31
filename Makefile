@@ -5,6 +5,7 @@
 # =============================================================================
 
 .PHONY: build test lint fmt clean ci setup help doc profiler-ui profiler-ui-test
+.PHONY: website-build website-run _website_setup
 
 # ---------------------------------------------------------------------------
 # OS Detection
@@ -111,6 +112,8 @@ help:
 	@echo "  doc    - Build cargo workspace documentation (no deps)"
 	@echo "  profiler-ui      - Build the profiler's VS Code UI package"
 	@echo "  profiler-ui-test - Test the profiler UI package against a mock server"
+	@echo "  website-build    - Install dependencies and build the Eleventy website"
+	@echo "  website-run      - Install dependencies and serve the website locally"
 
 # ---------------------------------------------------------------------------
 # Private sub-recipes (NOT in .PHONY public list; underscore-prefixed)
@@ -205,3 +208,15 @@ profiler-ui:
 ## profiler-ui-test: Test the UI library against a mock language server.
 profiler-ui-test: profiler-ui
 	cd packages/lsp-profiler-ui && npm test
+
+# [WEB-CONTENT] Share dependency setup; npm owns the build and dev commands.
+_website_setup:
+	npm ci --prefix website --no-audit --no-fund
+
+## website-build: Build the static website into website/_site.
+website-build: _website_setup
+	npm run build --prefix website
+
+## website-run: Serve the website with live reload at http://localhost:8080.
+website-run: _website_setup
+	npm run dev --prefix website

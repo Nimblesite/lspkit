@@ -49,6 +49,9 @@ Only a crate owner can delete a crate. Use the Settings → Delete crate page on
 - [x] Update every `use lspkit_*` path in this repo, its tests, docs, skills and `coverage-thresholds.json`. Each absorbed crate keeps its floor as a `<crate>::<module>` key (e.g. `lspkit::vfs`), which `_coverage_check` now gates.
 - [ ] Update the consumers (SharpLsp, Deslop, Basilisk, lql-lsp-rust) to the new paths.
 - [x] Cut the `[REL-ORDER]` publish list in `release.yml`, [publishing-plan.md](publishing-plan.md) and the release setup doc to `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`.
-- [ ] Confirm `make ci` is green and `cargo package --workspace --locked` verifies all 4 published crates. `cargo package` verifies all 4 (2026-10-31). `make ci` is still red on macOS from issues that predate this change: 7 oxlint residuals in `packages/`, `diagnostic_reference unrepresentable` (APFS rejects the `\xff` filename), and `lspkit-server::live` at 92.23% < 94% (the uncovered watcher rescan and `Access` paths are Linux inotify events). Needs a green Linux CI run on the PR.
+- [x] `cargo package --workspace --locked` verifies all 4 published crates (2026-10-31).
+- [x] `diagnostic_reference unrepresentable` runs on Linux; on Apple, a sibling test asserts that APFS refuses the non-UTF-8 name (`EILSEQ`).
+- [ ] Fix the 8 oxlint residuals in `packages/` (Kimi pi agent in progress).
+- [ ] Confirm `make ci` is green on the PR's Linux CI. On macOS, `lspkit-server::live` stays at 92.23% < 94%: the uncovered watcher lines are the inotify `Access` and rescan paths plus race-only drop paths.
 - [ ] Ship the first tagged release (see [publishing-plan.md](publishing-plan.md)).
 - [ ] Retire the old names per `[CRATE-RETIRE]`: delete 5 crates on crates.io, and yank and deprecate `lspkit-vfs`.

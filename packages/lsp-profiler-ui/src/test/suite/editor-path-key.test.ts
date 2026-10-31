@@ -55,22 +55,23 @@ suite("Editor source paths across symlinks and junctions", () => {
 
   test("a linked project and its canonical source share the heat-map key", async () => {
     await linkProject(source, linked);
-    const key = pathKeyer();
+    const files = FIXTURE_FILES.flatMap((name) => [path.join(source, name), path.join(linked, name)]);
+    const key = await pathKeyer(files);
     await Promise.all(
       FIXTURE_FILES.map(async (name) => {
         const original = path.join(source, name);
         const alias = path.join(linked, name);
         assert.ok(await exists(alias), "the test opens a real project through its link");
         assert.equal(key(alias), key(original), "both producers must match the same file");
-        assert.equal(key(alias), editorPathKey(await fs.realpath(original)));
+        assert.equal(key(alias), await editorPathKey(await fs.realpath(original)));
       }),
     );
   });
 
-  test("a deleted source falls back to a stable resolved key", () => {
+  test("a deleted source falls back to a stable resolved key", async () => {
     const absent = path.join(temporary, "deleted.cs");
-    assert.equal(editorPathKey(absent), editorPathKey(path.join(temporary, ".", "deleted.cs")));
-    assert.notEqual(editorPathKey(absent), editorPathKey(path.join(temporary, "other.cs")));
+    assert.equal(await editorPathKey(absent), await editorPathKey(path.join(temporary, ".", "deleted.cs")));
+    assert.notEqual(await editorPathKey(absent), await editorPathKey(path.join(temporary, "other.cs")));
   });
 
   test("removing the link leaves the project it linked to in place", async () => {

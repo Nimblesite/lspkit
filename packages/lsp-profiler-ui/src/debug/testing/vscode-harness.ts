@@ -89,29 +89,27 @@ export interface SessionWaiters<TSession extends DebugSessionHandle> {
   waitForDebugSessionEnd: (timeoutMs?: number, sessionId?: string) => Promise<void>;
 }
 
-/** The timeout handle, held so the start listener can cancel it. */
-interface StartTimeout {
-  handle?: NodeJS.Timeout;
-}
-
 /** Resolve with the next started session, rejecting on timeout. */
 async function startSession<TSession extends DebugSessionHandle>(
   api: VscodeSessionApi<TSession>,
   timeoutMs: number,
 ): Promise<TSession> {
-  const session = await new Promise<TSession>((resolve, reject) => {
-    const timeout: StartTimeout = {};
-    const subscription = api.onDidStartDebugSession((started) => {
-      clearTimeout(timeout.handle);
-      subscription.dispose();
-      resolve(started);
+  const started: TSession[] = [];
+  const subscription = api.onDidStartDebugSession((session) => { started.push(session); });
+  try {
+    const first = await pollUntilResult({
+      fn: (): PromiseLike<TSession | undefined> => Promise.resolve(started.at(0)),
+      predicate: (session) => session !== undefined,
+      timeoutMs,
+      intervalMs: SESSION_POLL_INTERVAL_MS,
     });
-    timeout.handle = setTimeout(() => {
-      subscription.dispose();
-      reject(new Error(`Debug session did not start within ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-  return session;
+    if (first === undefined) {
+      throw new Error(`Debug session did not start within ${timeoutMs}ms`);
+    }
+    return first;
+  } finally {
+    subscription.dispose();
+  }
 }
 
 /** True when the (matching) session is no longer the active one. */

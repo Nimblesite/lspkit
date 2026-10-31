@@ -1,5 +1,5 @@
 // Implements [PROF-UI-CPU]. Existing SVG export preview.
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { Logger } from "./logger";
 
 const MAX_INLINE_SVG_BYTES = 4_194_304;
@@ -10,12 +10,12 @@ const MAX_INLINE_SVG_BYTES = 4_194_304;
  * Returns undefined when there is no SVG, it cannot be read, or it is too large
  * to inline — the panel then simply omits the hero (the tables still work).
  */
-export function loadFlamegraphSvgDataUri(flamegraphPath: string | undefined): string | undefined {
+export async function loadFlamegraphSvgDataUri(flamegraphPath: string | undefined): Promise<string | undefined> {
   if (flamegraphPath === undefined || flamegraphPath === "") {
     return undefined;
   }
   try {
-    const svg = readFileSync(flamegraphPath);
+    const svg = await readFile(flamegraphPath);
     if (svg.byteLength === 0 || svg.byteLength > MAX_INLINE_SVG_BYTES) {
       return undefined;
     }

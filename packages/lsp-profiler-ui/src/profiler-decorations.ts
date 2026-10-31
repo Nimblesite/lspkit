@@ -17,7 +17,7 @@ import type { SampledView } from "./sampled-view";
 import * as vscode from "vscode";
 import { configSection } from "./ids";
 import { Logger } from "./logger";
-import { pathKeyer } from "./editor-path-key";
+import { groupByFile, rowAndEditorKeyer } from "./editor-path-key";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -171,23 +171,6 @@ function getDecorationTypeForColor(color: string): vscode.TextEditorDecorationTy
  * Apply inline heat map decorations to all visible editors based on
  * profiling results.
  */
-/** Group items by normalised file path (see `pathKey`) into a map. */
-function groupByFile<Item extends { file: string }>(
-  items: Item[],
-  keyOf: (file: string) => string,
-): Map<string, Item[]> {
-  const grouped = new Map<string, Item[]>();
-  for (const item of items) {
-    const key = keyOf(item.file);
-    const existing = grouped.get(key);
-    if (existing === undefined) {
-      grouped.set(key, [item]);
-    } else {
-      existing.push(item);
-    }
-  }
-  return grouped;
-}
 
 /** Add a decoration option to the color-keyed options map. */
 function addDecorationOption(
@@ -265,16 +248,22 @@ interface HeatByFile {
   readonly funcs: Map<string, LocatedHotFunction[]>;
 }
 
-export function applyProfileDecorations(result: ProfileResult): void {
+/** Group the result's located heat by the key of each file it names. */
+async function heatByFile(result: ProfileResult, editors: readonly vscode.TextEditor[]): Promise<HeatByFile> {
+  // An unlocated frame stays in the results table but paints no line.
+  const located = result.hotFunctions.filter(isLocated);
+  const keyOf = await rowAndEditorKeyer([...result.hotLines, ...located], editors);
+  return { keyOf, lines: groupByFile(result.hotLines, keyOf), funcs: groupByFile(located, keyOf) };
+}
+
+export async function applyProfileDecorations(result: ProfileResult): Promise<void> {
   if (!vscode.workspace.getConfiguration(configSection()).get<boolean>("profiler.showInlineHeatMap", true)) {
     Logger.info("Profiler heat map disabled — skipping decorations");
     return;
   }
   clearProfileDecorations();
-  const keyOf = pathKeyer();
-  // An unlocated frame stays in the results table but paints no line.
-  const heat: HeatByFile = { keyOf, lines: groupByFile(result.hotLines, keyOf), funcs: groupByFile(result.hotFunctions.filter(isLocated), keyOf) };
   const editors = vscode.window.visibleTextEditors;
+  const heat = await heatByFile(result, editors);
   for (const editor of editors) { decorateEditor(editor, heat); }
   // Count what was PAINTED, not what the profile held: a profile full of hot
   // lines that matches no open editor used to log exactly like a successful

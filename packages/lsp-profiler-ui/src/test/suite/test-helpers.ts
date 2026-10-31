@@ -160,8 +160,8 @@ export async function setupLspTestSuite(tmpDirPrefix: string): Promise<{ tmpDir:
   return { tmpDir, hotFile };
 }
 
-export function teardownLspTestSuite(tmpDir: string): void {
-  removeTestDir(tmpDir);
+export async function teardownLspTestSuite(tmpDir: string): Promise<void> {
+  await removeTestDir(tmpDir);
 }
 
 /** A detached host for store-level tests: no client, no debuggee, `lspui` identity. */

@@ -19,7 +19,7 @@
  */
 
 import path from "node:path";
-import * as fs from "node:fs";
+import { realpath } from "node:fs/promises";
 
 /**
  * Key a path for cross-producer comparison.
@@ -27,9 +27,16 @@ import * as fs from "node:fs";
  * Windows paths are case-insensitive, so folding case there is sound; POSIX
  * paths are case-SENSITIVE, so it must not fold there.
  */
-export function editorPathKey(file: string): string {
-  const canonical = canonicalPath(file);
+export async function editorPathKey(file: string): Promise<string> {
+  return foldCase(await canonicalPath(file));
+}
+
+function foldCase(canonical: string): string {
   return process.platform === "win32" ? canonical.toLowerCase() : canonical;
+}
+
+async function keyEntry(file: string): Promise<[string, string]> {
+  return [file, await editorPathKey(file)];
 }
 
 /**
@@ -42,16 +49,16 @@ export function editorPathKey(file: string): string {
  * in more than case, so `path.resolve` leaves them unequal and the overlay
  * matches nothing.
  *
- * `realpathSync.native` is what collapses the two spellings — it asks the
+ * `realpath` is what collapses the two spellings — it asks the
  * filesystem for the name it actually records. It therefore touches disk and
  * throws for a path that no longer exists, so a file that has since been
  * deleted falls back to the resolved-but-unexpanded form rather than taking the
  * whole decoration pass down with it. Callers memoise (see `pathKeyer`) so this
  * costs one lookup per distinct file, not one per hot line.
  */
-function canonicalPath(file: string): string {
+async function canonicalPath(file: string): Promise<string> {
   try {
-    return fs.realpathSync.native(file);
+    return await realpath(file);
   } catch {
     return path.resolve(file);
   }
@@ -64,14 +71,40 @@ function canonicalPath(file: string): string {
  * above hits the filesystem — so the same handful of paths would otherwise be
  * looked up hundreds of times. The cache is per-pass rather than module-level
  * so a file that moves between runs is never matched against a stale name.
+ * Every distinct file in `files` is resolved up front, so the returned lookup
+ * is pure; a file outside that set keys exactly as an unresolvable path does.
  */
-export function pathKeyer(): (file: string) => string {
-  const cache = new Map<string, string>();
-  return (file: string): string => {
-    const hit = cache.get(file);
-    if (hit !== undefined) { return hit; }
-    const key = editorPathKey(file);
-    cache.set(file, key);
-    return key;
-  };
+export async function pathKeyer(files: readonly string[]): Promise<(file: string) => string> {
+  const distinct = [...new Set(files)];
+  const cache = new Map<string, string>(await Promise.all(distinct.map(async (file) => keyEntry(file))));
+  return (file: string): string => cache.get(file) ?? foldCase(path.resolve(file));
+}
+
+/** The editor surface a decoration pass paints: only its document's path matters here. */
+export interface PathedEditor { readonly document: { readonly uri: { readonly fsPath: string } }; }
+
+/** A `pathKeyer` over a pass's located rows and the editors it will paint. */
+export async function rowAndEditorKeyer(
+  rows: readonly { readonly file: string }[],
+  editors: readonly PathedEditor[],
+): Promise<(file: string) => string> {
+  return pathKeyer([...rows.map(({ file }) => file), ...editors.map(({ document }) => document.uri.fsPath)]);
+}
+
+/** Group items by normalised file path (see `pathKey`) into a map. */
+export function groupByFile<Item extends { readonly file: string }>(
+  items: readonly Item[],
+  keyOf: (file: string) => string,
+): Map<string, Item[]> {
+  const grouped = new Map<string, Item[]>();
+  for (const item of items) {
+    const key = keyOf(item.file);
+    const existing = grouped.get(key);
+    if (existing === undefined) {
+      grouped.set(key, [item]);
+    } else {
+      existing.push(item);
+    }
+  }
+  return grouped;
 }

@@ -23,27 +23,27 @@ export function clearLastProfileResult(): void {
 }
 
 /** Keep `result` as the last one and paint its heat on the editors. */
-function keepResult(result: ProfileResult): void {
+async function keepResult(result: ProfileResult): Promise<void> {
   lastProfile.result = result;
-  applyProfileDecorations(result);
+  await applyProfileDecorations(result);
 }
 
 /** Keep and present a stop result, when the server returned one. */
-export function presentStopResult(result: ProfileResult | undefined): void {
+export async function presentStopResult(result: ProfileResult | undefined): Promise<void> {
   if (result === undefined) { return; }
-  keepResult(result);
+  await keepResult(result);
   // Land the user on the self-contained results panel, beside the
   // heat-mapped source; the raw `.cpuprofile` stays one click away
   // ([PROF-CPU-START], #145).
-  presentProfileResult(result);
+  await presentProfileResult(result);
 }
 
 /**
  * Keep a snapshot's result and offer its panel. Fire-and-forget: a toast with
  * a button is sticky and must not block the snapshot handler ([PROF-CPU-START]).
  */
-export function announceSnapshot(result: ProfileResult): void {
-  keepResult(result);
+export async function announceSnapshot(result: ProfileResult): Promise<void> {
+  await keepResult(result);
   Logger.info(`Profile snapshot: ${String(result.totalSamples)} samples so far`);
   void offerSnapshotView(result);
 }
@@ -54,7 +54,7 @@ async function offerSnapshotView(result: ProfileResult): Promise<void> {
     `${brand()}: Snapshot — ${String(result.totalSamples)} samples (profiling continues)`,
     "View Results",
   );
-  if (choice === "View Results") { openFlamegraphWebview(result); }
+  if (choice === "View Results") { await openFlamegraphWebview(result); }
 }
 
 /**
@@ -63,12 +63,12 @@ async function offerSnapshotView(result: ProfileResult): Promise<void> {
  * way back in — results are never trapped behind a dismissed completion toast
  * ([PROF-CPU-START]).
  */
-export function handleProfileShowResults(): void {
+export async function handleProfileShowResults(): Promise<void> {
   if (lastProfile.result === undefined) {
     vscode.window.showInformationMessage(
       `${brand()}: No profile results yet — run a profiling session first.`,
     );
     return;
   }
-  openFlamegraphWebview(lastProfile.result);
+  await openFlamegraphWebview(lastProfile.result);
 }

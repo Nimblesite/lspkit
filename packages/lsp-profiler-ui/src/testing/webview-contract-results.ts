@@ -33,7 +33,7 @@ async function writeSvg(name: string, contents: string): Promise<string> {
 
 async function theFlameGraphIsTheHero(): Promise<void> {
     const svgPath = await writeSvg('profile.svg', '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
-    const html = buildFlamegraphHtml(hotProfileResult({ flamegraphPath: svgPath }));
+    const html = await buildFlamegraphHtml(hotProfileResult({ flamegraphPath: svgPath }));
     assert.ok(html.includes('data:image/svg+xml;base64,'), 'the flame graph SVG must be inlined as a data URI (a profiler must show a flame graph)');
     assert.ok(html.includes('open-flame-svg'), 'the hero must offer opening the interactive SVG externally');
     assert.ok(html.includes('openFlamegraphSvg'), 'the open action must post a message the extension handles');
@@ -43,17 +43,17 @@ async function theFlameGraphIsTheHero(): Promise<void> {
 // landing view — so the panel itself must carry the way into it. Without
 // this button the raw trace is only reachable through the (dismissable)
 // completion toast.
-function theRawTraceIsOneClickAway(): void {
-    const withTrace = buildFlamegraphHtml(hotProfileResult({ cpuProfilePath: '/tmp/lspui-s-1.cpuprofile' }));
+async function theRawTraceIsOneClickAway(): Promise<void> {
+    const withTrace = await buildFlamegraphHtml(hotProfileResult({ cpuProfilePath: '/tmp/lspui-s-1.cpuprofile' }));
     assert.ok(withTrace.includes('Open Trace in VS Code Viewer'), 'the panel must offer opening the native .cpuprofile viewer');
     assert.ok(withTrace.includes('openCpuProfile'), 'the trace button must post a message the extension handles');
-    const withoutTrace = buildFlamegraphHtml(hotProfileResult());
+    const withoutTrace = await buildFlamegraphHtml(hotProfileResult());
     assert.ok(!withoutTrace.includes('/tmp/lspui-s-1.cpuprofile'), 'no stale trace path may be embedded when no .cpuprofile was produced');
 }
 
-function noSvgDegradesToTheTables(): void {
-    const withoutPath = buildFlamegraphHtml(hotProfileResult());
-    const withDeadPath = buildFlamegraphHtml(hotProfileResult({ flamegraphPath: path.join(tmpDir, 'nope.svg') }));
+async function noSvgDegradesToTheTables(): Promise<void> {
+    const withoutPath = await buildFlamegraphHtml(hotProfileResult());
+    const withDeadPath = await buildFlamegraphHtml(hotProfileResult({ flamegraphPath: path.join(tmpDir, 'nope.svg') }));
     for (const html of [withoutPath, withDeadPath]) {
         assert.ok(!html.includes('data:image/svg+xml'), 'no hero image without a readable SVG');
         assert.ok(!html.includes('<img'), 'no broken <img> element');
@@ -66,18 +66,18 @@ const SVG_LIMIT_MIB = 5;
 const MEBIBYTE = 1024;
 
 async function unusableSvgsAreNotInlined(): Promise<void> {
-    assert.strictEqual(loadFlamegraphSvgDataUri(undefined), undefined);
-    assert.strictEqual(loadFlamegraphSvgDataUri(''), undefined);
+    assert.strictEqual(await loadFlamegraphSvgDataUri(undefined), undefined);
+    assert.strictEqual(await loadFlamegraphSvgDataUri(''), undefined);
     const empty = await writeSvg('empty.svg', '');
-    assert.strictEqual(loadFlamegraphSvgDataUri(empty), undefined, 'an empty artifact is not a flame graph');
+    assert.strictEqual(await loadFlamegraphSvgDataUri(empty), undefined, 'an empty artifact is not a flame graph');
     const oversized = await writeSvg('huge.svg', `<svg>${'x'.repeat(SVG_LIMIT_MIB * MEBIBYTE * MEBIBYTE)}</svg>`);
-    assert.strictEqual(loadFlamegraphSvgDataUri(oversized), undefined, 'an oversized artifact must not be inlined (it still opens externally)');
+    assert.strictEqual(await loadFlamegraphSvgDataUri(oversized), undefined, 'an oversized artifact must not be inlined (it still opens externally)');
 }
 
 // Implements [PROF-EXPORT-FLAMEGRAPH]. See docs/specs/LSP-PROFILER-SPEC.md
 suite('Profiler webviews — flame graph hero', () => {
     suiteSetup(async () => { tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lspui-flame-hero-')); });
-    suiteTeardown(() => { removeTestDir(tmpDir); });
+    suiteTeardown(async () => { await removeTestDir(tmpDir); });
     test('the results panel embeds the LSP-exported flame graph SVG as its hero', theFlameGraphIsTheHero);
     test('the results panel offers the raw trace via an "Open Trace in VS Code Viewer" button', theRawTraceIsOneClickAway);
     test('a missing or unreadable SVG degrades to the tables, never a broken image', noSvgDegradesToTheTables);
@@ -94,9 +94,9 @@ function selectionsStayInTheirSession(): void {
     assert.equal(profileVariable({ variable: { name: '', value: '' } }, 'one'), undefined);
 }
 
-function hostileSelectionsStayInert(): void {
+async function hostileSelectionsStayInert(): Promise<void> {
     selectedProfileVariable.value = profileVariable({ name: HOSTILE, value: HOSTILE, type: HOSTILE }, 'one');
-    try { assertHardened(buildFlamegraphHtml(hotProfileResult()), 'debug variable'); }
+    try { assertHardened(await buildFlamegraphHtml(hotProfileResult()), 'debug variable'); }
     finally { selectedProfileVariable.value = undefined; }
 }
 

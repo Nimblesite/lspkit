@@ -49,6 +49,12 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+/** The active editor and its path key, read together so a poll sees one consistent pair. */
+async function activeKey(): Promise<{ editor: vscode.TextEditor | undefined; key: string | undefined }> {
+  const active = vscode.window.activeTextEditor;
+  return { editor: active, key: active === undefined ? undefined : await editorPathKey(active.document.uri.fsPath) };
+}
+
 async function hotLinesNavigateToTheirSource(result: ProfileResult): Promise<void> {
   const located = await Promise.all(
     result.hotLines
@@ -59,25 +65,30 @@ async function hotLinesNavigateToTheirSource(result: ProfileResult): Promise<voi
   assert.ok(line !== undefined, "capture must attribute a real source line");
   assert.equal(handleSourceNavigation({ type: "navigateToSource", file: line.file, line: line.line }), true);
   // The editor spells a Windows drive in lower case; the runtime reports it as built.
-  const opened = (active: vscode.TextEditor | undefined): boolean =>
-    active !== undefined && editorPathKey(active.document.uri.fsPath) === editorPathKey(line.file);
-  const editor = await pollUntilResult(() => vscode.window.activeTextEditor,
-    active => opened(active) && active?.selection.active.line === line.line - 1);
-  assert.ok(opened(editor), `the hot line's own file opens: ${line.file}`);
+  const expected = await editorPathKey(line.file);
+  const { editor, key } = await pollUntilResult(activeKey,
+    seen => seen.key === expected && seen.editor?.selection.active.line === line.line - 1);
+  assert.equal(key, expected, `the hot line's own file opens: ${line.file}`);
   assert.equal(editor?.selection.active.line, line.line - 1);
 }
 
 /** How long the one real CPU capture may take on a cold CI runner. */
 const CPU_CAPTURE_TIMEOUT_MS = 120_000;
 
+/** Options a host passes to the shared capture contract. */
+export interface CpuCaptureContractOptions {
+  /** Where to also write the captured results panel for a human review; omitted writes nothing. */
+  readonly reviewHtmlPath?: string;
+}
+
 /** Register the contract against `capture`, the host's own real runtime capture. */
-export function registerCpuCaptureContract(capture: () => Promise<ProfileResult>): void {
+export function registerCpuCaptureContract(capture: () => Promise<ProfileResult>, options: CpuCaptureContractOptions = {}): void {
   suite("Shared profiler VSIX — real runtime capture", () => {
     const captured: { result: ProfileResult | undefined } = { result: undefined };
     suiteSetup(async function captureProfile() { this.timeout(CPU_CAPTURE_TIMEOUT_MS); captured.result = await capture(); });
     suiteTeardown(closeAllEditors);
     test("captures attributed CPU samples and valid native trace artifacts", async () => { await capturesAttributedSamples(contractResult(captured)); });
-    test("mounts both interactive views, search, fiber selection and trace actions", async () => { await mountsTheInteractiveViews(contractResult(captured)); });
+    test("mounts both interactive views, search, fiber selection and trace actions", async () => { await mountsTheInteractiveViews(contractResult(captured), options.reviewHtmlPath); });
     test("palette overrides update an already-open webview", paletteOverridesRepaintOpenPanels);
     test("a measured hot line navigates to the actual runtime source", async () => { await hotLinesNavigateToTheirSource(contractResult(captured)); });
   });

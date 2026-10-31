@@ -68,7 +68,7 @@ export async function handleProfileStop(store: Store): Promise<void> {
   try {
     const result = await collectReport(active, CPU_CMD.stop, { title: `${brand()}: Stopping profiler`, step: "Collecting results…" });
     store.profilerStopped();
-    presentStopResult(result);
+    await presentStopResult(result);
   } catch (error: unknown) {
     store.profilerStopped();
     reportFailure("Profile stop", error);
@@ -80,7 +80,7 @@ export async function handleProfileSnapshot(store: Store): Promise<void> {
   if (active === undefined) { return; }
   try {
     const result = await collectReport(active, CPU_CMD.snapshot, { title: `${brand()}: Taking profile snapshot`, step: "Collecting samples so far…" });
-    if (result !== undefined) { announceSnapshot(result); }
+    if (result !== undefined) { await announceSnapshot(result); }
   } catch (error: unknown) {
     reportFailure("Profile snapshot", error);
   }

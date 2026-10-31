@@ -1,5 +1,5 @@
 // Implements [PROF-UI-SAMPLED]. Shared interactive view for every sampled runtime.
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import type { FlameModel } from "./flame-model";
 import { buildFlameModel, parseSpeedscope } from "./flame-model";
 import { FLAME_CSS, flameBody } from "./flame-html";
@@ -12,16 +12,16 @@ import { Logger } from "./logger";
 export interface SampledView { readonly model: FlameModel; readonly summary: ProfileSummary; }
 
 /** Load the existing speedscope artifact; metadata from the native host stays intact. */
-export function sampledView(result: ProfileResult): SampledView | undefined {
+export async function sampledView(result: ProfileResult): Promise<SampledView | undefined> {
   if (result.sampled !== undefined) { return result.sampled; }
   if (result.outputFile === "") { return undefined; }
   return sampledViewFromFile(result);
 }
 
 /** Build the sampled view from the existing speedscope artifact on disk. */
-function sampledViewFromFile(result: ProfileResult): SampledView | undefined {
+async function sampledViewFromFile(result: ProfileResult): Promise<SampledView | undefined> {
   try {
-    const parsed = parseSpeedscope(readFileSync(result.outputFile, "utf8"));
+    const parsed = parseSpeedscope(await readFile(result.outputFile, "utf8"));
     if (!parsed.ok) { Logger.warn(parsed.error); return undefined; }
     const model = buildFlameModel(parsed.value);
     return { model, summary: summaryFromResult(result, model) };

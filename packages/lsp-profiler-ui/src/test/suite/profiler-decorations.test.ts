@@ -42,8 +42,8 @@ suite('Profiler — Decoration Modules', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -170,8 +170,8 @@ suite('Profiler — Decoration Apply/Clear', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -180,7 +180,7 @@ suite('Profiler — Decoration Apply/Clear', () => {
         await closeAllEditors();
     });
 
-    test('applyProfileDecorations handles empty result without throwing', () => {
+    test('applyProfileDecorations handles empty result without throwing', async () => {
         const emptyResult: ProfileResult = {
             sessionId: 'empty-session',
             duration: 0,
@@ -190,14 +190,14 @@ suite('Profiler — Decoration Apply/Clear', () => {
             hotLines: [],
         };
 
-        assert.doesNotThrow(() => {
-            applyProfileDecorations(emptyResult);
+        await assert.doesNotReject(async () => {
+            await applyProfileDecorations(emptyResult);
         }, 'applyProfileDecorations should handle empty results gracefully');
 
         clearProfileDecorations();
     });
 
-    test('applyMemoryDecorations handles empty result without throwing', () => {
+    test('applyMemoryDecorations handles empty result without throwing', async () => {
         const emptySnapshot: MemorySnapshotResult = {
             memorySessionId: 'empty-mem',
             snapshotId: 'snap-empty',
@@ -206,8 +206,8 @@ suite('Profiler — Decoration Apply/Clear', () => {
             topAllocations: [],
         };
 
-        assert.doesNotThrow(() => {
-            applyMemoryDecorations(emptySnapshot);
+        await assert.doesNotReject(async () => {
+            await applyMemoryDecorations(emptySnapshot);
         }, 'applyMemoryDecorations should handle empty snapshots gracefully');
 
         clearMemoryDecorations();

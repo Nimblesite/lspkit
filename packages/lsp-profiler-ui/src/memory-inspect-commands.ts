@@ -30,14 +30,14 @@ export async function handleMemoryMenu(store: Store): Promise<void> {
 export async function handleMemorySnapshot(store: Store): Promise<void> {
   const result = await runMemoryScript(store, LSP_MEM_CMD.snapshot);
   if (result?.kind === "snapshot") {
-    presentSnapshot(result, { openResultsView: true });
+    await presentSnapshot(result, { openResultsView: true });
   }
 }
 
 export async function handleMemoryDiff(store: Store): Promise<void> {
   const result = await runMemoryScript(store, LSP_MEM_CMD.diff);
   if (result?.kind === "diff") {
-    const diff = presentDiff(result);
+    const diff = await presentDiff(result);
     void vscode.window.showInformationMessage(
       `${brand()}: Compared snapshots — ${String(diff.suspectedLeaks.length)} suspected leak(s)`,
     );

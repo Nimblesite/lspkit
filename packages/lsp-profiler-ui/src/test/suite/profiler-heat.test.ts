@@ -51,8 +51,8 @@ suite('Profiler — Heat Level Classification', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     test('critical heat level classification (>= 20%)', () => {
@@ -147,8 +147,8 @@ suite('Profiler — Decoration Contracts', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -178,8 +178,8 @@ suite('Profiler — Decoration Contracts', () => {
             ],
         };
 
-        assert.doesNotThrow(() => {
-            applyProfileDecorations(result);
+        await assert.doesNotReject(async () => {
+            await applyProfileDecorations(result);
         }, 'applyProfileDecorations should handle multi-file results');
 
         assert.strictEqual(result.hotFunctions.length, 3, 'Should have 3 hot functions');
@@ -248,8 +248,8 @@ suite('Profiler — Decoration Lifecycle', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -258,7 +258,7 @@ suite('Profiler — Decoration Lifecycle', () => {
         await closeAllEditors();
     });
 
-    test('clearProfileDecorations removes all decorations without error', () => {
+    test('clearProfileDecorations removes all decorations without error', async () => {
         const result: ProfileResult = {
             sessionId: 'clear-test',
             duration: 1,
@@ -270,8 +270,8 @@ suite('Profiler — Decoration Lifecycle', () => {
             ],
         };
 
-        assert.doesNotThrow(() => {
-            applyProfileDecorations(result);
+        await assert.doesNotReject(async () => {
+            await applyProfileDecorations(result);
         }, 'Applying decorations should not throw');
 
         assert.doesNotThrow(() => {
@@ -298,11 +298,11 @@ suite('Profiler — Decoration Lifecycle', () => {
             ],
         };
 
-        assert.doesNotThrow(() => { applyProfileDecorations(result); },
+        await assert.doesNotReject(async () => { await applyProfileDecorations(result); },
             'First apply should succeed');
         assert.doesNotThrow(() => { clearProfileDecorations(); },
             'Clear should succeed');
-        assert.doesNotThrow(() => { applyProfileDecorations(result); },
+        await assert.doesNotReject(async () => { await applyProfileDecorations(result); },
             'Re-apply should succeed');
         clearProfileDecorations();
     });

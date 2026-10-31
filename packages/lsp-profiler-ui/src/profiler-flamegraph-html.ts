@@ -77,12 +77,12 @@ export function profileHasNoUsableData(
  * button, or the `${brand()}: Show Profile Results` re-entry command — so the
  * user is never stranded and never dumped somewhere confusing.
  */
-export function presentProfileResult(result: ProfileResult): void {
+export async function presentProfileResult(result: ProfileResult): Promise<void> {
   if (profileHasNoUsableData(result)) {
     presentNoUsableData(result);
     return;
   }
-  openFlamegraphWebview(result);
+  await openFlamegraphWebview(result);
   Logger.info(`Profiling stopped: ${String(result.totalSamples)} samples, ${result.duration.toFixed(1)}s, output: ${result.outputFile}`);
   // A failed/refused export is never silent — even when there is still data to
   // show, surface why an artifact is missing ([PROF-EXPORT-VALIDATE]).
@@ -168,8 +168,8 @@ export function handleFlamegraphMessage(msg: WebviewMessage): void {
 const flamegraphPanel = new SingletonWebviewPanel(() => cmd("flamegraph"), handleFlamegraphMessage);
 
 /** Open (or reveal) the profile results panel beside the source. */
-export function openFlamegraphWebview(result: ProfileResult): void {
-  flamegraphPanel.show(`${brand()} Profiler`, buildFlamegraphHtml(result));
+export async function openFlamegraphWebview(result: ProfileResult): Promise<void> {
+  flamegraphPanel.show(`${brand()} Profiler`, await buildFlamegraphHtml(result));
 }
 
 /** The open results panel's view type, title and HTML (e2e seam). */
@@ -355,9 +355,9 @@ const TRACE_ACTIONS_SCRIPT = `
     }`;
 
 /** Build the complete results-panel HTML for the profiler webview. */
-export function buildFlamegraphHtml(result: ProfileResult): string {
-  const svgDataUri = loadFlamegraphSvgDataUri(result.flamegraphPath);
-  const sampled = sampledParts(sampledView(result));
+export async function buildFlamegraphHtml(result: ProfileResult): Promise<string> {
+  const [svgDataUri, view] = await Promise.all([loadFlamegraphSvgDataUri(result.flamegraphPath), sampledView(result)]);
+  const sampled = sampledParts(view);
   return buildWebviewDocument({
     title: `${brand()} Profiler`,
     css: `${sampled.css}${FLAMEGRAPH_CSS}`,

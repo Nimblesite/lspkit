@@ -8,7 +8,7 @@ import type { LeakConfidence } from '../memory-decorations';
 import { appliedMemoryDecorations, applyLeakDecorations, clearMemoryDecorations } from '../memory-decorations';
 import { profilerPalette } from '../palette';
 import { closeAllEditors, removeTestDir } from './webview-contract-helpers';
-import { editorPathKey } from '../editor-path-key';
+import { pathKeyer } from '../editor-path-key';
 
 const CONFIDENCES: readonly LeakConfidence[] = ['DEFINITE', 'HIGH', 'MEDIUM', 'LOW'];
 
@@ -19,15 +19,15 @@ async function leakColours(): Promise<string[]> {
     await fs.promises.writeFile(file, 'definite\nhigh\nmedium\nlow\n');
     try {
         await vscode.window.showTextDocument(vscode.Uri.file(file));
-        applyLeakDecorations({ totalGrowth: 0, totalFreed: 0, netGrowth: 0, suspectedLeaks: CONFIDENCES.map((confidence, i) => ({
+        await applyLeakDecorations({ totalGrowth: 0, totalFreed: 0, netGrowth: 0, suspectedLeaks: CONFIDENCES.map((confidence, i) => ({
             file, line: i + 1, sizeGrowth: 1024, countGrowth: 1, currentSize: 2048, confidence, reason: 'grows', typeName: '' })) });
-        return appliedMemoryDecorations()
-            .filter((entry) => editorPathKey(entry.file) === editorPathKey(file))
-            .map((entry) => entry.color);
+        const applied = appliedMemoryDecorations();
+        const keyOf = await pathKeyer([file, ...applied.map((entry) => entry.file)]);
+        return applied.filter((entry) => keyOf(entry.file) === keyOf(file)).map((entry) => entry.color);
     } finally {
         clearMemoryDecorations();
         await closeAllEditors();
-        removeTestDir(dir);
+        await removeTestDir(dir);
     }
 }
 

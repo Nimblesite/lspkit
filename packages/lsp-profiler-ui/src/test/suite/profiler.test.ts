@@ -67,8 +67,8 @@ suite('Profiler — Command Registration', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -129,8 +129,8 @@ suite('Profiler — Configuration', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     test('profiler settings have correct defaults', () => {
@@ -258,8 +258,8 @@ suite('Profiler — Status Bar', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -285,8 +285,8 @@ suite('Profiler — Keybindings', () => {
         tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     test('profiler commands declared in keybindings', () => {

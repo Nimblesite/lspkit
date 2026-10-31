@@ -54,11 +54,11 @@ export async function closeAllEditors(): Promise<void> {
   await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 }
 
-export function removeTestDir(dir: string): void {
-  if (dir === '' || !fs.existsSync(dir)) {
+export async function removeTestDir(dir: string): Promise<void> {
+  if (dir === '') {
     return;
   }
-  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 /** A CPU result, overriding the fields a test cares about. */

@@ -44,7 +44,7 @@ export function registerProfiler(store: Store): vscode.Disposable[] {
     // Decorations follow the last result onto every newly visible editor.
     vscode.window.onDidChangeVisibleTextEditors(() => {
       const result = lastProfileResult();
-      if (result !== undefined) { applyProfileDecorations(result); }
+      if (result !== undefined) { void applyProfileDecorations(result); }
     }),
     vscode.debug.onDidStartDebugSession((session) => { profileOnLaunch(store, session); }),
     vscode.debug.onDidTerminateDebugSession(() => { stopWithDebugSession(store); }),
@@ -58,7 +58,7 @@ function registerProfilerCommands(store: Store): vscode.Disposable[] {
     vscode.commands.registerCommand(cmd("profileStop"), async () => { await handleProfileStop(store); }),
     vscode.commands.registerCommand(cmd("profileSnapshot"), async () => { await handleProfileSnapshot(store); }),
     vscode.commands.registerCommand(cmd("profileAttachToDebug"), async () => { await handleProfileAttachToDebug(store); }),
-    vscode.commands.registerCommand(cmd("profileShowResults"), () => { handleProfileShowResults(); }),
+    vscode.commands.registerCommand(cmd("profileShowResults"), handleProfileShowResults),
   ];
 }
 

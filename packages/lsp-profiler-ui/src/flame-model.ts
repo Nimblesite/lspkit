@@ -277,8 +277,15 @@ const SOURCE_LIGHTNESS_RANGE = 15;
 export const triangle = (value: number): number =>
   2 * Math.abs(value / 2 - Math.floor(value / 2 + TRIANGLE_HALF));
 
+/** One frame's place in the color ramp: its file and its rank among `frameCount` frames. */
+export interface RankedFrame {
+  readonly file: string;
+  readonly rank: number;
+  readonly frameCount: number;
+}
+
 /** Deterministic speedscope-style color for the frame ranked `rank` of `frameCount`. */
-export function colorForRank(file: string, rank: number, frameCount: number, isSource = hasSourceFile): string {
+export function colorForRank({ file, rank, frameCount }: RankedFrame, isSource = hasSourceFile): string {
   const bucket = Math.floor((COLOR_CHANNEL_MAX * rank) / Math.max(frameCount, 1));
   const hue = bucket / COLOR_CHANNEL_MAX;
   const mix = triangle(RUNTIME_HUE_MIX_STEPS * hue);
@@ -291,7 +298,7 @@ export function colorForRank(file: string, rank: number, frameCount: number, isS
 /** Stable per-frame colors: frames ranked by (file+name), ramped over hue. */
 export function frameColors(frames: SpeedscopeFrame[], isSource = hasSourceFile): string[] {
   const ranks = frameRanks(frames);
-  return frames.map((frame, i) => colorForRank(frame.file ?? "", ranks[i] ?? i, frames.length, isSource));
+  return frames.map((frame, i) => colorForRank({ file: frame.file ?? "", rank: ranks[i] ?? i, frameCount: frames.length }, isSource));
 }
 
 // --- assembly ------------------------------------------------------------------------

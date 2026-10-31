@@ -169,7 +169,7 @@ async function presentIngestedSnapshot(client: LanguageClient, memorySessionId: 
     warnCapturedBut("it could not be analyzed into an allocation view");
     return;
   }
-  presentSnapshot(result, { openResultsView: true });
+  await presentSnapshot(result, { openResultsView: true });
   void vscode.window.showInformationMessage(`${brand()}: Captured a final memory snapshot at exit — opened the allocation view.`);
 }
 

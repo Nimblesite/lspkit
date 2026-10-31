@@ -199,11 +199,11 @@ function anEmptyWalkSaysSo(): void {
     assert.ok(html.includes('No reference graph data available'), 'an empty walk must say so, never show a blank canvas');
 }
 
-function viewsFollowTheEditorTheme(): void {
+async function viewsFollowTheEditorTheme(): Promise<void> {
     const surfaces = [
         buildMemoryDashboardHtml(dashboardSnapshot()),
         buildRefGraphHtml({ targetType: 'W', maxDepth: 5, maxNodes: 200, script: '' }),
-        buildFlamegraphHtml(profileResult()),
+        await buildFlamegraphHtml(profileResult()),
     ];
     for (const html of surfaces) {
         assert.ok(html.includes('var(--vscode-editor-background'), 'panel background must track the active VS Code theme');

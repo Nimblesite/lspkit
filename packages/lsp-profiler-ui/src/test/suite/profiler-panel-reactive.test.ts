@@ -186,9 +186,9 @@ suite("Processes panel — reactive chrome (store-driven, live)", () => {
     tmpDir = created;
   });
 
-  suiteTeardown(() => {
+  suiteTeardown(async () => {
     resetProfilerState();
-    teardownLspTestSuite(tmpDir);
+    await teardownLspTestSuite(tmpDir);
   });
 
   teardown(() => { resetProfilerState(); });

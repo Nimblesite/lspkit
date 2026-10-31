@@ -34,8 +34,8 @@ suite("Profiler UX — loading & progress states", () => {
     tmpDir = created;
   });
 
-  suiteTeardown(() => {
-    teardownLspTestSuite(tmpDir);
+  suiteTeardown(async () => {
+    await teardownLspTestSuite(tmpDir);
   });
 
   test("panel empty state is server-state aware — never 'no processes' while connecting", () => {

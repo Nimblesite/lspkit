@@ -18,15 +18,17 @@ export async function capturesAttributedSamples(result: ProfileResult): Promise<
   assert.ok(isRecord(cpu) && Array.isArray(cpu.nodes) && cpu.nodes.length > 0 && Array.isArray(cpu.samples) && cpu.samples.length > 0);
 }
 
-/** The real host must mount both interactive views and the expected controls. */
-export async function mountsTheInteractiveViews(result: ProfileResult): Promise<void> {
-  openFlamegraphWebview(result);
+/**
+ * The real host must mount both interactive views and the expected controls.
+ * With `reviewHtmlPath`, the rendered panel is also written there for a human review.
+ */
+export async function mountsTheInteractiveViews(result: ProfileResult, reviewHtmlPath?: string): Promise<void> {
+  await openFlamegraphWebview(result);
   const panel = flamegraphPanelState();
   assert.ok(panel !== undefined);
   for (const id of ["flame", "btn-left", "btn-time", "fiber-select", "search", "btn-reset", "trace-actions", "fn-body", "line-body"]) {
     assert.ok(panel.html.includes(`id="${id}"`), `${id} is reachable in the real host`);
   }
   assertHardened(panel.html, "captured profile");
-  const output = process.env.PROFILER_REVIEW_HTML;
-  if (output !== undefined && output !== "") { await fs.promises.writeFile(output, buildFlamegraphHtml(result)); }
+  if (reviewHtmlPath !== undefined && reviewHtmlPath !== "") { await fs.promises.writeFile(reviewHtmlPath, await buildFlamegraphHtml(result)); }
 }

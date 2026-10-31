@@ -19,7 +19,7 @@ import { EXTENSION_ID, hostApi } from './test-helpers';
 
 const FOREIGN = /basilisk|sharplsp/iu;
 
-function flamegraph(): string {
+async function flamegraph(): Promise<string> {
     return buildFlamegraphHtml({
         sessionId: 's-1', duration: 1, totalSamples: 10, outputFile: '/tmp/p.json',
         hotFunctions: [{ name: 'f', file: '/a.txt', line: 1, samples: 10, percentage: 100, selfPercentage: 100 }],
@@ -81,8 +81,8 @@ suite('Host identity — ids follow the installed host', () => {
 suite('Host identity — webviews render the host brand', () => {
     suiteSetup(async () => { await hostApi(); });
 
-    test('the CPU results heading is the host brand, upper-cased', () => {
-        const html = flamegraph();
+    test('the CPU results heading is the host brand, upper-cased', async () => {
+        const html = await flamegraph();
         assert.ok(html.includes('<span class="accent">LSPUI</span> PROFILER'), 'brand heading present');
         assert.ok(!FOREIGN.test(html), 'no other product named in the CPU results');
     });

@@ -19,8 +19,8 @@ import { LSP_MEM_CMD } from "./memory-capture-ids";
  * ([PROF-CPU-START]). Without it (the autopilot's quiet per-pass capture) only
  * the decorations + timeline update — the diff step surfaces the dashboard.
  */
-export function presentSnapshot(result: MemoryIngestResult, options: { openResultsView: boolean }): void {
-  applyMemoryDecorations(toSnapshotResult(result));
+export async function presentSnapshot(result: MemoryIngestResult, options: { openResultsView: boolean }): Promise<void> {
+  await applyMemoryDecorations(toSnapshotResult(result));
   const dashboard = toDashboardSnapshot(result);
   recordTimelinePoint(dashboard);
   dashboard.timeline = [...currentTimeline()];
@@ -36,9 +36,9 @@ export function presentSnapshot(result: MemoryIngestResult, options: { openResul
  * the dashboard with the leak analysis alongside the last snapshot. Returns the
  * typed diff so callers (the autopilot) can read suspected-leak confidence.
  */
-export function presentDiff(result: MemoryIngestResult): MemoryDiffResult {
+export async function presentDiff(result: MemoryIngestResult): Promise<MemoryDiffResult> {
   const diff = toDiffResult(result);
-  applyLeakDecorations(diff);
+  await applyLeakDecorations(diff);
   const lastSnapshot = currentDashboardSnapshot();
   if (lastSnapshot !== null) {
     openMemoryDashboard(lastSnapshot, toDashboardDiff(result));
@@ -69,10 +69,10 @@ export async function captureSnapshotAndDiff(
   try {
     const snapshotResult = await runMemoryOperation(quietOp(LSP_MEM_CMD.snapshot));
     if (snapshotResult?.kind === "snapshot") {
-      presentSnapshot(snapshotResult, { openResultsView: false });
+      await presentSnapshot(snapshotResult, { openResultsView: false });
     }
     const diffResult = await runMemoryOperation(quietOp(LSP_MEM_CMD.diff));
-    const diff = diffResult?.kind === "diff" ? presentDiff(diffResult) : null;
+    const diff = diffResult?.kind === "diff" ? await presentDiff(diffResult) : null;
     return { snapshot: snapshotResult, diff };
   } finally {
     endMemoryOp();

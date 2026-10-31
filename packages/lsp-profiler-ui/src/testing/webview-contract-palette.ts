@@ -33,11 +33,11 @@ const LEAKING_DIFF: MemoryDiffData = {
 };
 
 /** Every profiler view, rendered under whatever palette is configured now. */
-function everyView(): Record<string, string> {
+async function everyView(): Promise<Record<string, string>> {
     return {
         'memory dashboard': buildMemoryDashboardHtml(dashboardSnapshot(), LEAKING_DIFF),
         'retention graph': buildRefGraphHtml({ targetType: 'W', maxDepth: 5, maxNodes: 200, script: '' }),
-        'results panel': buildFlamegraphHtml(profileResult()),
+        'results panel': await buildFlamegraphHtml(profileResult()),
     };
 }
 
@@ -47,7 +47,7 @@ async function viewsUnder(palette: ProfilerPalette): Promise<Record<string, stri
     const previous = config.inspect('profiler.palette')?.globalValue;
     await config.update('profiler.palette', palette, vscode.ConfigurationTarget.Global);
     try {
-        return everyView();
+        return await everyView();
     } finally {
         await config.update('profiler.palette', previous, vscode.ConfigurationTarget.Global);
     }

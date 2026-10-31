@@ -75,6 +75,10 @@ jobs:
       - name: Format check
         run: make fmt CHECK=1
 
+      # [WEB-ACCESS-PROSE] Static-site regression; no browser download or service.
+      - name: Website
+        run: make website-test
+
       - name: Profiler source path regressions
         run: |
           npm ci --prefix packages/lsp-profiler-ui

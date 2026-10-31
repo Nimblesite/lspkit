@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>lspkit — Language link</title>
+  <path d="M24 7H15v16l-9 9 9 9v16h9M40 7h9v16l9 9-9 9v16h-9" stroke="#202720" stroke-width="6" stroke-linejoin="miter"/>
+  <path d="M18 32h28" stroke="#ad321e" stroke-width="5"/>
+  <path d="m32 23 9 9-9 9-9-9z" fill="#ad321e"/>
+</svg>

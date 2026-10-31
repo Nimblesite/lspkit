@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>lspkit — Relay</title>
+  <path d="M20 32h10V14h17M30 32v18h17" stroke="#202720" stroke-width="6"/>
+  <path d="M42 6h16v16H42zM42 42h16v16H42z" fill="#202720"/>
+  <path d="M5 23h18v18H5z" fill="#ad321e"/>
+</svg>

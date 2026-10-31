@@ -1,5 +1,5 @@
 ---
-layout: layouts/docs.njk
+layout: docs.njk
 title: A small foundation.
 description: The architectural basics of the LSP Toolkit.
 eleventyNavigation:
@@ -7,9 +7,9 @@ eleventyNavigation:
   order: 1
 ---
 <!-- [WEB-CONTENT] Deliberately brief starter documentation. -->
-# A small foundation.
-
 Reusable Rust components for building language servers, with shared infrastructure for LSP and MCP.
+
+[Explore the prose example →](/docs/prose/)
 
 ## One engine
 

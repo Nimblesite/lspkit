@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "eleventy --serve",
     "build": "eleventy",
+    "test": "python3 tests/prose_test.py",
     "lint": "oxlint --deny-warnings eleventy.config.js src/_data/site.js"
   },
   "devDependencies": {

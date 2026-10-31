@@ -75,32 +75,65 @@ h3 { font-size: 25px; line-height: 1.25; letter-spacing: -.025em; }
 .journal-row p { margin-top: 12px; color: var(--color-muted); font-size: 16px; max-width: 54ch; }
 .journal-row time { font: 12px/1.7 var(--font-mono); color: var(--color-muted); text-align: right; }
 /* Shared techdoc article, list and documentation surfaces. */
-main > .blog-container { max-width: 1000px; margin: auto; padding: 64px 32px; }
+main > .blog-container { max-width: var(--max-width); margin: auto; padding: 56px 32px 72px; }
 .blog-header { padding-bottom: 32px; }
+.blog-header::after { content: ""; display: block; aspect-ratio: 12 / 5; margin-top: 32px; background: var(--color-panel) url("/assets/images/engine.svg") center / cover no-repeat; }
 .blog-subtitle { color: var(--color-muted); margin-top: 24px; }
-.blog-nav { display: flex; gap: 24px; padding-bottom: 24px; font: 13px var(--font-mono); }
+.blog-nav { display: flex; flex-wrap: wrap; gap: 24px; padding-bottom: 24px; font: 13px var(--font-mono); }
+.blog-nav-link { padding: 12px 0; }
 .post-list .blog-post { max-width: none; padding: 32px 0; border-top: 1px solid var(--color-border); }
 .post-title { font-size: 32px; line-height: 1.2; letter-spacing: -.035em; font-weight: bold; }
 .post-meta, .blog-post-meta { font: 12px/1.7 var(--font-mono); color: var(--color-muted); margin: 16px 0; }
 .post-excerpt { margin: 16px 0; }
-.tag { display: inline-block; padding: 5px 12px; border: 1px solid var(--color-border); font: 12px/1.7 var(--font-mono); }
-main > .blog-post { max-width: 960px; padding: 48px 32px 72px; }
+.tag, .tag-link { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; border: 1px solid var(--color-border); font: 12px/1.7 var(--font-mono); }
+.post-tags, .tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; }
+.category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 24px; }
+.category-card { display: block; padding: 24px 0; border-block: 1px solid var(--color-border); text-decoration: none; }
+.category-card p { margin-top: 12px; color: var(--color-muted); }
+main > .blog-post, .article-shell { width: 100%; max-width: 960px; margin-inline: auto; padding: 48px 32px 72px; }
 .blog-post-header { max-width: 800px; }
-.blog-post-content > * { max-width: 68ch; margin: 24px auto; }
-.blog-post-content > p:has(img) { max-width: none; }
-.blog-post-content img { display: block; width: 100%; height: auto; }
-.blog-post-content h2, .docs-content h2 { margin-top: 48px; margin-bottom: 20px; font-size: 32px; }
-.blog-post-content blockquote { border-left: 3px solid var(--color-primary); padding: 12px 24px; font-size: 24px; letter-spacing: -.02em; }
+.article-header { margin-bottom: 32px; }
+.article-header .eyebrow { margin-bottom: 16px; }
+.article-description { color: var(--color-muted); max-width: 56ch; margin-top: 24px; }
+.page-illustration { margin: 0 0 32px; background: var(--color-panel); }
+.page-illustration img { display: block; width: 100%; height: auto; }
 .btn { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 20px; border: 1px solid var(--color-border); }
-.docs-layout { padding: 64px 32px 80px; gap: 64px; }
-.sidebar { font-size: 14px; }
-.sidebar a { display: inline-block; padding: 10px 0; }
-.docs-content { min-width: 0; }
-.docs-content p { margin: 24px 0; }
-code, pre { font-family: var(--font-mono); font-size: .85em; background: var(--color-panel); }
-code { padding: 3px 6px; }
-pre { padding: 24px; overflow-x: auto; }
-pre code { padding: 0; }
+.docs-layout { grid-template-columns: 180px minmax(0, 1fr); padding: 48px 32px 80px; gap: 48px; }
+.sidebar { position: sticky; top: calc(var(--header-height) + 24px); font-size: 14px; }
+.sidebar a { display: block; min-height: 44px; padding: 10px 12px; text-decoration: none; border-left: 2px solid var(--color-border); }
+.sidebar a.active { color: var(--color-primary); border-color: var(--color-primary); background: var(--color-panel); }
+.docs-content { min-width: 0; max-width: none; }
+/* [WEB-ACCESS-PROSE] Every long-form surface uses this single prose class. */
+.prose { width: 100%; max-width: var(--content-width); margin-inline: auto; overflow-wrap: anywhere; }
+.prose > * + * { margin-top: 24px; }
+.prose > :first-child { margin-top: 0; }
+.prose :is(h1, h2, h3, h4) { scroll-margin-top: calc(var(--header-height) + 24px); }
+.prose :is(h2, h3, h4) { margin-top: 48px; margin-bottom: 16px; }
+.prose h2 { font-size: clamp(28px, 3vw, 36px); }
+.prose h3 { font-size: 25px; }
+.prose h4 { font-size: 20px; line-height: 1.3; }
+.prose .header-anchor { text-decoration: none; }
+.prose .header-anchor:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+.prose :is(ul, ol) { padding-left: 1.5em; }
+.prose li + li { margin-top: 8px; }
+.prose li > :is(ul, ol) { margin-block: 12px; }
+.prose li::marker { color: var(--color-primary); }
+.prose blockquote { margin-inline: 0; border-left: 3px solid var(--color-primary); padding: 12px 24px; font-size: clamp(20px, 2.5vw, 24px); letter-spacing: -.02em; }
+.prose blockquote p + p { margin-top: 16px; }
+.prose :is(code, pre) { font-family: var(--font-mono); background: var(--color-panel); }
+.prose code { padding: 3px 6px; font-size: .85em; }
+.prose pre { max-width: 100%; padding: 24px; overflow-x: auto; border: 1px solid var(--color-border); line-height: 1.6; }
+.prose pre code { padding: 0; white-space: pre; overflow-wrap: normal; }
+.prose .table-scroll { max-width: 100%; overflow-x: auto; }
+.prose table { width: 100%; border-collapse: collapse; font-size: 16px; text-align: left; }
+.prose :is(th, td) { padding: 16px; vertical-align: top; border-bottom: 1px solid var(--color-border); }
+.prose thead { background: var(--color-panel); }
+.prose img { display: block; max-width: 100%; height: auto; }
+.prose figcaption { margin-top: 12px; color: var(--color-muted); font: 12px/1.6 var(--font-mono); }
+.prose hr { margin-block: 40px; border: 0; border-top: 1px solid var(--color-border); }
+.prose details { padding: 16px 20px; border-block: 1px solid var(--color-border); }
+.prose summary { cursor: pointer; font-weight: bold; min-height: 44px; padding-block: 8px; }
+.prose details > p { margin-block: 16px; }
 .token.comment { color: var(--color-muted); }
 .token.keyword, .token.function, .token.string { color: var(--color-primary); }
 .skip-link { position: fixed; top: -100px; left: 16px; z-index: 200; padding: 12px 20px; background: var(--color-text); color: var(--color-bg); }
@@ -110,7 +143,7 @@ pre code { padding: 0; }
   :root { --header-height: 85px; }
   .nav, .footer-content { padding: 20px; }
   .nav-actions { margin-left: auto; }
-  .nav-links { margin: 0; background: var(--color-bg); border-bottom: 1px solid var(--color-border); gap: 8px; padding: 20px; }
+  .nav-links { margin: 0; background: var(--color-bg); border-bottom: 1px solid var(--color-border); gap: 8px; padding: 20px; max-height: calc(100dvh - var(--header-height)); overflow-y: auto; }
   .mobile-menu-toggle { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
   .home-shell { padding: 0 20px; }
   .hero { grid-template-columns: 1fr; gap: 28px; padding: 40px 0 32px; }
@@ -125,7 +158,15 @@ pre code { padding: 0; }
   .journal-row { grid-template-columns: 1fr; gap: 16px; }
   .journal-row time { text-align: left; }
   .footer-section, .footer-section ul { flex-wrap: wrap; }
-  main > .blog-container, main > .blog-post { padding: 32px 20px 48px; }
-  .docs-layout { padding: 32px 20px; gap: 24px; }
-  .sidebar { background: var(--color-bg); padding: 20px; border-right: 1px solid var(--color-border); }
+  main > .blog-container, main > .blog-post, .article-shell { padding: 32px 20px 48px; }
+  .docs-layout { grid-template-columns: minmax(0, 1fr); padding: 24px 20px 48px; gap: 32px; }
+  .docs-layout .sidebar { position: static; width: auto; height: auto; transform: none; transition: none; padding: 0; border: 0; z-index: auto; }
+  .docs-nav > ul { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sidebar a { border: 1px solid var(--color-border); padding: 8px 12px; }
+  .article-header h1, .blog-post-header h1, .blog-header h1 { font-size: clamp(36px, 8vw, 56px); overflow-wrap: anywhere; }
+  .prose { font-size: 17px; }
+  .prose :is(h2, h3, h4) { margin-top: 36px; }
+  .prose :is(th, td) { padding: 12px; min-width: 120px; }
+  .prose pre { padding: 16px; }
+  .prose blockquote { padding: 8px 16px; }
 }

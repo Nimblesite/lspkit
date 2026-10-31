@@ -116,7 +116,7 @@ pub trait EngineApi: Send + Sync + 'static {
 
 ## Release & publishing
 
-lspkit runs a **release-only** regime modelled on [Shipwright](https://github.com/Nimblesite/Shipwright/tree/main/docs/specs) and the AgentPMO repo standard. The one way to ship is to push a version tag: [.github/workflows/release.yml](../../.github/workflows/release.yml) gates the tagged commit, cuts a signed GitHub Release and publishes the four crates to crates.io and every package under `packages/` to npm. Spec IDs below are cited by the workflows and by the plan in [docs/plans/publishing-plan.md](../plans/publishing-plan.md).
+lspkit runs a **release-only** regime modelled on [Shipwright](https://github.com/Nimblesite/Shipwright/tree/main/docs/specs) and the AgentPMO repo standard. The one way to ship is to push a version tag: [.github/workflows/release.yml](../../.github/workflows/release.yml) gates the tagged commit, cuts a signed GitHub Release and publishes the four crates to crates.io, every package under `packages/` to npm and `LspKit.Sidecar` to NuGet. Spec IDs below are cited by the workflows and by the plan in [docs/plans/publishing-plan.md](../plans/publishing-plan.md).
 
 - **[REL-REGIME]** Workflow triggers are fixed:
 
@@ -125,7 +125,7 @@ lspkit runs a **release-only** regime modelled on [Shipwright](https://github.co
   | `ci.yml` | PR to `main` | `make ci` gate |
   | `supply-chain.yml` | PR to `main`, weekly cron | cargo-deny + osv-scanner |
   | `codeql.yml` | PR to `main`, weekly cron | CodeQL scan |
-  | `release.yml` | push of a `v*` tag | package security checks, GitHub Release, crates.io, npm |
+  | `release.yml` | push of a `v*` tag | package security checks, GitHub Release, crates.io, npm, NuGet |
   | `pages.yml` | push of a `v*` tag, `workflow_dispatch` | build the website and deploy it to GitHub Pages |
   | `dependabot-automerge.yml` | Dependabot PR | sweep the bump into `dependabot-upgrades` |
 
@@ -138,10 +138,10 @@ lspkit runs a **release-only** regime modelled on [Shipwright](https://github.co
   3. `cargo package --workspace --locked` builds every crate tarball against its siblings.
 
   Every `uses:` is pinned to a 40-character commit SHA. Workflows default to `permissions: contents: read` and elevate per job. Installs are frozen (`npm ci`, `--locked`), and the release job uses no caches.
-- **[REL-GITHUB]** The release attaches every crate tarball, every npm tarball, a CycloneDX SBOM and one `SHA256SUMS` over them all, cosign keyless-signed (`SHA256SUMS.sigstore.json`). Build provenance and the SBOM are attested against `SHA256SUMS`, so consumers can run `gh attestation verify <file> --repo Nimblesite/lspkit`. `[SWR-SEC-CHECKSUM]` `[SWR-SEC-PROVENANCE]` `[SWR-SEC-SBOM]`
-- **[REL-OIDC]** crates.io and npm both publish through OIDC Trusted Publishing from `release.yml` in the protected `release` environment. The repo stores no `CARGO_REGISTRY_TOKEN` or `NPM_TOKEN`. npm packages also publish with `--provenance`. `[SWR-SEC-OIDC-PUBLISH]`
-- **[REL-ORDER]** Crates publish in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `cargo publish` waits for each crate to appear in the index, so no sleeps are needed. The npm package (`@nimblesite/lsp-profiler-ui`) publishes after the crates. Both publish wrappers skip a version that is already on the registry, so a re-run after a failure partway through is safe.
-- **[REL-METADATA]** Every published crate and npm package declares `license = "MIT"` and a repository. The root `LICENSE-MIT` is staged into each crate (`LICENSE-MIT`) and each npm package (`LICENSE`) at publish time, so the declared license ships with the package. `[SWR-REL-LICENSE]`
+- **[REL-GITHUB]** The release attaches every crate tarball, every npm tarball, the `LspKit.Sidecar` nupkg, a CycloneDX SBOM and one `SHA256SUMS` over them all, cosign keyless-signed (`SHA256SUMS.sigstore.json`). Build provenance and the SBOM are attested against `SHA256SUMS`, so consumers can run `gh attestation verify <file> --repo Nimblesite/lspkit`. `[SWR-SEC-CHECKSUM]` `[SWR-SEC-PROVENANCE]` `[SWR-SEC-SBOM]`
+- **[REL-OIDC]** crates.io, npm and NuGet all publish through OIDC Trusted Publishing from `release.yml` in the protected `release` environment. NuGet's policy is owned by the `Nimblesite` nuget.org organization. The repo stores no `CARGO_REGISTRY_TOKEN`, `NPM_TOKEN` or `NUGET_API_KEY`. npm packages also publish with `--provenance`. `[SWR-SEC-OIDC-PUBLISH]`
+- **[REL-ORDER]** Crates publish in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `cargo publish` waits for each crate to appear in the index, so no sleeps are needed. The npm package (`@nimblesite/lsp-profiler-ui`) publishes after the crates, then NuGet (`LspKit.Sidecar`). Every publish step skips a version that is already on the registry, so a re-run after a failure partway through is safe.
+- **[REL-METADATA]** Every published crate, npm package and nupkg declares `license = "MIT"` and a repository. The root `LICENSE-MIT` is staged into each crate (`LICENSE-MIT`) each npm package (`LICENSE`) and the nupkg (`LICENSE-MIT`, via `PackageLicenseFile`) at publish time, so the declared license ships with the package. `[SWR-REL-LICENSE]`
 - **[REL-PACKAGED-BUILD]** A published crate builds without the workspace around it. `lsp-profiler`'s `build.rs` runs the typeDiagram generator only when the workspace generator exists. Otherwise it requires the generated `src/wire_generated.rs` that the crate's `include` packs. `[PROF-WIRE-PACKAGED]`
 - **[REL-DEPENDABOT]** Every Dependabot bump lands on the unprotected `dependabot-upgrades` staging branch. CI, CodeQL and supply-chain skip Dependabot PRs, and the batch reaches `main` through one consolidation PR.
 
@@ -157,7 +157,7 @@ A patch is acceptable iff:
 6. `grep -R 'tower_lsp\|rmcp::' crates/*/src/lib.rs` returns **zero hits** in `pub` signatures (manual review against the rule).
 7. The `EngineApi` trait skeleton compiles and is exercised by a smoke test that constructs a no-op implementation and calls each method.
 8. Each of the four source repos has a "Migration to `lspkit`" section in its AI-guidance file.
-9. **[REL-OIDC]** `.github/workflows/release.yml` publishes crates.io (`rust-lang/crates-io-auth-action`) and npm (`--provenance`) under `environment: release`, references no registry token secret, and pins every `uses:` to a 40-char SHA.
+9. **[REL-OIDC]** `.github/workflows/release.yml` publishes crates.io (`rust-lang/crates-io-auth-action`), npm (`--provenance`) and NuGet (`NuGet/login`) under `environment: release`, references no registry token secret, and pins every `uses:` to a 40-char SHA.
 10. **[REL-VERSION]** Every source version is `0.0.0-dev`, and the release stamps from `${{ github.ref_name }}`.
-11. **[REL-ORDER]** The release publishes all four crates and both npm packages in the order above, through the idempotent skip-if-published wrappers.
+11. **[REL-ORDER]** The release publishes all four crates, the npm package and the NuGet package in the order above, through the idempotent skip-if-published wrappers.
 12. **[REL-REGIME]** No workflow triggers on `push` to a branch. `actionlint` and `zizmor --min-severity medium` report nothing for `.github/workflows/`.

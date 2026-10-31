@@ -115,6 +115,11 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=high --prefix packages/lsp-profiler-ui
 
+      # The wire model is gitignored; generate it so the packaged lsp-profiler
+      # crate ships `src/wire_generated.rs`. [PROF-WIRE-GEN] [PROF-WIRE-PACKAGED]
+      - name: Generate wire model
+        run: node scripts/typediagram/generate.mjs
+
       # Package every crate and verify each tarball builds on its own, against
       # the other just-packaged crates. The tarballs are checksummed, attested
       # and attached to the release; `cargo publish` uploads the same packaged

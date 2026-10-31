@@ -144,6 +144,8 @@ main > .blog-post, .article-shell { width: 100%; max-width: 960px; margin-inline
 .prose .example-shots figure:only-child { grid-column: 1 / -1; }
 @media (max-width: 768px) { .prose .example-shots { grid-template-columns: 1fr; } }
 .prose figcaption { margin-top: 12px; color: var(--color-muted); font: 12px/1.6 var(--font-mono); }
+.prose .example-project { display: block; margin-bottom: 4px; color: var(--color-text); font: 15px/1.5 Arial, Helvetica, sans-serif; text-decoration: none; }
+.prose .example-project strong { color: var(--color-primary); }
 .prose hr { margin-block: 40px; border: 0; border-top: 1px solid var(--color-border); }
 .prose details { padding: 16px 20px; border-block: 1px solid var(--color-border); }
 .prose summary { cursor: pointer; font-weight: bold; min-height: 44px; padding-block: 8px; }

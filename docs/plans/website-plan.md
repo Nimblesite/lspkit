@@ -5,12 +5,16 @@
 - [x] Inspect techdoc layouts and identify missing shared prose coverage and off-canvas mobile docs navigation.
 - [x] Add and run a failing generated-site regression for prose examples and navigable docs/blog pages: missing `/docs/prose/` link reproduced before the fix.
 - [x] Apply shared `.prose` styling, in-flow mobile docs navigation, header illustrations and linked docs/standalone specimens from one Markdown source.
-- [ ] Run regression, lint, build and repository tests; record environment limits.
-- [ ] Review duplication and remove temporary build output.
+- [x] Run regression, lint, build and repository tests; record environment limits below.
+- [x] Review duplication and remove temporary website build output; disk check reports 17 GiB available.
 
 Website checks: both generated-site regressions pass; Oxlint and `git diff --check` pass. The final Deslop scan found no website duplication clusters. CSS is 172 lines, below the 2,000-line budget. Browser viewport verification remains unavailable: the computer-use host reports no browsers or native apps. Kimi's read-only review identified overlapping mobile menus, long-token overflow, table containment and landscape menu scrolling; the changes address these without adding runtime JavaScript.
 
 Branch: `website` created directly from fetched `origin/main`; all pending changes are website-related. The previous `updates` tree matches `origin/main` exactly.
+
+Repository validation: `make fmt CHECK=1`, profiler UI build and all three path regressions, `make lint`, `make build`, `make website-test`, Ruff and whitespace checks pass. `make test` is **not green**: 125 tests passed before `memory_profiling_sees_the_leak_its_root_and_the_collection` failed because the runtime dropped 1,713 heap events after its 1,024 MB capture buffer filled; fail-fast left 352 tests unrun. No profiler source, test, coverage threshold or timeout was changed. Browser viewport/interaction checks remain unverified because the browser host is unavailable.
+
+Added `make website-test` to PR CI so the static website checks stay enforced. Updated local `main` to `origin/main` and removed the obsolete local `updates` branch only after verifying its tree was identical to the already-squashed main tree; the working tree has one feature branch, `website`.
 
 - [x] Remove the Atom subscription footer link [WEB-CONTENT]: the plugin generates URL-encoded article markup instead of HTML content and omits feed/entry authors. Feed generation remains upstream; the footer no longer promotes it.
 

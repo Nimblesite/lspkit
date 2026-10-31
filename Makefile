@@ -5,7 +5,7 @@
 # =============================================================================
 
 .PHONY: build test lint fmt clean ci setup help doc profiler-ui profiler-ui-test
-.PHONY: website-build website-run _website_setup
+.PHONY: website-build website-run website-test _website_setup
 
 # ---------------------------------------------------------------------------
 # OS Detection
@@ -114,6 +114,7 @@ help:
 	@echo "  profiler-ui-test - Test the profiler UI package against a mock server"
 	@echo "  website-build    - Install dependencies and build the Eleventy website"
 	@echo "  website-run      - Install dependencies and serve the website locally"
+	@echo "  website-test     - Lint and verify the generated website"
 
 # ---------------------------------------------------------------------------
 # Private sub-recipes (NOT in .PHONY public list; underscore-prefixed)
@@ -220,3 +221,8 @@ website-build: _website_setup
 ## website-run: Serve the website with live reload at http://localhost:8080.
 website-run: _website_setup
 	npm run dev --prefix website
+
+## website-test: Check the shared prose pages and all generated local links.
+website-test: _website_setup
+	npm run lint --prefix website
+	npm test --prefix website

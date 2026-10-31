@@ -22,7 +22,8 @@ for tarball in "$work"/dist/*.tgz; do
 done
 
 readonly PACKAGE=@nimblesite/lsp-profiler-ui
-if [ "$(npm trust list "$PACKAGE" --json)" != "[]" ]; then
+trusts="$(npm trust list "$PACKAGE" --json)"
+if [ "$(python3 -c 'import json, sys; print(len(json.loads(sys.argv[1])))' "$trusts")" -gt 0 ]; then
     echo "==> $PACKAGE already has a Trusted Publisher"
 else
     npm trust github "$PACKAGE" --file release.yml --repo Nimblesite/lspkit --env release --allow-publish --yes

@@ -29,7 +29,7 @@ const PALETTE_CSS_VARS: readonly (readonly [keyof ProfilerPalette, string])[] = 
 ];
 
 /** A six-digit hex colour: the only override CSS can never be injected through. */
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
 
 let readPalette: () => ProfilerPalette = () => DEFAULT_PALETTE;
 
@@ -39,7 +39,7 @@ export function profilerPalette(): ProfilerPalette { return readPalette(); }
 
 /** Reject CSS injection and invalid overrides, retaining the host default. */
 export function resolvePalette(base: ProfilerPalette, overrides: unknown): ProfilerPalette {
-  if (!isRecord(overrides)) return base;
+  if (!isRecord(overrides)) { return base; }
   const pick = (key: keyof ProfilerPalette, fallback: string): string => {
     const value = overrides[key];
     return typeof value === "string" && HEX_COLOR.test(value) ? value : fallback;
@@ -69,15 +69,24 @@ export function paletteCss(palette: ProfilerPalette = profilerPalette()): string
   return `:root { ${Object.entries(paletteVars(palette)).map(([name, value]) => `${name}: ${value};`).join(" ")} }`;
 }
 
+const COLOR_CHANNEL_MAX = 255;
+const LUMA_RED = 0.2126;
+const LUMA_GREEN = 0.7152;
+const LUMA_BLUE = 0.0722;
+const LUMA_THRESHOLD = 0.5;
+const RED_CHANNEL_OFFSET = 1;
+const GREEN_CHANNEL_OFFSET = 3;
+const BLUE_CHANNEL_OFFSET = 5;
+
 /**
  * Text that stays readable on `fill`, a six-digit hex colour: dark ink on a
  * light fill, light ink on a dark one. Embedded in the flame webview, so it
  * calls nothing else.
  */
 export function inkFor(fill: string): string {
-  const channel = (at: number): number => parseInt(fill.slice(at, at + 2), 16) / 255;
-  const luma = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
-  return luma < 0.5 ? "rgba(245, 245, 245, 0.95)" : "rgba(15, 15, 15, 0.9)";
+  const channel = (at: number): number => Number.parseInt(fill.slice(at, at + 2), 16) / COLOR_CHANNEL_MAX;
+  const luma = LUMA_RED * channel(RED_CHANNEL_OFFSET) + LUMA_GREEN * channel(GREEN_CHANNEL_OFFSET) + LUMA_BLUE * channel(BLUE_CHANNEL_OFFSET);
+  return luma < LUMA_THRESHOLD ? "rgba(245, 245, 245, 0.95)" : "rgba(15, 15, 15, 0.9)";
 }
 
 /** The source classification a host that supplies none gets: a frame with a file is source. */
@@ -103,31 +112,43 @@ export interface FrameRank { key: string; i: number }
  * so equal elements come back in input order either way. The policy has to be
  * asserted directly or it is not pinned.
  */
-export function byFrameKeyThenIndex(a: FrameRank, b: FrameRank): number {
-  return a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i;
+export function byFrameKeyThenIndex(left: FrameRank, right: FrameRank): number {
+  if (left.key < right.key) { return -1; }
+  if (left.key > right.key) { return 1; }
+  return left.i - right.i;
 }
 
 /** Each frame's rank by (file, name): frame identity, never array order, picks its colour. */
 export function frameRanks(frames: readonly { file?: string; name: string }[]): number[] {
-  const ranks = new Array<number>(frames.length).fill(0);
-  frames.map((frame, i) => ({ key: (frame.file ?? "") + "\u0000" + frame.name, i }))
-    .sort(byFrameKeyThenIndex)
-    .forEach(({ i }, rank) => { ranks[i] = rank; });
+  const ranks = Array.from({ length: frames.length }, () => 0);
+  const keyed = frames.map((frame, index) => ({ key: `${frame.file ?? ""}\u0000${frame.name}`, i: index }));
+  for (const [rank, entry] of keyed.toSorted(byFrameKeyThenIndex).entries()) {
+    ranks[entry.i] = rank;
+  }
   return ranks;
 }
 
+const RAMP_SIZE = 3;
+
 /** Stable frame ranks choose from the host ramp; unknown frames stay neutral. */
 export function framePaletteColor(index: number, source: boolean, palette: ProfilerPalette): string {
-  return source ? [palette.critical, palette.hot, palette.warm][index % 3] : "#78818b";
+  return source ? [palette.critical, palette.hot, palette.warm][index % RAMP_SIZE] : "#78818b";
 }
+
+const CPU_HEAT_HIGH = 20;
+const CPU_HEAT_MEDIUM = 10;
+const CPU_HEAT_LOW = 5;
 
 /** CPU heat thresholds shared by canvas and source annotations. */
 export function cpuHeatColor(pct: number, palette = profilerPalette()): string {
-  return pct >= 20 ? palette.critical : pct >= 10 ? palette.hot : pct >= 5 ? palette.warm : "#88888899";
+  if (pct >= CPU_HEAT_HIGH) { return palette.critical; }
+  if (pct >= CPU_HEAT_MEDIUM) { return palette.hot; }
+  if (pct >= CPU_HEAT_LOW) { return palette.warm; }
+  return "#88888899";
 }
 
 /** Every frame coloured from the host ramp by its rank. */
-export function paletteFrames<T extends { file: string; name: string; color: string; source?: boolean }>(frames: T[], palette: ProfilerPalette): T[] {
+export function paletteFrames<Frame extends { file: string; name: string; color: string; source?: boolean }>(frames: Frame[], palette: ProfilerPalette): Frame[] {
   const ranks = frameRanks(frames);
   return frames.map((frame, index) => ({ ...frame,
     color: framePaletteColor(ranks[index] ?? index, frame.source ?? hasSourceFile(frame.file), palette) }));

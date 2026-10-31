@@ -10,11 +10,11 @@
  */
 
 import { numberField, rawField } from "./unknown-shape";
-import { cmd, debugType, configSection, brand } from "./ids";
+import { brand, cmd, configSection, debugType } from "./ids";
 import * as vscode from "vscode";
 import { startProfilingForPid } from "./profiler-attach";
-import { type ProfilerStore as Store } from "./store";
-import { type ProcessInfo } from "./process-explorer";
+import type { ProfilerStore as Store } from "./store";
+import type { ProcessInfo } from "./process-explorer";
 import type { LaunchMetric } from "./host";
 
 // ── Per-row actions (#79) ────────────────────────────────────────────────
@@ -85,7 +85,7 @@ export interface ProcessRowDeps {
 }
 
 const DEFAULT_ROW_DEPS: ProcessRowDeps = {
-  runCommand: async (command, ...args) => await vscode.commands.executeCommand(command, ...args),
+  runCommand: async (command, ...args) => vscode.commands.executeCommand(command, ...args),
   activeSession: () => vscode.debug.activeDebugSession,
 };
 
@@ -113,7 +113,7 @@ async function memoryTrackProcess(
   deps: ProcessRowDeps,
 ): Promise<void> {
   if (!ensureSelection(item)) { return; }
-  const pid = item.process.pid;
+  const { pid } = item.process;
   // A direct runtime reads any attachable heap; a courier runtime only its debuggee ([PROF-UI-CAPABILITIES]).
   if (store.memoryIsDirect(item.process.runtime) || memoryTrackRoute(store, pid, deps.activeSession()) === "start-tracking") {
     await deps.runCommand(cmd("memoryStart"), pid);
@@ -126,9 +126,13 @@ async function memoryTrackProcess(
 function offerMemoryLaunch(pid: number, deps: ProcessRowDeps): void {
   const launch = "Run & Track Memory (Current File)";
   const offer = `${brand()}: Memory tracking needs the target running under the ${brand()} debugger — PID ${String(pid)} is not the active debuggee. Launch the current file with memory tracking instead?`;
-  void vscode.window.showWarningMessage(offer, launch).then((choice) => {
-    if (choice === launch) { void deps.runCommand(cmd("trackMemoryCurrentFile")); }
-  });
+  void offerMemoryLaunchChoice(offer, launch, deps);
+}
+
+/** Await the launch offer and run the launch when it is accepted. */
+async function offerMemoryLaunchChoice(offer: string, launch: string, deps: ProcessRowDeps): Promise<void> {
+  const choice = await vscode.window.showWarningMessage(offer, launch);
+  if (choice === launch) { await deps.runCommand(cmd("trackMemoryCurrentFile")); }
 }
 
 /**

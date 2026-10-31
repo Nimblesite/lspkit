@@ -1,7 +1,7 @@
 {
   "name": "@nimblesite/lsp-profiler-ui",
-  "version": "0.0.1",
-  "description": "Editor-neutral VS Code UI for the lsp-profiler protocol: processes view, CPU heat map, flame graph, memory dashboard, retention graph, autopilot.",
+  "version": "0.0.0-dev",
+  "description": "Editor-neutral VS Code UI for the lsp-profiler protocol (processes view, CPU heat map, flame graph, memory dashboard, retention graph, autopilot) plus language-neutral Debug Adapter Protocol glue and test harness (debug, debug/testing).",
   "license": "MIT",
   "repository": "https://github.com/Nimblesite/lspkit",
   "main": "./out/src/index.js",
@@ -9,6 +9,7 @@
   "files": [
     "out/src",
     "!out/src/test",
+    "!out/src/debug/test",
     "scripts/contributions.mjs"
   ],
   "engines": {
@@ -18,10 +19,11 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "build": "npm run compile",
-    "lint": "tsc -p ./ --noEmit && eslint .",
+    "lint": "tsc -p ./ --noEmit && oxlint -c ../.oxlintrc.json --type-aware --deny-warnings src",
     "pretest": "node scripts/write-test-host-manifest.mjs",
-    "test": "vscode-test",
-    "test:paths": "mocha --ui tdd out/src/test/suite/editor-path-key.test.js"
+    "test": "vscode-test && npm run test:debug",
+    "test:paths": "mocha --ui tdd out/src/test/suite/editor-path-key.test.js",
+    "test:debug": "c8 mocha --ui tdd --timeout 10000 \"out/src/debug/test/**/*.test.js\""
   },
   "dependencies": {
     "@preact/signals-core": "^1.14.4"
@@ -30,25 +32,24 @@
     "vscode-languageclient": "^9.0.1 || ^10.1.0"
   },
   "overrides": {
-    "mocha": "$mocha"
+    "mocha": "$mocha",
+    "glob": "$glob",
+    "minimatch": "^11.0.3"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.1.2",
     "@types/vscode": "^1.99.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
-    "eslint": "^10.13.0",
-    "glob": "^13.0.6",
+    "c8": "^12.0.0",
+    "glob": "^14.0.3",
     "mocha": "^12.0.3",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.72.0",
+    "oxlint": "^1.90.0",
+    "oxlint-tsgolint": "^7.0.2005",
+    "typescript": "^7.0.2",
     "vscode-languageclient": "^10.1.0",
     "vscode-languageserver": "^10.0.0",
     "vscode-languageserver-textdocument": "^1.0.15"
-  },
-  "overrides": {
-    "mocha": "$mocha"
   }
 }

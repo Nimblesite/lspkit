@@ -1,0 +1,11 @@
+{
+  "all": true,
+  "include": ["out/src/debug/**/*.js"],
+  "exclude": ["**/index.js", "**/*.d.ts", "out/src/debug/test/**"],
+  "reporter": ["text", "text-summary", "json-summary"],
+  "check-coverage": true,
+  "branches": 90,
+  "lines": 95,
+  "functions": 95,
+  "statements": 95
+}

@@ -10,12 +10,13 @@
  * issue #148). Both share the one subscription primitive below.
  */
 
-import { effect, type ReadonlySignal } from "@preact/signals-core";
+import type { ReadonlySignal } from "@preact/signals-core";
+import { effect } from "@preact/signals-core";
 import type * as vscode from "vscode";
 
 /** A panel that can re-render on demand and tracks its own disposables. */
 export interface RefreshablePanel {
-  refresh(): void;
+  refresh: () => void;
   readonly disposables: vscode.Disposable[];
 }
 

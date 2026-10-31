@@ -86,7 +86,7 @@ export function toSnapshotResult(result: MemoryIngestResult): MemorySnapshotResu
     snapshotId: asString(result.snapshotId),
     currentMemory: asNumber(result.currentMemory),
     peakMemory: asNumber(result.peakMemory),
-    topAllocations: recordArrayField(result, "topAllocations").map(toAllocation),
+    topAllocations: recordArrayField(result, "topAllocations").map((allocation) => toAllocation(allocation)),
   };
 }
 
@@ -119,7 +119,7 @@ export function toDashboardSnapshot(result: MemoryIngestResult): MemoryDashboard
     gcObjects: asNumber(result.gcObjects),
     gcCounts: numberArrayField(result, "gcCounts"),
     generationSizes: recordArrayField(result, "generationSizes").map((region) => ({ name: asString(region.name), size: asNumber(region.size) })),
-    topAllocations: recordArrayField(result, "topAllocations").map(toAllocation),
+    topAllocations: recordArrayField(result, "topAllocations").map((allocation) => toAllocation(allocation)),
     timeline: [],
     heapProfilePath: asString(result.heapProfilePath),
   };
@@ -133,7 +133,7 @@ export function toDashboardDiff(result: MemoryIngestResult): MemoryDiffData {
     totalFreed: asNumber(result.totalFreed),
     netGrowth: asNumber(result.netGrowth),
     grownAllocations: [],
-    suspectedLeaks: leaks.map(toSuspectedLeak),
+    suspectedLeaks: leaks.map((leak) => toSuspectedLeak(leak)),
   };
 }
 

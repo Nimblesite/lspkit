@@ -7,8 +7,8 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use lspkit::vfs::DocumentUri;
 use lspkit::Generation;
-use lspkit_vfs::DocumentUri;
 
 use crate::uri::path_to_uri;
 

@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use lsp_types::{Diagnostic, DiagnosticSeverity, InitializeParams, Position, Range};
-use lspkit_live::watcher::CoalescedWatcher;
-use lspkit_live::{FileWatcher, ScheduleConfig};
+use lspkit_server::live::watcher::CoalescedWatcher;
+use lspkit_server::live::{FileWatcher, ScheduleConfig};
 use lspkit_server::pull::{Analysis, AnalysisError};
 use lspkit_server::uri_to_path;
 use serde_json::Value;

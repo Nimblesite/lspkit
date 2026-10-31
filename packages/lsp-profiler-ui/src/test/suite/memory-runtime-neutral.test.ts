@@ -8,10 +8,11 @@
  * counter as "objects freed". Each test here fails on that behaviour.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import { toMemoryIngestResult } from '../../wire-adapters';
 import { toDashboardDiff, toDashboardSnapshot } from '../../memory-dashboard-mapping';
-import { buildMemoryDashboardHtml, type MemoryDashboardSnapshot } from '../../memory-dashboard';
+import type { MemoryDashboardSnapshot } from '../../memory-dashboard';
+import { buildMemoryDashboardHtml } from '../../memory-dashboard';
 import { referenceTypeCandidates } from '../../memory-ref-picker';
 import { gcSummary } from '../../memory-profiler';
 import type { AllocationSite, MemoryResult } from '../../wire-generated';

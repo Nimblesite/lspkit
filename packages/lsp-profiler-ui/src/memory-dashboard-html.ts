@@ -2,7 +2,7 @@
 import { brand } from "./ids";
 import type { MemoryDashboardSnapshot, MemoryDiffData } from "./memory-dashboard";
 import { buildWebviewDocument, embedJson } from "./profiler-webview";
-import { PROFILER_CSS_VARS, PROFILER_CSS_RESET, PROFILER_CSS_CARDS, PROFILER_CSS_TABLE, PROFILER_CSS_HEADING, PROFILER_JS_UTILS, brandHeading } from "./profiler-styles";
+import { PROFILER_CSS_CARDS, PROFILER_CSS_HEADING, PROFILER_CSS_RESET, PROFILER_CSS_TABLE, PROFILER_CSS_VARS, PROFILER_JS_UTILS, brandHeading } from "./profiler-styles";
 
 
 // ── HTML builder ──────────────────────────────────────────────────────────
@@ -18,36 +18,6 @@ export function buildMemoryDashboardHtml(
     body: buildDashboardBodyHtml(snapshot.heapProfilePath !== ""),
     script: buildDashboardScriptTag(snapshot, diff),
   });
-}
-
-function buildDashboardHeadCss(): string {
-  return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}
-    body { padding: 16px; overflow-y: auto; }
-    h1 .accent { color: var(--prof-mem-critical); }
-    .card .value.mem { color: var(--prof-mem-critical); }
-    ${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}${DASHBOARD_LAYOUT_CSS}${DASHBOARD_ACCENT_CSS}`;
-}
-
-/**
- * The raw V8 `.heapprofile` opens on demand rather than by default
- * ([PROF-CPU-START]): in the built-in viewer or in speedscope.app ([PROF-UI-WEBVIEW]).
- */
-function heapProfileButtonsHtml(hasHeapProfile: boolean): string {
-  return hasHeapProfile
-    ? `
-    <button class="toggle-btn" id="btn-open-heapprofile" title="Open the raw .heapprofile in the built-in trace viewer">Open Heap Profile in VS Code Viewer</button>
-    <button class="toggle-btn" id="btn-open-speedscope" title="Open speedscope.app with the heap profile loaded automatically">Open in Speedscope (external)</button>`
-    : "";
-}
-
-function buildDashboardBodyHtml(hasHeapProfile: boolean): string {
-  return `
-  ${brandHeading(brand(), "MEMORY")}
-  <div class="toggle-row">
-    <button class="toggle-btn" id="btn-take-snapshot">Take Snapshot</button>
-    <button class="toggle-btn" id="btn-compare">Compare Snapshots</button>${heapProfileButtonsHtml(hasHeapProfile)}
-  </div>
-  ${SUMMARY_CARDS_HTML}${DASHBOARD_SECTIONS_HTML}`;
 }
 
 /** The timeline, the heat mode toggle, the allocation table and the leak list. */
@@ -71,42 +41,6 @@ const DASHBOARD_SECTIONS_HTML = `
     <h2>Suspected Leaks</h2>
     <div id="leak-list"></div>
   </div>`;
-
-function buildDashboardScriptTag(
-  snapshot: MemoryDashboardSnapshot,
-  diff?: MemoryDiffData,
-): string {
-  return `
-    const vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
-    ${dashboardDataScript(snapshot, diff)}
-    ${PROFILER_JS_UTILS}
-    ${SUMMARY_SCRIPT}
-    ${TIMELINE_SCRIPT}
-    ${TOGGLE_SCRIPT}
-    ${ACTIONS_SCRIPT}
-    ${ALLOC_SCRIPT}
-    ${LEAK_SCRIPT}
-    renderTimeline(); renderAllocs(); renderLeaks();
-    window.addEventListener('resize',()=>{renderTimeline();});`;
-}
-
-/**
- * The snapshot and diff as script constants. Allocation paths and leak reasons
- * come from the profiled program, so they are embedded such that they can never
- * close the inline <script> ([PROF-UI-WEBVIEW]).
- */
-function dashboardDataScript(snapshot: MemoryDashboardSnapshot, diff?: MemoryDiffData): string {
-  return `
-    const allocations = ${embedJson(snapshot.topAllocations)};
-    const timeline = ${embedJson(snapshot.timeline)};
-    const leaks = ${embedJson(diff?.suspectedLeaks ?? [])};
-    const gcCounts = ${embedJson(snapshot.gcCounts)};
-    const generationSizes = ${embedJson(snapshot.generationSizes ?? [])};
-    const heapProfileFile = ${embedJson(snapshot.heapProfilePath)};
-    const currentMemory = ${embedJson(snapshot.currentMemory)};
-    const peakMemory = ${embedJson(snapshot.peakMemory)};
-    const gcObjects = ${embedJson(snapshot.gcObjects)};`;
-}
 
 // ── CSS fragments ─────────────────────────────────────────────────────────
 
@@ -352,3 +286,70 @@ const LEAK_SCRIPT = `
     }`;
 
 const TIMELINE_SCRIPT = [TIMELINE_SETUP_SCRIPT, TIMELINE_DRAW_SCRIPT, TIMELINE_CROSSHAIR_SCRIPT].join("\n");
+
+function buildDashboardHeadCss(): string {
+  return `${PROFILER_CSS_VARS}${PROFILER_CSS_RESET}
+    body { padding: 16px; overflow-y: auto; }
+    h1 .accent { color: var(--prof-mem-critical); }
+    .card .value.mem { color: var(--prof-mem-critical); }
+    ${PROFILER_CSS_HEADING}${PROFILER_CSS_CARDS}${PROFILER_CSS_TABLE}${DASHBOARD_LAYOUT_CSS}${DASHBOARD_ACCENT_CSS}`;
+}
+
+/**
+ * The raw V8 `.heapprofile` opens on demand rather than by default
+ * ([PROF-CPU-START]): in the built-in viewer or in speedscope.app ([PROF-UI-WEBVIEW]).
+ */
+function heapProfileButtonsHtml(hasHeapProfile: boolean): string {
+  return hasHeapProfile
+    ? `
+    <button class="toggle-btn" id="btn-open-heapprofile" title="Open the raw .heapprofile in the built-in trace viewer">Open Heap Profile in VS Code Viewer</button>
+    <button class="toggle-btn" id="btn-open-speedscope" title="Open speedscope.app with the heap profile loaded automatically">Open in Speedscope (external)</button>`
+    : "";
+}
+
+function buildDashboardBodyHtml(hasHeapProfile: boolean): string {
+  return `
+  ${brandHeading(brand(), "MEMORY")}
+  <div class="toggle-row">
+    <button class="toggle-btn" id="btn-take-snapshot">Take Snapshot</button>
+    <button class="toggle-btn" id="btn-compare">Compare Snapshots</button>${heapProfileButtonsHtml(hasHeapProfile)}
+  </div>
+  ${SUMMARY_CARDS_HTML}${DASHBOARD_SECTIONS_HTML}`;
+}
+
+function buildDashboardScriptTag(
+  snapshot: MemoryDashboardSnapshot,
+  diff?: MemoryDiffData,
+): string {
+  return `
+    const vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
+    ${dashboardDataScript(snapshot, diff)}
+    ${PROFILER_JS_UTILS}
+    ${SUMMARY_SCRIPT}
+    ${TIMELINE_SCRIPT}
+    ${TOGGLE_SCRIPT}
+    ${ACTIONS_SCRIPT}
+    ${ALLOC_SCRIPT}
+    ${LEAK_SCRIPT}
+    renderTimeline(); renderAllocs(); renderLeaks();
+    window.addEventListener('resize',()=>{renderTimeline();});`;
+}
+
+/**
+ * The snapshot and diff as script constants. Allocation paths and leak reasons
+ * come from the profiled program, so they are embedded such that they can never
+ * close the inline <script> ([PROF-UI-WEBVIEW]).
+ */
+function dashboardDataScript(snapshot: MemoryDashboardSnapshot, diff?: MemoryDiffData): string {
+  return `
+    const allocations = ${embedJson(snapshot.topAllocations)};
+    const timeline = ${embedJson(snapshot.timeline)};
+    const leaks = ${embedJson(diff?.suspectedLeaks ?? [])};
+    const gcCounts = ${embedJson(snapshot.gcCounts)};
+    const generationSizes = ${embedJson(snapshot.generationSizes ?? [])};
+    const heapProfileFile = ${embedJson(snapshot.heapProfilePath)};
+    const currentMemory = ${embedJson(snapshot.currentMemory)};
+    const peakMemory = ${embedJson(snapshot.peakMemory)};
+    const gcObjects = ${embedJson(snapshot.gcObjects)};`;
+}
+

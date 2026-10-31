@@ -10,17 +10,14 @@
 //   3. the live wiring — driving the real store's signal and reading the live
 //      tree-view chrome + status bar back through their e2e seams.
 
-import * as assert from "assert";
-import { getStore } from "./test-helpers";
+import * as assert from "node:assert";
+import type { ProfilerSession } from "../../profiler-state";
+import { IDLE_PROFILER_SESSION } from "../../profiler-state";
+import { getStore, setupLspTestSuite, teardownLspTestSuite } from "./test-helpers";
 import { profilerStatusText } from "../../profiler";
 import { panelBadge, panelMessage, processesViewState } from "../../process-reactivity";
-import { IDLE_PROFILER_SESSION, type ProfilerSession } from "../../profiler-state";
-
-import { setupLspTestSuite, teardownLspTestSuite } from "./test-helpers";
-import {
-  type MenuContribution,
-  manifestMenu
-} from "./extension-manifest";
+import type { MenuContribution } from "./extension-manifest";
+import { manifestMenu } from "./extension-manifest";
 
 /** Panel-scoped entries of a given menu. */
 function panelMenu(menuId: string): MenuContribution[] {
@@ -38,14 +35,28 @@ function session(partial: Partial<ProfilerSession>): ProfilerSession {
   return { ...IDLE_PROFILER_SESSION, ...partial };
 }
 
+/** The live store, asserted present. */
+function liveStore(): NonNullable<ReturnType<typeof getStore>> {
+  const store = getStore();
+  assert.ok(store, "the store must be initialized after activation");
+  return store;
+}
+
+/** Return the panel to idle so suites stay independent. */
+function resetProfilerState(): void {
+  const store = getStore();
+  store?.profilerStopped();
+  store?.memoryTrackingStopped();
+}
+
 /** Assert `text` is present and contains `needle`. */
 function assertHas(text: string | undefined, needle: string): void {
-  assert.ok(text?.includes(needle), `expected "${needle}" in: ${text ?? "(none)"}`);
+  assert.ok(text?.includes(needle) === true, `expected "${needle}" in: ${text ?? "(none)"}`);
 }
 
 /** Assert `text` does not contain `needle` (absent counts as not containing). */
 function assertLacks(text: string | undefined, needle: string): void {
-  assert.ok(!text?.includes(needle), `unexpected "${needle}" in: ${text ?? "(none)"}`);
+  assert.ok(text?.includes(needle) !== true, `unexpected "${needle}" in: ${text ?? "(none)"}`);
 }
 
 suite("Processes panel — reactive button gating (manifest)", () => {
@@ -101,14 +112,15 @@ suite("Processes panel — reactive button gating (manifest)", () => {
   test("Track Memory is offered only on the active-debuggee row, never an external process", () => {
     // Memory tracking can't target an external process, so its row action gates
     // on the debuggee-only contextValue ([PROF-UI-PROCESSES]).
-    for (const entry of panelMenu("view/item/context").filter((e) => e.command === "lspui.profiler.memoryTrackProcess")) {
+    const rowActions = panelMenu("view/item/context");
+    for (const entry of rowActions.filter((candidate) => candidate.command === "lspui.profiler.memoryTrackProcess")) {
       assertWhenHas(entry, "lspui.profiler.memoryTrackProcess", "viewItem == processDebuggee");
     }
     // The CPU Profile action, by contrast, stays available on every attachable
     // row — blocked (🚫) rows opt out via `blockedProcess`, which the
     // `/^process/` clause deliberately does not match (#266).
     const profile = panelMenu("view/item/context").find(
-      (e) => e.command === "lspui.profiler.profileProcess" && (e.group ?? "").startsWith("inline"),
+      (entry) => entry.command === "lspui.profiler.profileProcess" && (entry.group ?? "").startsWith("inline"),
     );
     assertWhenHas(profile, "lspui.profiler.profileProcess", "/^process/");
   });
@@ -168,32 +180,18 @@ suite("Processes panel — reactive chrome builders (pure)", () => {
 suite("Processes panel — reactive chrome (store-driven, live)", () => {
   let tmpDir = "";
 
-  suiteSetup(async function () {
+  suiteSetup(async function setupSuite(this: Mocha.Context): Promise<void> {
     this.timeout(90_000);
-    const result = await setupLspTestSuite("lspui-reactive-");
-    tmpDir = result.tmpDir;
+    const { tmpDir: created } = await setupLspTestSuite("lspui-reactive-");
+    tmpDir = created;
   });
 
-  suiteTeardown(() => {
+  suiteTeardown(async () => {
     resetProfilerState();
-    teardownLspTestSuite(tmpDir);
+    await teardownLspTestSuite(tmpDir);
   });
 
   teardown(() => { resetProfilerState(); });
-
-  /** The live store, asserted present. */
-  function liveStore(): NonNullable<ReturnType<typeof getStore>> {
-    const store = getStore();
-    assert.ok(store, "the store must be initialized after activation");
-    return store;
-  }
-
-  /** Return the panel to idle so suites stay independent. */
-  function resetProfilerState(): void {
-    const store = getStore();
-    store?.profilerStopped();
-    store?.memoryTrackingStopped();
-  }
 
   test("idle: no live chrome, the status bar is hidden, and nothing is busy", () => {
     resetProfilerState();

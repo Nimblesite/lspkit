@@ -5,14 +5,16 @@
 
 import type { FlameModel } from "./flame-model";
 import { escapeHtml } from "./profiler-styles";
-import { formatSummaryHeader, onCpuPct, type ProfileSummary } from "./sample-summary";
+import type { ProfileSummary } from "./sample-summary";
+import { formatSummaryHeader, onCpuPct } from "./sample-summary";
 
 export { escapeHtml } from "./profiler-styles";
 
 /** The final path segment (both separators), for compact locations. */
 export function pathBasename(filePath: string): string {
-  const parts = filePath.split(/[\\/]/);
-  return parts[parts.length - 1] || filePath;
+  const parts = filePath.split(/[\\/]/u);
+  const lastPart = parts.at(-1);
+  return lastPart !== undefined && lastPart !== "" ? lastPart : filePath;
 }
 
 function chipsHtml(summary: ProfileSummary): string {
@@ -89,7 +91,7 @@ body {
 
 function embedJson(model: FlameModel, summary: ProfileSummary): string {
   // <-escape so "</script>" inside frame names can never close the blob.
-  return JSON.stringify({ model, summary }).replace(/</g, "\\u003c");
+  return JSON.stringify({ model, summary }).replaceAll("<", String.raw`\u003c`);
 }
 
 /** The interactive sampled view, mounted in the shared CPU results panel. */

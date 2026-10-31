@@ -20,15 +20,15 @@
  */
 
 import * as vscode from "vscode";
-import { cmd, brand, configSection } from "./ids";
+import { brand, cmd, configSection } from "./ids";
 import { effect } from "@preact/signals-core";
 import { Logger } from "./logger";
 import type { ProfilerStore as Store } from "./store";
-import type { ProfilerActivity } from "./profiler-state";
 import { withUserProgress } from "./progress-ops";
 import { captureSnapshotAndDiff, isDirectMemorySession, isMemoryOperationInFlight } from "./memory-capture";
 import { isDebuggeePaused, onDebuggeePaused } from "./debuggee-pause";
-import { confidenceRank, type LeakConfidence, type MemoryDiffResult } from "./memory-decorations";
+import type { LeakConfidence, MemoryDiffResult, SuspectedLeak } from "./memory-decorations";
+import { confidenceRank } from "./memory-decorations";
 import { describeLeak, leakToOffer } from "./memory-leak-offer";
 
 /** Progress title for an automatic capture (visible feedback each pass). */
@@ -90,15 +90,22 @@ export function recordedLeakOffers(): readonly LeakActionOffer[] {
 
 // ── State ─────────────────────────────────────────────────────────────────
 
-let boundStore: Store | undefined;
+/** The autopilot's nullable module state, in one object so it has one initialiser. */
+interface AutopilotState {
+  boundStore: Store | undefined;
+  intervalTimer: ReturnType<typeof setInterval> | undefined;
+  leakOfferedForSession: string | undefined;
+}
+
+const autopilotState: AutopilotState = {
+  boundStore: undefined,
+  intervalTimer: undefined,
+  leakOfferedForSession: undefined,
+};
 /** Synchronous re-entrancy guard — set before the first `await` of a capture. */
 let autopilotBusy = false;
-/** Interval timer handle while interval mode is armed. */
-let intervalTimer: ReturnType<typeof setInterval> | undefined;
-/** The memory session we have already offered a leak action for (offer once). */
-let leakOfferedForSession: string | undefined;
 /** Previous tracking state, to detect active⇄idle transitions in the effect. */
-let prevMemoryState: ProfilerActivity = "idle";
+let prevMemoryState: Store["profiler"]["value"]["memory"] = "idle";
 
 // ── Registration ────────────────────────────────────────────────────────────
 
@@ -107,7 +114,7 @@ let prevMemoryState: ProfilerActivity = "idle";
  * tracking-signal effect and any live interval timer.
  */
 export function registerMemoryAutopilot(store: Store): vscode.Disposable[] {
-  boundStore = store;
+  autopilotState.boundStore = store;
   prevMemoryState = store.profiler.value.memory;
   const disposeEffect = effect(() => { autopilotLifecycle(store); });
   return [
@@ -119,9 +126,9 @@ export function registerMemoryAutopilot(store: Store): vscode.Disposable[] {
 /** Clear all autopilot state (deactivation / test teardown). */
 export function disposeMemoryAutopilot(): void {
   stopInterval();
-  boundStore = undefined;
+  autopilotState.boundStore = undefined;
   autopilotBusy = false;
-  leakOfferedForSession = undefined;
+  autopilotState.leakOfferedForSession = undefined;
   prevMemoryState = "idle";
   autopilotCaptures = [];
   leakActionOffers = [];
@@ -136,22 +143,31 @@ export function disposeMemoryAutopilot(): void {
  * enabled. Fire-and-forget — never blocks the DAP tracker.
  */
 export function notifyDebuggeePause(sessionId: string): void {
+  const store = pauseCaptureStore(sessionId);
+  if (store === undefined) { return; }
+  autopilotBusy = true;
+  Logger.info(`[Memory] autopilot: capturing on pause (session ${sessionId})`);
+  void runAutoCapture(store, "pause");
+}
+
+/** The bound store when a pause should auto-capture, else undefined. */
+function pauseCaptureStore(sessionId: string): Store | undefined {
   // A direct runtime cannot read a heap the debugger holds paused, and a read
   // started just after a Continue blocks at the next pause, so pause-driven
   // capture is courier-only; a direct runtime is captured on the interval
   // ([PROF-MEMORY-MODE]).
-  if (isDirectMemorySession()) { return; }
-  const store = boundStore;
-  if (store === undefined) { return; }
-  if (autopilotBusy || isMemoryOperationInFlight()) { return; }
-  if (store.profiler.value.memory !== "active") { return; }
-  if (store.profiler.value.memoryDebugSessionId !== sessionId) { return; }
-  if (!isPauseCaptureEnabled()) { return; }
-  // Set the synchronous guard NOW so a second `stopped` event in the same tick
-  // (per-thread + allThreadsStopped) cannot start a duplicate capture.
-  autopilotBusy = true;
-  Logger.info(`[Memory] autopilot: capturing on pause (session ${sessionId})`);
-  void runAutoCapture(store, "pause");
+  if (isDirectMemorySession()) { return undefined; }
+  const store = autopilotState.boundStore;
+  if (store === undefined) { return undefined; }
+  return canCapturePause(store, sessionId) ? store : undefined;
+}
+
+/** Whether this session may capture on its pause right now. */
+function canCapturePause(store: Store, sessionId: string): boolean {
+  if (autopilotBusy || isMemoryOperationInFlight()) { return false; }
+  if (store.profiler.value.memory !== "active") { return false; }
+  if (store.profiler.value.memoryDebugSessionId !== sessionId) { return false; }
+  return isPauseCaptureEnabled();
 }
 
 // ── Interval trigger ─────────────────────────────────────────────────────────
@@ -181,15 +197,15 @@ function armIntervalIfEnabled(store: Store): void {
   const seconds = captureIntervalSeconds();
   if (seconds === undefined) { return; }
   stopInterval();
-  intervalTimer = setInterval(() => { void onIntervalTick(store); }, seconds * MS_PER_SECOND);
+  autopilotState.intervalTimer = setInterval(() => { void onIntervalTick(store); }, seconds * MS_PER_SECOND);
   Logger.info(`[Memory] autopilot interval armed: every ${String(seconds)}s`);
 }
 
 /** Stop the interval timer if running. */
 function stopInterval(): void {
-  if (intervalTimer !== undefined) {
-    clearInterval(intervalTimer);
-    intervalTimer = undefined;
+  if (autopilotState.intervalTimer !== undefined) {
+    clearInterval(autopilotState.intervalTimer);
+    autopilotState.intervalTimer = undefined;
   }
 }
 
@@ -214,12 +230,12 @@ async function onIntervalTick(store: Store): Promise<void> {
 async function runAutoCapture(store: Store, trigger: "pause" | "interval"): Promise<void> {
   try {
     const result = await withUserProgress(autoCaptureTitle(), async (report) =>
-      await captureSnapshotAndDiff(store, report),
+      captureSnapshotAndDiff(store, report),
     );
     recordCapture(trigger, result.diff);
     maybeOfferLeakActions(store, result.diff);
-  } catch (err: unknown) {
-    Logger.warn(`[Memory] autopilot capture failed: ${err instanceof Error ? err.message : String(err)}`);
+  } catch (error: unknown) {
+    Logger.warn(`[Memory] autopilot capture failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     autopilotBusy = false;
   }
@@ -252,8 +268,13 @@ function maybeOfferLeakActions(store: Store, diff: MemoryDiffResult | null): voi
     return;
   }
   const sessionId = store.profiler.value.memorySessionId;
-  if (sessionId === undefined || leakOfferedForSession === sessionId) { return; }
-  leakOfferedForSession = sessionId;
+  if (sessionId === undefined || autopilotState.leakOfferedForSession === sessionId) { return; }
+  autopilotState.leakOfferedForSession = sessionId;
+  recordLeakOffer(leak);
+}
+
+/** Record and announce one proactive leak-action offer (at most once per session). */
+function recordLeakOffer(leak: SuspectedLeak): void {
   const named = `${describeLeak(leak)} (${leak.confidence})`;
   const message = `${brand()}: Suspected memory leak: ${named}. ${leak.reason}`;
   const { file, line, typeName, confidence } = leak;
@@ -278,7 +299,7 @@ async function offerLeakActions(message: string): Promise<void> {
 function resetSessionState(): void {
   autopilotCaptures = [];
   leakActionOffers = [];
-  leakOfferedForSession = undefined;
+  autopilotState.leakOfferedForSession = undefined;
 }
 
 /** Whether per-pause auto-capture is enabled (default true). */

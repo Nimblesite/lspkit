@@ -5,18 +5,18 @@
  * suite's host extension and its wire-speaking language server.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import {
+    closeAllEditors,
     setupLspTestSuite,
     teardownLspTestSuite,
-    closeAllEditors,
 } from "./test-helpers";
 
 // Import profiler decoration types for structural assertions.
 import type {
-    ProfileResult,
-    ProfileHotLine,
     ProfileHotFunction,
+    ProfileHotLine,
+    ProfileResult,
 } from '../../profiler-decorations';
 import {
     applyProfileDecorations,
@@ -37,13 +37,13 @@ import {
 let tmpDir = '';
 
 suite('Profiler — Decoration Modules', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-dec-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-dec-');
+        tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -105,13 +105,13 @@ suite('Profiler — Decoration Modules', () => {
             file: '/src/app.py',
             line: 42,
             samples: 500,
-            percentage: 25.0,
+            percentage: 25,
         };
 
         assert.strictEqual(hotLine.file, '/src/app.py');
         assert.strictEqual(hotLine.line, 42);
         assert.strictEqual(hotLine.samples, 500);
-        assert.strictEqual(hotLine.percentage, 25.0);
+        assert.strictEqual(hotLine.percentage, 25);
     });
 
     test('ProfileHotFunction type has required fields', () => {
@@ -120,29 +120,29 @@ suite('Profiler — Decoration Modules', () => {
             file: '/src/pipeline.py',
             line: 15,
             samples: 800,
-            percentage: 40.0,
-            selfPercentage: 30.0,
+            percentage: 40,
+            selfPercentage: 30,
         };
 
         assert.strictEqual(hotFunc.name, 'process_data');
         assert.strictEqual(hotFunc.file, '/src/pipeline.py');
         assert.strictEqual(hotFunc.line, 15);
         assert.strictEqual(hotFunc.samples, 800);
-        assert.strictEqual(hotFunc.percentage, 40.0);
-        assert.strictEqual(hotFunc.selfPercentage, 30.0);
+        assert.strictEqual(hotFunc.percentage, 40);
+        assert.strictEqual(hotFunc.selfPercentage, 30);
     });
 
     test('MemoryAllocation type has required fields', () => {
         const alloc: MemoryAllocation = {
             file: '/src/data.py',
             line: 100,
-            size: 10485760,
+            size: 10_485_760,
             count: 5000,
         };
 
         assert.strictEqual(alloc.file, '/src/data.py');
         assert.strictEqual(alloc.line, 100);
-        assert.strictEqual(alloc.size, 10485760);
+        assert.strictEqual(alloc.size, 10_485_760);
         assert.strictEqual(alloc.count, 5000);
     });
 
@@ -150,28 +150,28 @@ suite('Profiler — Decoration Modules', () => {
         const snapshot: MemorySnapshotResult = {
             memorySessionId: 'mem-session-001',
             snapshotId: 'snap-001',
-            currentMemory: 50000000,
-            peakMemory: 75000000,
+            currentMemory: 50_000_000,
+            peakMemory: 75_000_000,
             topAllocations: [],
         };
 
         assert.strictEqual(snapshot.memorySessionId, 'mem-session-001');
         assert.strictEqual(snapshot.snapshotId, 'snap-001');
-        assert.strictEqual(snapshot.currentMemory, 50000000);
-        assert.strictEqual(snapshot.peakMemory, 75000000);
+        assert.strictEqual(snapshot.currentMemory, 50_000_000);
+        assert.strictEqual(snapshot.peakMemory, 75_000_000);
         assert.ok(Array.isArray(snapshot.topAllocations), 'topAllocations should be an array');
     });
 
 });
 
 suite('Profiler — Decoration Apply/Clear', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-dec2-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-dec2-');
+        tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -180,7 +180,7 @@ suite('Profiler — Decoration Apply/Clear', () => {
         await closeAllEditors();
     });
 
-    test('applyProfileDecorations handles empty result without throwing', () => {
+    test('applyProfileDecorations handles empty result without throwing', async () => {
         const emptyResult: ProfileResult = {
             sessionId: 'empty-session',
             duration: 0,
@@ -190,14 +190,14 @@ suite('Profiler — Decoration Apply/Clear', () => {
             hotLines: [],
         };
 
-        assert.doesNotThrow(() => {
-            applyProfileDecorations(emptyResult);
+        await assert.doesNotReject(async () => {
+            await applyProfileDecorations(emptyResult);
         }, 'applyProfileDecorations should handle empty results gracefully');
 
         clearProfileDecorations();
     });
 
-    test('applyMemoryDecorations handles empty result without throwing', () => {
+    test('applyMemoryDecorations handles empty result without throwing', async () => {
         const emptySnapshot: MemorySnapshotResult = {
             memorySessionId: 'empty-mem',
             snapshotId: 'snap-empty',
@@ -206,8 +206,8 @@ suite('Profiler — Decoration Apply/Clear', () => {
             topAllocations: [],
         };
 
-        assert.doesNotThrow(() => {
-            applyMemoryDecorations(emptySnapshot);
+        await assert.doesNotReject(async () => {
+            await applyMemoryDecorations(emptySnapshot);
         }, 'applyMemoryDecorations should handle empty snapshots gracefully');
 
         clearMemoryDecorations();
@@ -225,16 +225,16 @@ suite('Profiler — Decoration Apply/Clear', () => {
                     file: '/src/math.py',
                     line: 10,
                     samples: 2500,
-                    percentage: 50.0,
-                    selfPercentage: 35.0,
+                    percentage: 50,
+                    selfPercentage: 35,
                 },
                 {
                     name: 'transform',
                     file: '/src/utils.py',
                     line: 88,
                     samples: 1000,
-                    percentage: 20.0,
-                    selfPercentage: 15.0,
+                    percentage: 20,
+                    selfPercentage: 15,
                 },
             ],
             hotLines: [
@@ -242,7 +242,7 @@ suite('Profiler — Decoration Apply/Clear', () => {
                     file: '/src/math.py',
                     line: 12,
                     samples: 2000,
-                    percentage: 40.0,
+                    percentage: 40,
                 },
             ],
         };

@@ -64,7 +64,8 @@ public sealed class RequestPump<TRequest, TResponse> : IAsyncDisposable
         {
             return new WorkResult.Ok<bool, string>(false);
         }
-        catch (Exception error)
+        // A cancellation callback threw; Cancel aggregates every callback failure.
+        catch (AggregateException error)
         {
             return WorkResult.Failure(error.Message);
         }
@@ -80,7 +81,8 @@ public sealed class RequestPump<TRequest, TResponse> : IAsyncDisposable
         {
             return new WorkResult.Ok<bool, string>(false);
         }
-        catch (Exception error)
+        // The worker boundary: any failure becomes a result, except the runtime's own fatal states.
+        catch (Exception error) when (error is not (OutOfMemoryException or StackOverflowException))
         {
             return WorkResult.Failure(error.Message);
         }
@@ -106,7 +108,8 @@ public sealed class RequestPump<TRequest, TResponse> : IAsyncDisposable
         {
             return await _handle(call.Request, call.Source.Token).ConfigureAwait(false);
         }
-        catch (Exception error)
+        // A handler failure is the request's failure response, never the pump's.
+        catch (Exception error) when (error is not (OutOfMemoryException or StackOverflowException))
         {
             return _failure(call.Request, error);
         }

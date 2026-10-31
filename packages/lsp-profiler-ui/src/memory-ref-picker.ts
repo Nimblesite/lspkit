@@ -34,7 +34,7 @@ export function referenceTypeCandidates(snapshot: MemoryDashboardSnapshot | unde
 
 /** Ask for a type name in free text. */
 async function askForTypeName(): Promise<string | undefined> {
-  return await vscode.window.showInputBox({
+  return vscode.window.showInputBox({
     prompt: "Type to inspect, exactly as the runtime names it",
     placeHolder: "Take a snapshot first to pick from the types it found",
   });
@@ -46,13 +46,13 @@ async function askForTypeName(): Promise<string | undefined> {
  */
 export async function pickReferenceType(): Promise<string | undefined> {
   const candidates = referenceTypeCandidates(lastMemorySnapshot());
-  if (candidates.length === 0) { return await askForTypeName(); }
+  if (candidates.length === 0) { return askForTypeName(); }
   const pick = await vscode.window.showQuickPick(
     [...candidates.map((type) => ({ label: type })), { label: OTHER_TYPE_LABEL }],
     { placeHolder: "Inspect retainers of which type? (types in the latest snapshot)", ignoreFocusOut: true },
   );
   if (pick === undefined) { return undefined; }
-  return pick.label === OTHER_TYPE_LABEL ? await askForTypeName() : pick.label;
+  return pick.label === OTHER_TYPE_LABEL ? askForTypeName() : pick.label;
 }
 
 /** Run the reference-graph walk for `typeName` and open the graph webview. */

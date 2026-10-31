@@ -29,7 +29,7 @@ import type { ProcessesProvider } from "./process-explorer";
 import { formatProfileDuration, formatSampleCount } from "./profiler-format";
 
 /** The live tree view, exposed read-only for the e2e seam below. */
-let boundView: vscode.TreeView<unknown> | undefined;
+const boundProcessPanel: { view: vscode.TreeView<unknown> | undefined } = { view: undefined };
 
 /**
  * Bind the panel to the store's profiling state. Returns a disposable that
@@ -40,7 +40,7 @@ export function bindProcessPanelReactivity(
   treeView: vscode.TreeView<unknown>,
   provider: ProcessesProvider,
 ): vscode.Disposable {
-  boundView = treeView;
+  boundProcessPanel.view = treeView;
   const regate = onGateChange(provider);
   const disposeEffect = effect(() => {
     const session = store.profiler.value;
@@ -49,7 +49,7 @@ export function bindProcessPanelReactivity(
     treeView.badge = panelBadge(session);
     regate(session);
   });
-  return { dispose() { disposeEffect(); boundView = undefined; } };
+  return { dispose() { disposeEffect(); boundProcessPanel.view = undefined; } };
 }
 
 /** The expensive leg (context keys + tree rebuild), run only on gating transitions. */
@@ -114,20 +114,23 @@ function applyContextKeys(session: ProfilerSession): void {
  */
 export function panelMessage(session: ProfilerSession): string | undefined {
   if (session.cpu === "starting") { return "⏳ Starting CPU profiler…"; }
-  if (session.cpu === "active") {
-    const head = `🔥 Profiling PID ${String(session.cpuPid ?? "?")}`;
-    if (session.sampleCount > 0) {
-      const live = `${formatSampleCount(session.sampleCount)} samples (${formatProfileDuration(session.durationSecs)})`;
-      const top = session.topFunction !== undefined && session.topFunction !== ""
-        ? ` · ${session.topFunction}`
-        : "";
-      return `${head} · ${live}${top}`;
-    }
-    return `${head}…`;
-  }
+  if (session.cpu === "active") { return activeCpuMessage(session); }
   if (session.memory === "starting") { return "⏳ Starting memory tracking…"; }
   if (session.memory === "active") { return "🗄️ Tracking memory allocations…"; }
   return undefined;
+}
+
+/** The live CPU readout while a session is active. */
+function activeCpuMessage(session: ProfilerSession): string {
+  const head = `🔥 Profiling PID ${String(session.cpuPid ?? "?")}`;
+  if (session.sampleCount > 0) {
+    const live = `${formatSampleCount(session.sampleCount)} samples (${formatProfileDuration(session.durationSecs)})`;
+    const top = session.topFunction !== undefined && session.topFunction !== ""
+      ? ` · ${session.topFunction}`
+      : "";
+    return `${head} · ${live}${top}`;
+  }
+  return `${head}…`;
 }
 
 /** A badge dot while busy (its tooltip mirrors the message), else none. */
@@ -143,5 +146,5 @@ export function panelBadge(session: ProfilerSession): vscode.ViewBadge | undefin
  * readable once the view is owned by VS Code.
  */
 export function processesViewState(): { message: string | undefined; badge: number | undefined } {
-  return { message: boundView?.message, badge: boundView?.badge?.value };
+  return { message: boundProcessPanel.view?.message, badge: boundProcessPanel.view?.badge?.value };
 }

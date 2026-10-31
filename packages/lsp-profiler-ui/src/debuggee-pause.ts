@@ -48,19 +48,26 @@ export function onDebuggeePaused(listener: SessionListener): vscode.Disposable {
 function observe(sessionId: string, message: unknown): void {
   if (!isRecord(message)) { return; }
   if (message.type === "event") {
-    if (message.event === "stopped") {
-      paused.add(sessionId);
-      pauseListeners.forEach((listener) => { listener(sessionId); });
-    } else if (message.event === "continued") {
-      resumed(sessionId);
-    } else if (message.event === "terminated" || message.event === "exited") {
-      paused.delete(sessionId);
-    }
+    observeEvent(sessionId, message.event);
     return;
   }
   if (message.type === "response" && message.success === true && RESUMING_REQUESTS.has(String(message.command))) {
     resumed(sessionId);
   }
+}
+
+/** Apply one DAP event to the pause bookkeeping. */
+function observeEvent(sessionId: string, event: unknown): void {
+  if (event === "stopped") {
+    paused.add(sessionId);
+    for (const listener of pauseListeners) { listener(sessionId); }
+    return;
+  }
+  if (event === "continued") {
+    resumed(sessionId);
+    return;
+  }
+  if (event === "terminated" || event === "exited") { paused.delete(sessionId); }
 }
 
 function resumed(sessionId: string): void {

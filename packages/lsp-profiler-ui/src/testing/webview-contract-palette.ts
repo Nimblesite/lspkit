@@ -5,20 +5,18 @@
  * names a colour it does not draw, or dark text on a dark accent.
  */
 
-import * as assert from 'assert';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as assert from 'node:assert';
 import * as vscode from 'vscode';
 import { configSection } from '../ids';
-import { buildMemoryDashboardHtml, type MemoryDiffData } from '../memory-dashboard';
+import type { MemoryDiffData } from '../memory-dashboard';
+import { buildMemoryDashboardHtml } from '../memory-dashboard';
 import { buildRefGraphHtml } from '../memory-ref-graph';
-import { applyLeakDecorations, appliedMemoryDecorations, clearMemoryDecorations, type LeakConfidence } from '../memory-decorations';
-import { DEFAULT_PALETTE, inkFor, paletteCss, profilerPalette, type ProfilerPalette } from '../palette';
+import { DEFAULT_PALETTE, inkFor, paletteCss } from '../palette';
+import type { ProfilerPalette } from '../palette';
 import { FLAME_SCRIPT } from '../flame-script';
 import { buildFlamegraphHtml } from '../profiler-flamegraph-html';
-import { closeAllEditors, dashboardSnapshot, profileResult, removeTestDir } from './webview-contract-helpers';
-import { editorPathKey } from '../editor-path-key';
+import { dashboardSnapshot, profileResult } from './webview-contract-helpers';
+import { leakDecorationsWearTheHostPalette } from './webview-contract-leak';
 
 /** A dark host palette that shares no colour with the default one. */
 const DARK_PALETTE: Required<ProfilerPalette> = {
@@ -35,11 +33,11 @@ const LEAKING_DIFF: MemoryDiffData = {
 };
 
 /** Every profiler view, rendered under whatever palette is configured now. */
-function everyView(): Record<string, string> {
+async function everyView(): Promise<Record<string, string>> {
     return {
         'memory dashboard': buildMemoryDashboardHtml(dashboardSnapshot(), LEAKING_DIFF),
         'retention graph': buildRefGraphHtml({ targetType: 'W', maxDepth: 5, maxNodes: 200, script: '' }),
-        'results panel': buildFlamegraphHtml(profileResult()),
+        'results panel': await buildFlamegraphHtml(profileResult()),
     };
 }
 
@@ -49,7 +47,7 @@ async function viewsUnder(palette: ProfilerPalette): Promise<Record<string, stri
     const previous = config.inspect('profiler.palette')?.globalValue;
     await config.update('profiler.palette', palette, vscode.ConfigurationTarget.Global);
     try {
-        return everyView();
+        return await everyView();
     } finally {
         await config.update('profiler.palette', previous, vscode.ConfigurationTarget.Global);
     }
@@ -77,7 +75,8 @@ function activeToggleRules(css: string): string[] {
 }
 
 async function textOnAnAccentReadsItsInk(): Promise<void> {
-    const results = (await viewsUnder(DARK_PALETTE))['results panel'] ?? '';
+    const views = await viewsUnder(DARK_PALETTE);
+    const results = views['results panel'] ?? '';
     assert.ok(activeToggleRules(results).some((rule) => rule.includes('color: var(--prof-hot-ink)')), 'the active toggle writes in the hot accent\'s ink');
     assert.ok(FLAME_SCRIPT.includes('ctx.fillStyle = inkFor(model.frames[r.frameIdx].color)'), 'a slab label is inked against its own slab');
     assert.ok(FLAME_SCRIPT.includes(inkFor.toString()), 'the canvas runs the tested ink rule');
@@ -87,36 +86,6 @@ function labelsNameNoColour(): void {
     const dashboard = buildMemoryDashboardHtml(dashboardSnapshot());
     assert.ok(dashboard.includes('id="btn-mem">Memory</button>'), 'the memory heat toggle names its metric, not a colour');
     assert.ok(dashboard.includes('id="btn-cpu">CPU</button>'), 'the CPU heat toggle names its metric, not a colour');
-}
-
-const CONFIDENCES: readonly LeakConfidence[] = ['DEFINITE', 'HIGH', 'MEDIUM', 'LOW'];
-
-/** Paint one leak of each confidence on an open file and return the colours the editor got. */
-async function leakColours(): Promise<string[]> {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lspui-leak-palette-'));
-    const file = path.join(dir, 'leaks.txt');
-    fs.writeFileSync(file, 'definite\nhigh\nmedium\nlow\n');
-    try {
-        await vscode.window.showTextDocument(vscode.Uri.file(file));
-        applyLeakDecorations({ totalGrowth: 0, totalFreed: 0, netGrowth: 0, suspectedLeaks: CONFIDENCES.map((confidence, i) => ({
-            file, line: i + 1, sizeGrowth: 1024, countGrowth: 1, currentSize: 2048, confidence, reason: 'grows', typeName: '' })) });
-        return appliedMemoryDecorations()
-            .filter((entry) => editorPathKey(entry.file) === editorPathKey(file))
-            .map((entry) => entry.color);
-    } finally {
-        clearMemoryDecorations();
-        await closeAllEditors();
-        removeTestDir(dir);
-    }
-}
-
-async function leakDecorationsWearTheHostPalette(): Promise<void> {
-    const hostColours = Object.values(profilerPalette());
-    const colours = await leakColours();
-    assert.strictEqual(colours.length, CONFIDENCES.length, 'every leak is painted');
-    for (const colour of colours) {
-        assert.ok(hostColours.includes(colour), `a leak decoration draws ${colour}, which the host palette does not have`);
-    }
 }
 
 suite('Profiler webviews — host palette', () => {

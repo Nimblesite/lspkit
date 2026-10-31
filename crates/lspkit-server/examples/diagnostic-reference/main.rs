@@ -11,7 +11,7 @@
 //!
 //! `--backend` mode is a sidecar-framed out-of-process backend (4-byte
 //! little-endian length-prefixed JSON over OS stdio) driven by
-//! `lspkit-sidecar`'s `tests/inbound_routing.rs`.
+//! `lspkit`'s `tests/sidecar_inbound_routing.rs`.
 
 mod analysis;
 mod backend;

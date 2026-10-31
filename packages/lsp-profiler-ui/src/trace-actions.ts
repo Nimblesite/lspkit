@@ -15,7 +15,7 @@ import type { ProfileResult } from "./profiler-decorations";
 /** The on-disk trace a "Reveal" action points at: the `.cpuprofile`, else the speedscope JSON. */
 export function traceFileFor(result: ProfileResult): string {
   const cpu = result.cpuProfilePath ?? "";
-  return cpu !== "" ? cpu : result.outputFile;
+  return cpu === "" ? result.outputFile : cpu;
 }
 
 /**
@@ -34,8 +34,8 @@ async function openNativeProfileViewerBeside(filePath: string, fallback: () => v
   }
   try {
     await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(filePath), vscode.ViewColumn.Beside);
-  } catch (err: unknown) {
-    Logger.warn(`Built-in profile viewer failed to open (${errorText(err)}); using the in-extension fallback`);
+  } catch (error: unknown) {
+    Logger.warn(`Built-in profile viewer failed to open (${errorText(error)}); using the in-extension fallback`);
     fallback();
   }
 }
@@ -82,8 +82,8 @@ export async function openSpeedscopeImport(file: string): Promise<void> {
     const localUrl = await serveProfileForBrowser(file);
     await vscode.env.openExternal(vscode.Uri.parse(`https://www.speedscope.app/#profileURL=${localUrl}`));
     void offerSpeedscopeFallback(file);
-  } catch (err: unknown) {
-    Logger.warn(`Profile loopback serving failed (${errorText(err)}); falling back to manual speedscope import`);
+  } catch (error: unknown) {
+    Logger.warn(`Profile loopback serving failed (${errorText(error)}); falling back to manual speedscope import`);
     await revealTraceFile(file);
     await vscode.env.openExternal(vscode.Uri.parse("https://www.speedscope.app/"));
     vscode.window.showInformationMessage(`${brand()}: Drag the revealed file into speedscope.app to view it — ${file}`);

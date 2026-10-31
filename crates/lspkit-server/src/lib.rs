@@ -9,14 +9,20 @@
 //! - [`diagnostics::DiagnosticsBus`] for fan-out to LSP and MCP sinks.
 //! - [`progress::ProgressSink`] wrapping `window/workDoneProgress`.
 //! - Multi-root [`workspace::Workspace`] tracking.
+//! - [`live`] file watching, debouncing and analysis scheduling.
+//! - `mcp` — an MCP adapter for the same engine (`mcp` feature).
 //!
-//! All routing happens against an [`lspkit::EngineApi`] + [`lspkit_vfs::Vfs`]
-//! pair the consumer supplies.
+//! All routing happens against an [`lspkit::EngineApi`] + [`lspkit::vfs::Vfs`]
+//! pair the consumer supplies. This is the L1 toolkit crate and depends only
+//! on `lspkit` ([CRATE-LAYOUT-LAYERS]).
 
 pub mod capabilities;
 pub mod diagnostics;
 pub mod dispatch;
 pub mod jsonrpc;
+pub mod live;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 pub mod progress;
 #[cfg(feature = "pull")]
 pub mod pull;

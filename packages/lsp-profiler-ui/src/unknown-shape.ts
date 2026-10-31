@@ -82,7 +82,7 @@ export function recordArrayField(
   value: unknown,
   key: string,
 ): Record<string, unknown>[] {
-  return arrayField(value, key).filter(isRecord);
+  return arrayField(value, key).filter((item) => isRecord(item));
 }
 
 /** The `key` field of `value` as an array of finite numbers; `[]` when absent. */
@@ -109,8 +109,10 @@ export function nested(
   value: unknown,
   ...keys: string[]
 ): Record<string, unknown> | undefined {
-  return keys.reduce<Record<string, unknown> | undefined>(
-    (current, key) => (current === undefined ? undefined : recordField(current, key)),
-    asRecord(value),
-  );
+  let current: Record<string, unknown> | undefined = asRecord(value);
+  for (const key of keys) {
+    if (current === undefined) { return undefined; }
+    current = recordField(current, key);
+  }
+  return current;
 }

@@ -3,10 +3,11 @@
 // readers for what a row carries.
 
 import * as vscode from "vscode";
-import { type LanguageClient } from "vscode-languageclient/node";
-import { ProcessesProvider, type ProcessInfo } from "../../process-explorer";
-import { createProfilerStore, type ProfilerStore as Store } from "../../store";
-import { seedSignal, fakeHost, toWireProcess, ungroup } from "./test-helpers";
+import type { ProcessInfo } from "../../process-explorer";
+import { ProcessesProvider } from "../../process-explorer";
+import { createProfilerStore } from "../../store";
+import type { ProfilerStore as Store } from "../../store";
+import { fakeHost, fakeLanguageClient, seedSignal, toWireProcess, ungroup } from "./test-helpers";
 import { numberField, rawField, recordArrayField } from "../../unknown-shape";
 
 export const MB = 1024 * 1024;
@@ -52,11 +53,9 @@ export interface RecordedRequest {
  */
 export function storeWith(processes: readonly ProcessInfo[], requests?: RecordedRequest[]): Store {
   const store = createProfilerStore(fakeHost());
-  // A stand-in for the three members the provider actually calls. No runtime
-  // check can produce the rest of `LanguageClient`, so this one assertion
-  // stays — it is the test double itself, not a payload being read.
-   
-  const client = {
+  // A stand-in for the members the provider actually calls; the rest of
+  // `LanguageClient` is what the double leaves out on purpose.
+  const client = fakeLanguageClient({
     isRunning: (): boolean => true,
     // The server names its runtime; the row must show that name, never a
     // guess derived from the wire id's spelling ([PROF-UI-CAPABILITIES]). It
@@ -64,12 +63,16 @@ export function storeWith(processes: readonly ProcessInfo[], requests?: Recorded
     // `memory` block would mean the runtime has no memory profiler at all.
     initializeResult: { capabilities: { experimental: { lspProfiler: { runtimes: [{ id: "python", display_name: "CPython", source_entries: true, ...CPYTHON_PROFILERS }] } } } },
     onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
+    // A real request crosses the wire; this double records what it was asked
+    // for and then yields once, so an awaiting caller sees the same ordering.
     sendRequest: async (_method: string, param?: RecordedRequest): Promise<unknown> => {
       if (param !== undefined) { requests?.push(param); }
       if (param?.command === "lspui.lspProfiler.cpu.start") { return undefined; }
-      return { processes: processes.map(toWireProcess) };
+      const response = { processes: processes.map((process) => toWireProcess(process)) };
+      await Promise.resolve();
+      return response;
     },
-  } as unknown as LanguageClient;
+  });
   seedSignal(store.client, client);
   return store;
 }
@@ -85,6 +88,32 @@ export async function loadedProvider(store: Store): Promise<ProcessesProvider> {
   const provider = new ProcessesProvider(store);
   await provider.refreshNow();
   return provider;
+}
+
+/** The providers the running test created; its `teardown` disposes them. */
+const createdProviders: ProcessesProvider[] = [];
+
+/** Remember `provider` so the running test's `teardown` disposes it. */
+export function tracked(provider: ProcessesProvider): ProcessesProvider {
+  createdProviders.push(provider);
+  return provider;
+}
+
+/** Dispose every provider the test that just finished created. */
+export function disposeProviders(): void {
+  for (const provider of createdProviders.splice(0)) {
+    provider.dispose();
+  }
+}
+
+/**
+ * A command runner for the row actions: it records what the UI ran and settles
+ * on the next microtask, the way a real command host resolves its thenable.
+ */
+export function recordingRunner(executed: string[]): (command: string) => Thenable<unknown> {
+  return async (command) => {
+    executed.push(command);
+  };
 }
 
 /** The `basilisk.profiler.start` requests among the recorded ones. */
@@ -138,11 +167,11 @@ export function tooltipText(item: vscode.TreeItem): string {
 
 /** Drop the pinned "Run & …(Current File)" launch-action rows from a root listing. */
 export function processRows(rows: vscode.TreeItem[]): vscode.TreeItem[] {
-  return rows.filter((r) => r.contextValue !== "launchAction");
+  return rows.filter((row) => row.contextValue !== "launchAction");
 }
 /** Just the pinned launch-action rows. */
 export function actionRows(rows: vscode.TreeItem[]): vscode.TreeItem[] {
-  return rows.filter((r) => r.contextValue === "launchAction");
+  return rows.filter((row) => row.contextValue === "launchAction");
 }
 
 /** A debugger-machinery row: listed, but non-debuggable (the 🚫 / grey / sunk case). */

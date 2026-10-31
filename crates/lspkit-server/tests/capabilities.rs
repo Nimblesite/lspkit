@@ -1,7 +1,7 @@
 //! End-to-end tests for the [`lspkit_server::capabilities`] builder.
 
+use lspkit::vfs::PositionEncoding;
 use lspkit_server::{Capabilities, Feature, TextSync};
-use lspkit_vfs::PositionEncoding;
 
 #[test]
 fn new_has_default_encoding_and_incremental_sync() {

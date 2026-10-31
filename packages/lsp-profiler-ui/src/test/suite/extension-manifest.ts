@@ -15,7 +15,7 @@
  * what makes the suites that assert on it fail loudly.
  */
 
-import * as assert from "assert";
+import * as assert from "node:assert";
 import * as vscode from "vscode";
 import {
   asRecord,
@@ -204,17 +204,17 @@ export function manifestActivationEvents(): string[] {
 
 /** Every contributed command. */
 export function manifestCommands(): CommandContribution[] {
-  return recordArrayField(contributes(), "commands").map(toCommand);
+  return recordArrayField(contributes(), "commands").map((entry) => toCommand(entry));
 }
 
 /** Every contributed keybinding. */
 export function manifestKeybindings(): KeybindingContribution[] {
-  return recordArrayField(contributes(), "keybindings").map(toKeybinding);
+  return recordArrayField(contributes(), "keybindings").map((entry) => toKeybinding(entry));
 }
 
 /** The entries of one menu, e.g. `view/title` or `debug/toolBar`. */
 export function manifestMenu(menuId: string): MenuContribution[] {
-  return recordArrayField(menuSections(), menuId).map(toMenu);
+  return recordArrayField(menuSections(), menuId).map((entry) => toMenu(entry));
 }
 
 /** Every contributed menu, keyed by menu id. */
@@ -230,19 +230,19 @@ export function manifestMenus(): Record<string, MenuContribution[]> {
 export function manifestViews(): Record<string, ViewContribution[]> {
   const views = recordField(contributes(), "views") ?? {};
   const entries: [string, ViewContribution[]][] = Object.keys(views).map(
-    (container) => [container, recordArrayField(views, container).map(toView)],
+    (container) => [container, recordArrayField(views, container).map((entry) => toView(entry))],
   );
   return Object.fromEntries(entries);
 }
 
 /** Every contributed viewsWelcome entry. */
 export function manifestViewsWelcome(): WelcomeContribution[] {
-  return recordArrayField(contributes(), "viewsWelcome").map(toWelcome);
+  return recordArrayField(contributes(), "viewsWelcome").map((entry) => toWelcome(entry));
 }
 
 /** Every contributed debugger. */
 export function manifestDebuggers(): DebuggerContribution[] {
-  return recordArrayField(contributes(), "debuggers").map(toDebugger);
+  return recordArrayField(contributes(), "debuggers").map((entry) => toDebugger(entry));
 }
 
 /**
@@ -253,7 +253,7 @@ export function manifestDebuggers(): DebuggerContribution[] {
  */
 export function manifestConfigurationProperties(): ConfigurationProperties {
   const declared = rawField(contributes(), "configuration");
-  const sections = Array.isArray(declared) ? declared.filter(isRecord) : [asRecord(declared)];
+  const sections = Array.isArray(declared) ? declared.filter((section) => isRecord(section)) : [asRecord(declared)];
   const entries: [string, Record<string, unknown>][] = sections.flatMap((section) => {
     const properties = recordField(section, "properties") ?? {};
     return Object.keys(properties).map(

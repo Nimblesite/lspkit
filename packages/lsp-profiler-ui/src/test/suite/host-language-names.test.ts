@@ -5,7 +5,7 @@
  * csharp/fsharp file": VS Code's language IDs, not language names.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import { openFileToProfile } from '../../process-launch';
 
 suite('[PROF-UI-HOST] messages name the host languages as a user knows them', () => {

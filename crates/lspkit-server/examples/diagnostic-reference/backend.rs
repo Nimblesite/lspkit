@@ -1,12 +1,12 @@
 //! `--backend` mode: a real out-of-process backend speaking the sidecar wire
 //! protocol — 4-byte little-endian length-prefixed JSON frames over OS stdio
-//! — for `lspkit-sidecar`'s `tests/inbound_routing.rs`. Requests are natural
+//! — for `lspkit`'s `tests/sidecar_inbound_routing.rs`. Requests are natural
 //! backend calls; diagnostics come from real `serde_json` parses of real
 //! files ([LSP-PULL-SALSA]).
 
 use std::process::ExitCode;
 
-use lspkit_sidecar::{TransportError, DEFAULT_MAX_FRAME};
+use lspkit::sidecar::{TransportError, DEFAULT_MAX_FRAME};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
@@ -53,7 +53,7 @@ async fn next_frame(
     if reader.fill_buf().await?.is_empty() {
         return Ok(None);
     }
-    lspkit_sidecar::read_frame(reader, DEFAULT_MAX_FRAME)
+    lspkit::sidecar::read_frame(reader, DEFAULT_MAX_FRAME)
         .await
         .map(Some)
 }
@@ -64,7 +64,7 @@ async fn write_envelope(
     envelope: &Value,
 ) -> Result<(), BackendError> {
     let body = serde_json::to_vec(envelope)?;
-    lspkit_sidecar::write_frame(writer, &body).await?;
+    lspkit::sidecar::write_frame(writer, &body).await?;
     Ok(())
 }
 

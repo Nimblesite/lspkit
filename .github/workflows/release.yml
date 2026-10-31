@@ -1,31 +1,58 @@
 name: release
 
-# Tag-triggered crates.io publish. A library workspace has no binaries, so the
-# "release" is the set of crates published to crates.io — no GitHub Release
-# archives, Homebrew, Scoop, or VSIX apply here. [SWR-REL-WORKFLOW]
+# The ONLY path to ship. Pushing a `v*` tag runs the full CI gate on the tagged
+# SHA, cuts a signed GitHub Release, then publishes every crate to crates.io
+# and every package under packages/ to npm. Nothing ships on a merge to `main`
+# or on a schedule. [REL-REGIME] [REL-TRIGGER] [CI-WORKFLOWS] [SWR-REL-WORKFLOW]
+#
+# lspkit is a library workspace with no executables, so there are no binary
+# archives, Homebrew, Scoop or VSIX channels, and no costly platform matrix for
+# release change detection to gate. [SWR-REL-CHANGES-CONTRACT]
 on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-*"
 
-# Least-privilege default; the publish job elevates only what it needs.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Least-privilege default; each job elevates only what it needs.
 # [SWR-SEC-TOKEN-PRIVILEGE]
 permissions:
   contents: read
 
 jobs:
-  publish:
-    name: Publish to crates.io
+  # Hard gate: scan the exact tagged SHA and block publishing on any High or
+  # Critical finding. [REL-GATES] [GITHUB-CODE-SCANNING]
+  codeql:
+    name: CodeQL gate
+    uses: ./.github/workflows/codeql.yml
+    with:
+      gate: true
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+  release:
+    name: Release
+    needs: codeql
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # Protected environment gates the OIDC publish (reviewer + tag restriction).
+    # TIMEOUT EXCEPTION: one job stamps, runs the full `make ci` gate, packages,
+    # signs, cuts the GitHub Release and publishes 4 crates + 1 npm package.
+    timeout-minutes: 45
+    # Protected environment gates the OIDC publishes (reviewer + tag restriction).
     environment: release
     permissions:
-      contents: read
-      id-token: write # OIDC -> crates.io Trusted Publishing. [SWR-SEC-OIDC-PUBLISH]
+      contents: write # create the GitHub Release
+      id-token: write # OIDC: crates.io + npm Trusted Publishing, cosign keyless. [SWR-SEC-OIDC-PUBLISH]
+      attestations: write # build provenance + SBOM attestations. [SWR-SEC-PROVENANCE]
+    env:
+      DIST: dist
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -40,37 +67,49 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      # crates/lsp-profiler/build.rs generates the wire model from
-      # docs/models/profiler.td with typeDiagram. [PROF-WIRE-GEN]
+      # registry-url tells npm which registry to mint an OIDC publish token for.
+      # No caches anywhere in this job: a poisoned cache entry must never reach
+      # a published artifact.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
-      - name: Install typeDiagram
-        run: npm install -g typediagram@0.11.0
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # npm Trusted Publishing needs npm >= 11.5.1; Node 22 bundles an older one.
+      # crates/lsp-profiler/build.rs generates the wire model with typeDiagram.
+      # [SWR-SEC-OIDC-PUBLISH] [PROF-WIRE-GEN]
+      - name: Install npm + typeDiagram
+        run: npm install -g npm@11.21.1 typediagram@0.11.0
 
       - name: Install release tooling (coverage, test runner, version stamper, vuln gate)
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-llvm-cov,cargo-nextest,shipwright-version-stamp,cargo-deny
 
-      # Fail fast with a precise error if the single license source-of-truth is
-      # absent on the runner. It MUST be committed (git-tracked) at the repo root;
-      # only the per-crate staged copies (crates/*/LICENSE-MIT) are gitignored.
-      # Without this guard the staging step below would abort with a cryptic
-      # `cp: No such file or directory`. [SWR-REL-LICENSE]
+      # `make test` traces the profiled fixture's syscalls, as in ci.yml.
+      - name: Install syscall tracer
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends strace
+
+      # The single license source-of-truth MUST be committed at the repo root;
+      # only the staged per-package copies are gitignored. [SWR-REL-LICENSE]
       - name: Verify license source-of-truth is present
         run: |
           test -f LICENSE-MIT || {
-            echo "::error::LICENSE-MIT missing from checkout. Commit it (git-tracked) at the repo root — it is staged into every crate at publish time. [SWR-REL-LICENSE]"
+            echo "::error::LICENSE-MIT missing from checkout. Commit it (git-tracked) at the repo root — it is staged into every crate and npm package at publish time. [SWR-REL-LICENSE]"
             exit 1
           }
 
-      # Stamp the tag into every Cargo.toml version carrier in the runner working
-      # tree only. The tagged commit keeps `0.0.0-dev`; nothing is committed back.
-      # [SWR-VERSION-BUILD-STAMPING]
+      # Install from the committed lockfiles BEFORE stamping: the stamper
+      # rewrites package.json versions, never the lockfiles. [SWR-SEC-FROZEN-INSTALL]
+      - name: Install npm packages (frozen)
+        run: |
+          npm ci --prefix packages/lsp-profiler-ui
+
+      # Stamp the tag into every version carrier (Cargo.toml, package.json,
+      # *.csproj, build-info.json) in the runner working tree only. The tagged
+      # commit keeps `0.0.0-dev`; nothing is committed back.
+      # [REL-VERSION] [SWR-VERSION-BUILD-STAMPING]
       - name: Stamp version from tag
         run: shipwright-version-stamp --tag "${GITHUB_REF_NAME}" --root .
 
@@ -79,53 +118,125 @@ jobs:
       - name: Refresh lockfile for stamped versions
         run: cargo update --workspace
 
-      # Single root LICENSE-MIT is the source of truth; stage a copy into each
-      # crate so the published tarball ships the license text. [SWR-REL-LICENSE]
-      - name: Stage license into every crate
+      # Stage the root license into every crate (LICENSE-MIT, forced in by each
+      # crate's `include`) and npm package (LICENSE, which npm always packs).
+      # [REL-METADATA] [SWR-REL-LICENSE]
+      - name: Stage license into every package
         run: |
           set -euo pipefail
-          for crate in crates/*/; do
-            cp LICENSE-MIT "${crate}LICENSE-MIT"
-          done
+          for crate in crates/*/; do cp LICENSE-MIT "${crate}LICENSE-MIT"; done
+          for package in packages/*/; do cp LICENSE-MIT "${package}LICENSE"; done
 
-      # `make lint` lints the profiler UI package, so its tools come first.
-      - name: Install the profiler UI package
-        run: npm ci --prefix packages/lsp-profiler-ui
-
-      # Full gate (lint + test + coverage + build) MUST pass before any publish.
+      # Full gate (fmt + lint + test + coverage + build) MUST pass before any publish.
+      # [REL-GATES]
       - name: CI gate
         run: make ci
 
-      # Re-run the supply-chain gate on the release path itself, against the
-      # stamped + freshly-locked dependency graph. supply-chain.yml only covers
-      # PR/push/weekly-cron, so an advisory disclosed after the last main merge
-      # would otherwise publish unblocked. Same deny.toml, so the policy is DRY.
-      # [SWR-SEC-VULN-GATE]
+      # Re-run the supply-chain gate against the stamped + freshly-locked graph,
+      # so an advisory disclosed since the last PR still blocks. [SWR-SEC-VULN-GATE]
       - name: Supply-chain gate (advisories + bans + licenses + sources)
         run: cargo deny check advisories bans licenses sources
 
-      - name: Authenticate to crates.io via OIDC
-        id: auth
-        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      # The npm half of the vuln gate: fail on a high advisory in anything the
+      # published packages pull in at runtime. [SWR-SEC-VULN-GATE]
+      - name: npm audit (runtime dependencies)
+        run: |
+          npm audit --omit=dev --audit-level=high --prefix packages/lsp-profiler-ui
 
-      # Publish leaf crates (no internal deps) first, then dependents. `cargo
-      # publish` waits for index propagation before returning, so each dependent
-      # sees its just-published dependencies — no manual sleep. The per-crate
-      # wrapper is idempotent (skips already-published crates) so a re-run after a
-      # mid-batch failure is safe. [SWR-REL-CRATES]
+      # Package every crate and verify each tarball builds on its own, against
+      # the other just-packaged crates. The tarballs are checksummed, attested
+      # and attached to the release; `cargo publish` uploads the same packaged
+      # source. [REL-GATES] [REL-PACKAGED-BUILD] [SWR-REL-CRATES]
+      - name: Package crates
+        run: |
+          set -euo pipefail
+          cargo package --workspace --locked --allow-dirty
+          mkdir -p "${DIST}"
+          cp target/package/*.crate "${DIST}/"
+
+      - name: Package npm packages
+        run: |
+          set -euo pipefail
+          npm run build --prefix packages/lsp-profiler-ui
+          npm pack ./packages/lsp-profiler-ui --pack-destination "${DIST}"
+
+      # One CycloneDX SBOM over the whole dependency graph. [SWR-SEC-SBOM]
+      - name: Generate SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: ${{ env.DIST }}/lspkit-sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # One SHA256SUMS over every release asset, cosign keyless-signed with this
+      # workflow's OIDC identity. [REL-GITHUB] [SWR-SEC-CHECKSUM] [SWR-SIGN-COSIGN]
+      - name: Write and sign SHA256SUMS
+        working-directory: ${{ env.DIST }}
+        run: |
+          set -euo pipefail
+          sha256sum -- * > SHA256SUMS
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ env.DIST }}/SHA256SUMS
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ env.DIST }}/SHA256SUMS
+          sbom-path: ${{ env.DIST }}/lspkit-sbom.cdx.json
+
+      # Create the release on the tag (or refresh its assets on a re-run).
+      # A `-suffix` tag is a prerelease. [REL-GITHUB] [SWR-REL-GITHUB]
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${DIST}"/* --clobber
+          else
+            prerelease=()
+            case "${GITHUB_REF_NAME}" in *-*) prerelease=(--prerelease) ;; esac
+            gh release create "${GITHUB_REF_NAME}" "${DIST}"/* \
+              --verify-tag --generate-notes --title "${GITHUB_REF_NAME}" "${prerelease[@]}"
+          fi
+
+      - name: Authenticate to crates.io via OIDC
+        id: crates_auth
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+
+      # Dependencies before dependents; `cargo publish` waits for index
+      # propagation, so each dependent resolves its just-published dependencies.
+      # The wrapper skips already-published crates, so a re-run is safe.
+      # [REL-ORDER] [REL-OIDC] [SWR-REL-CRATES]
       - name: Publish crates in dependency order
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}
         run: |
           set -euo pipefail
           for crate in \
+            lsp-profiler \
+            lsp-profiler-dotnet \
             lspkit \
-            lspkit-vfs \
-            lspkit-treesitter \
-            lspkit-sidecar \
-            lspkit-config \
-            lspkit-live \
-            lspkit-mcp \
             lspkit-server; do
             bash scripts/cargo-publish-or-skip.sh "${crate}"
+          done
+
+      # Publish the exact tarballs signed above. setup-node writes a placeholder
+      # NODE_AUTH_TOKEN; blank it so npm takes the OIDC path. [REL-OIDC] [SWR-REL-NPM]
+      - name: Publish npm packages
+        env:
+          NODE_AUTH_TOKEN: ""
+          NPM_CONFIG_PROVENANCE: "true" # [SWR-SEC-PROVENANCE]
+        run: |
+          set -euo pipefail
+          for tarball in "${DIST}"/*.tgz; do
+            bash scripts/npm-publish-or-skip.sh "${tarball}"
           done

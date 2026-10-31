@@ -1,6 +1,6 @@
 [package]
 name = "lspkit-server"
-description = "Hand-rolled JSON-RPC LSP server scaffolding: Content-Length framing, dispatcher, capability builder, URI helpers, diagnostics fan-out, progress, cancellation."
+description = "LSP server runtime on top of lspkit: Content-Length JSON-RPC framing, dispatcher, capabilities, diagnostics fan-out, progress, cancellation, a file-watching analysis scheduler and an optional MCP adapter."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,40 +14,42 @@ documentation = "https://docs.rs/lspkit-server"
 # The example's support modules ship beside its entrypoint. [SWR-REL-EXAMPLE]
 include = ["src/**/*", "examples/**/*.rs", "LICENSE-MIT"]
 
+# The L1 toolkit crate: depends only on `lspkit`. [CRATE-LAYOUT-LAYERS]
 [lints]
 workspace = true
 
 [dependencies]
-salsa = { version = "0.28.5", optional = true }
 lspkit.workspace = true
-lspkit-vfs.workspace = true
 
-tokio.workspace = true
-tokio-util.workspace = true
 async-trait.workspace = true
 futures-util.workspace = true
-
+lsp-types.workspace = true
+notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-lsp-types.workspace = true
-
 thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
 tracing.workspace = true
 
+# Optional: the MCP SDK stays out of LSP-only consumers. [CRATE-LAYOUT-FEATURES]
+rmcp = { workspace = true, optional = true }
+salsa = { version = "0.28.5", optional = true }
+
 [features]
+mcp = ["dep:rmcp"]
 pull = ["dep:salsa"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "io-util", "time", "io-std", "process"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "io-util", "time", "io-std", "process", "test-util"] }
+futures-core.workspace = true
 futures-util.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
-tempfile = "3"
-lspkit-live.workspace = true
-lspkit-sidecar.workspace = true
+tempfile.workspace = true
 tracing-subscriber.workspace = true
 
-# Real reference pull-diagnostics server exercised by tests/reference_e2e.rs
+# Real reference pull-diagnostics server exercised by tests/diagnostic_reference.rs
 # and its sibling suites; it needs the pull store, so a default-feature
 # consumer build skips it instead of failing. [LSP-PULL-SALSA]
 [[example]]

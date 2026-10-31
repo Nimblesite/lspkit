@@ -11,12 +11,12 @@ import type {
   HeapSnapshot,
   MemoryOutcome,
   MemoryResult,
-  ProcessInfo as WireProcess,
   ProfileReport,
   RefGraph,
   StartProfileResult,
   SuspectedLeak,
   TimelinePoint,
+  ProcessInfo as WireProcess,
 } from "./wire-generated";
 
 /** A started CPU session as the screens track it. */
@@ -37,15 +37,15 @@ export function toStartedSession(result: StartProfileResult): StartedSession {
 }
 
 export function toProfileResult(report: ProfileReport): ProfileResult {
-  const artifacts = report.artifacts;
+  const { artifacts } = report;
   return {
     sessionId: report.session_id,
     duration: report.duration_secs,
     totalSamples: report.total_samples,
     outputFile: artifacts.speedscope_path ?? "",
-    ...(artifacts.cpuprofile_path !== undefined ? { cpuProfilePath: artifacts.cpuprofile_path } : {}),
-    ...(artifacts.flamegraph_path !== undefined ? { flamegraphPath: artifacts.flamegraph_path } : {}),
-    ...(artifacts.export_error !== undefined ? { exportError: artifacts.export_error } : {}),
+    ...(artifacts.cpuprofile_path === undefined ? {} : { cpuProfilePath: artifacts.cpuprofile_path }),
+    ...(artifacts.flamegraph_path === undefined ? {} : { flamegraphPath: artifacts.flamegraph_path }),
+    ...(artifacts.export_error === undefined ? {} : { exportError: artifacts.export_error }),
     hotFunctions: report.hot_functions.map((fn) => ({
       name: fn.name, ...located(fn), samples: fn.samples, percentage: fn.percentage, selfPercentage: fn.self_percentage,
     })),
@@ -120,7 +120,7 @@ function diffFields(diff: HeapDiff, leaks: SuspectedLeak[]): Record<string, unkn
     totalFreed: diff.total_freed,
     netGrowth: diff.net_growth,
     grownAllocations: diff.grown.map((site) => ({ ...allocation(site), sizeDiff: site.size_diff, countDiff: site.count_diff })),
-    suspectedLeaks: leaks.map(leak),
+    suspectedLeaks: leaks.map((entry) => leak(entry)),
   };
 }
 
@@ -144,21 +144,34 @@ export function toRefGraph(graph: RefGraph): Record<string, unknown> {
   };
 }
 
+type MemoryStepOutcome = Extract<MemoryOutcome, { kind: "Snapshot" | "Diff" | "Gc" }>;
+type RetentionOutcome = Extract<MemoryOutcome, { kind: "Refs" | "Objects" }>;
+
 function outcomeFields(outcome: MemoryOutcome): MemoryIngestResult {
-  switch (outcome.kind) {
-    case "Ack":
-      return { kind: "ack" };
-    case "Snapshot":
-      return { kind: "snapshot", ...snapshotFields(outcome.snapshot, outcome.timeline, outcome.heapprofile_path), trendingUpward: outcome.trending_upward };
-    case "Diff":
-      return { kind: "diff", ...diffFields(outcome.diff, outcome.leaks) };
-    case "Gc":
-      return { kind: "gc", collected: outcome.gc.collected, uncollectable: outcome.gc.uncollectable_count, freedBytes: outcome.gc.freed_bytes };
-    case "Refs":
-      return { kind: "refs", graph: toRefGraph(outcome.graph) };
-    case "Objects":
-      return { kind: "objects", ...objectsFields(outcome.objects) };
+  if (outcome.kind === "Ack") { return { kind: "ack" }; }
+  if (outcome.kind === "Snapshot" || outcome.kind === "Diff" || outcome.kind === "Gc") {
+    return memoryStepOutcomeFields(outcome);
   }
+  return retentionOutcomeFields(outcome);
+}
+
+/** The ingest shape for a snapshot, diff, or gc outcome. */
+function memoryStepOutcomeFields(outcome: MemoryStepOutcome): MemoryIngestResult {
+  if (outcome.kind === "Snapshot") {
+    return { kind: "snapshot", ...snapshotFields(outcome.snapshot, outcome.timeline, outcome.heapprofile_path), trendingUpward: outcome.trending_upward };
+  }
+  if (outcome.kind === "Diff") {
+    return { kind: "diff", ...diffFields(outcome.diff, outcome.leaks) };
+  }
+  return { kind: "gc", collected: outcome.gc.collected, uncollectable: outcome.gc.uncollectable_count, freedBytes: outcome.gc.freed_bytes };
+}
+
+/** The ingest shape for a reference-graph or live-objects outcome. */
+function retentionOutcomeFields(outcome: RetentionOutcome): MemoryIngestResult {
+  if (outcome.kind === "Refs") {
+    return { kind: "refs", graph: toRefGraph(outcome.graph) };
+  }
+  return { kind: "objects", ...objectsFields(outcome.objects) };
 }
 
 /** One type's live objects and the per-type totals beside them. */
@@ -167,8 +180,8 @@ function objectsFields(objects: Extract<MemoryOutcome, { kind: "Objects" }>["obj
     typeName: objects.type_name,
     totalCount: objects.total_count,
     totalBytes: objects.total_bytes,
-    objects: objects.objects.map((o) => ({ id: o.id, type: o.type_name, size: o.size_bytes, repr: o.label })),
-    typeSummary: objects.type_summary.map((t) => ({ type: t.type_name, count: t.count, size: t.size_bytes })),
+    objects: objects.objects.map((object) => ({ id: object.id, type: object.type_name, size: object.size_bytes, repr: object.label })),
+    typeSummary: objects.type_summary.map((type) => ({ type: type.type_name, count: type.count, size: type.size_bytes })),
   };
 }
 

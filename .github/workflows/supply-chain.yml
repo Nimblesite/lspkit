@@ -1,11 +1,11 @@
 name: supply-chain
 
 # Vulnerability + license gate across the dependency graph. [SWR-SEC-VULN-GATE]
-# Runs on every PR/push and on a weekly schedule to catch newly disclosed advisories.
+# Runs on PRs to `main` and on a weekly schedule to catch newly disclosed
+# advisories; release.yml re-runs cargo-deny on the tagged SHA before it
+# publishes. Pushes to `main` trigger nothing. [REL-REGIME] [CI-WORKFLOWS]
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
@@ -21,6 +21,8 @@ permissions:
 jobs:
   cargo-deny:
     name: cargo-deny (advisories + licenses + bans + sources)
+    # Dependabot PRs are swept into `dependabot-upgrades`. [GITHUB-DEPENDABOT]
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -32,7 +34,9 @@ jobs:
           command: check advisories bans licenses sources
 
   osv-scanner:
-    name: osv-scanner (Cargo.lock)
+    name: osv-scanner (Cargo.lock + npm lockfiles)
+    # Dependabot PRs are swept into `dependabot-upgrades`. [GITHUB-DEPENDABOT]
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -45,3 +49,25 @@ jobs:
         with:
           scan-args: |-
             --lockfile=Cargo.lock
+            --lockfile=packages/lsp-profiler-ui/package-lock.json
+
+  # Workflow static analysis: unpinned actions, over-broad tokens, template
+  # injection, cache poisoning, spoofable bot checks. Same settings as
+  # Shipwright's lint-supply-chain.yml. [SWR-GATE-ACTION-PINNING] [SWR-GATE-TOKEN-PRIVILEGE]
+  zizmor:
+    name: zizmor (workflow static analysis)
+    # Dependabot PRs are swept into `dependabot-upgrades`. [GITHUB-DEPENDABOT]
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          persona: pedantic
+          min-severity: medium
+          # No advisory upload: the gate stays read-only.
+          advanced-security: false
+          online-audits: false

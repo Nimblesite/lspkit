@@ -14,8 +14,8 @@
 
 import { cmd } from "./ids";
 import {
-  PROFILER_CSS_VARS,
   PROFILER_CSS_RESET,
+  PROFILER_CSS_VARS,
   PROFILER_JS_UTILS,
   escapeHtml,
 } from "./profiler-styles";
@@ -29,10 +29,10 @@ import {
   stringField,
 } from "./unknown-shape";
 import {
+  SingletonWebviewPanel,
   buildWebviewDocument,
   embedJson,
   handleSourceNavigation,
-  SingletonWebviewPanel,
 } from "./profiler-webview";
 
 /** Reference-graph result returned by `<prefix>.lspProfiler.memory.ingest` (kind `refs`). */
@@ -79,7 +79,7 @@ export function decodeRefGraph(value: unknown): ReferenceGraphResult["graph"] {
     return undefined;
   }
   return {
-    nodes: recordArrayField(value, "nodes").map(toRefNode),
+    nodes: recordArrayField(value, "nodes").map((node) => toRefNode(node)),
     edges: recordArrayField(value, "edges").map((edge) => ({
       from: numberField(edge, "from") ?? 0,
       to: numberField(edge, "to") ?? 0,
@@ -300,7 +300,7 @@ export function buildRefGraphHtml(result: ReferenceGraphResult): string {
  * data, embedded so they can never close the inline <script> ([PROF-UI-WEBVIEW]).
  */
 function buildRefGraphScript(result: ReferenceGraphResult): string {
-  const graph = result.graph;
+  const { graph } = result;
   return PROFILER_JS_UTILS +
     refGraphDataScript(embedJson(graph?.nodes ?? []), embedJson(graph?.edges ?? []), embedJson(graph?.cycles ?? [])) +
     REF_GRAPH_LAYOUT_SCRIPT + REF_GRAPH_EDGES_SCRIPT + REF_GRAPH_NODES_SCRIPT + REF_GRAPH_LAYER_LABELS_SCRIPT;

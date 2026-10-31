@@ -16,9 +16,10 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import * as http from "node:http";
-import { basename } from "node:path";
+import path from "node:path";
 import { Logger } from "./logger";
 import { errorText } from "./failure";
 
@@ -38,8 +39,12 @@ interface Registration {
   readonly expiresAt: number;
 }
 
-let server: http.Server | undefined;
-let serverPort: number | undefined;
+interface LoopbackServerState {
+  server: http.Server | undefined;
+  serverPort: number | undefined;
+}
+
+const serverState: LoopbackServerState = { server: undefined, serverPort: undefined };
 const registrations = new Map<string, Registration>();
 
 /**
@@ -58,47 +63,52 @@ export async function serveProfileForBrowser(
   registrations.set(token, { filePath, expiresAt: Date.now() + ttlMs });
   // The URL carries the real basename — speedscope falls back to
   // extension-based format detection (`.heapprofile` vs speedscope JSON).
-  return `http://127.0.0.1:${String(port)}/${token}/${encodeURIComponent(basename(filePath))}`;
+  return `http://127.0.0.1:${String(port)}/${token}/${encodeURIComponent(path.basename(filePath))}`;
 }
 
 /** Stop the server and forget every registration (extension teardown). */
 export function disposeProfileServer(): void {
-  server?.close();
-  server = undefined;
-  serverPort = undefined;
+  serverState.server?.close();
+  serverState.server = undefined;
+  serverState.serverPort = undefined;
   registrations.clear();
 }
 
 /** Start the loopback server if needed and resolve its port. */
 async function ensureServer(): Promise<number> {
-  if (server !== undefined && serverPort !== undefined) {
-    return serverPort;
+  if (serverState.server !== undefined && serverState.serverPort !== undefined) {
+    return serverState.serverPort;
   }
-  return await new Promise<number>((resolve, reject) => {
-    const created = http.createServer((req, res) => {
-      void handleRequest(req, res);
-    });
-    created.on("error", (err: Error) => {
-      Logger.warn(`Profile loopback server error: ${err.message}`);
-      reject(err);
-    });
-    // Port 0 = ephemeral; loopback only — never reachable off-machine.
-    created.listen(0, "127.0.0.1", () => { adoptListening(created, resolve, reject); });
+  const created = http.createServer((req, res) => {
+    void handleRequest(req, res);
   });
+  created.on("error", (error: Error) => {
+    Logger.warn(`Profile loopback server error: ${error.message}`);
+  });
+  // Port 0 = ephemeral; loopback only — never reachable off-machine.
+  created.listen(0, "127.0.0.1");
+  await once(created, "listening");
+  return adoptListening(created);
 }
 
 /** Keep the server once it is listening on a port; one bound without a port is closed. */
-function adoptListening(created: http.Server, resolve: (port: number) => void, reject: (err: Error) => void): void {
+function adoptListening(created: http.Server): number {
   const address = created.address();
   if (address === null || typeof address === "string") {
     created.close();
-    reject(new Error("profile loopback server bound without a port"));
-    return;
+    throw new Error("profile loopback server bound without a port");
   }
-  server = created;
-  serverPort = address.port;
-  resolve(address.port);
+  serverState.server = created;
+  serverState.serverPort = address.port;
+  return address.port;
 }
+
+/** Speedscope.app fetches cross-origin; the token is the access control. */
+const PROFILE_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Cache-Control": "no-store",
+};
 
 /** Serve a registered profile by token; anything else is a 404. */
 async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -111,18 +121,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const body = await readFile(registration.filePath);
     res.writeHead(HTTP_OK, PROFILE_HEADERS);
     res.end(body);
-  } catch (err: unknown) {
-    Logger.warn(`Profile loopback server could not read ${registration.filePath}: ${errorText(err)}`);
+  } catch (error: unknown) {
+    Logger.warn(`Profile loopback server could not read ${registration.filePath}: ${errorText(error)}`);
     res.writeHead(HTTP_NOT_FOUND).end();
   }
 }
-
-/** speedscope.app fetches cross-origin; the token is the access control. */
-const PROFILE_HEADERS = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Cache-Control": "no-store",
-};
 
 /** Resolve a request path to its live registration, dropping expired ones. */
 function lookupRegistration(url: string): Registration | undefined {

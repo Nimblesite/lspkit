@@ -5,18 +5,18 @@
  * wire-speaking language server.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import {
-    setupLspTestSuite,
-    teardownLspTestSuite,
     closeAllEditors,
     openSourceFile,
+    setupLspTestSuite,
+    teardownLspTestSuite,
 } from "./test-helpers";
 
 // Import profiler decoration types for structural assertions.
 import type {
-    ProfileResult,
     ProfileHotLine,
+    ProfileResult,
 } from '../../profiler-decorations';
 import {
     applyProfileDecorations,
@@ -28,25 +28,42 @@ import { clearMemoryDecorations } from '../../memory-decorations';
 
 let tmpDir = '';
 
+/** The heat level `percentage` falls in, at the boundaries the decorations use. */
+function heatLevelOf(percentage: number): string {
+    if (percentage >= 20) {
+        return 'critical';
+    }
+    if (percentage >= 10) {
+        return 'hot';
+    }
+    if (percentage >= 5) {
+        return 'warm';
+    }
+    if (percentage >= 1) {
+        return 'cool';
+    }
+    return 'none';
+}
+
 suite('Profiler — Heat Level Classification', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-heat-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-heat-');
+        tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     test('critical heat level classification (>= 20%)', () => {
         const criticalLine: ProfileHotLine = {
-            file: '/src/hot.py', line: 1, samples: 400, percentage: 25.0,
+            file: '/src/hot.py', line: 1, samples: 400, percentage: 25,
         };
         assert.ok(criticalLine.percentage >= 20,
             'Lines at 25% should fall in the critical range');
 
         const borderlineCritical: ProfileHotLine = {
-            file: '/src/hot.py', line: 2, samples: 200, percentage: 20.0,
+            file: '/src/hot.py', line: 2, samples: 200, percentage: 20,
         };
         assert.ok(borderlineCritical.percentage >= 20,
             'Lines at exactly 20% should fall in the critical range');
@@ -54,13 +71,13 @@ suite('Profiler — Heat Level Classification', () => {
 
     test('hot heat level classification (10-20%)', () => {
         const hotLine: ProfileHotLine = {
-            file: '/src/warm.py', line: 5, samples: 150, percentage: 15.0,
+            file: '/src/warm.py', line: 5, samples: 150, percentage: 15,
         };
         assert.ok(hotLine.percentage >= 10 && hotLine.percentage < 20,
             'Lines at 15% should fall in the hot range');
 
         const borderlineHot: ProfileHotLine = {
-            file: '/src/warm.py', line: 6, samples: 100, percentage: 10.0,
+            file: '/src/warm.py', line: 6, samples: 100, percentage: 10,
         };
         assert.ok(borderlineHot.percentage >= 10 && borderlineHot.percentage < 20,
             'Lines at exactly 10% should fall in the hot range');
@@ -68,13 +85,13 @@ suite('Profiler — Heat Level Classification', () => {
 
     test('warm heat level classification (5-10%)', () => {
         const warmLine: ProfileHotLine = {
-            file: '/src/warm.py', line: 10, samples: 70, percentage: 7.0,
+            file: '/src/warm.py', line: 10, samples: 70, percentage: 7,
         };
         assert.ok(warmLine.percentage >= 5 && warmLine.percentage < 10,
             'Lines at 7% should fall in the warm range');
 
         const borderlineWarm: ProfileHotLine = {
-            file: '/src/warm.py', line: 11, samples: 50, percentage: 5.0,
+            file: '/src/warm.py', line: 11, samples: 50, percentage: 5,
         };
         assert.ok(borderlineWarm.percentage >= 5 && borderlineWarm.percentage < 10,
             'Lines at exactly 5% should fall in the warm range');
@@ -82,13 +99,13 @@ suite('Profiler — Heat Level Classification', () => {
 
     test('cool heat level classification (1-5%)', () => {
         const coolLine: ProfileHotLine = {
-            file: '/src/cool.py', line: 20, samples: 30, percentage: 3.0,
+            file: '/src/cool.py', line: 20, samples: 30, percentage: 3,
         };
         assert.ok(coolLine.percentage >= 1 && coolLine.percentage < 5,
             'Lines at 3% should fall in the cool range');
 
         const borderlineCool: ProfileHotLine = {
-            file: '/src/cool.py', line: 21, samples: 10, percentage: 1.0,
+            file: '/src/cool.py', line: 21, samples: 10, percentage: 1,
         };
         assert.ok(borderlineCool.percentage >= 1 && borderlineCool.percentage < 5,
             'Lines at exactly 1% should fall in the cool range');
@@ -104,24 +121,19 @@ suite('Profiler — Heat Level Classification', () => {
 
     test('heat level boundaries are mutually exclusive', () => {
         const testCases = [
-            { pct: 25.0, expected: 'critical' },
-            { pct: 20.0, expected: 'critical' },
+            { pct: 25, expected: 'critical' },
+            { pct: 20, expected: 'critical' },
             { pct: 19.9, expected: 'hot' },
-            { pct: 10.0, expected: 'hot' },
+            { pct: 10, expected: 'hot' },
             { pct: 9.9, expected: 'warm' },
-            { pct: 5.0, expected: 'warm' },
+            { pct: 5, expected: 'warm' },
             { pct: 4.9, expected: 'cool' },
-            { pct: 1.0, expected: 'cool' },
+            { pct: 1, expected: 'cool' },
             { pct: 0.9, expected: 'none' },
         ];
 
         for (const tc of testCases) {
-            let level: string;
-            if (tc.pct >= 20) { level = 'critical'; }
-            else if (tc.pct >= 10) { level = 'hot'; }
-            else if (tc.pct >= 5) { level = 'warm'; }
-            else if (tc.pct >= 1) { level = 'cool'; }
-            else { level = 'none'; }
+            const level = heatLevelOf(tc.pct);
 
             assert.strictEqual(level, tc.expected,
                 `${tc.pct}% should be classified as "${tc.expected}", got "${level}"`);
@@ -130,13 +142,13 @@ suite('Profiler — Heat Level Classification', () => {
 });
 
 suite('Profiler — Decoration Contracts', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-deco-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-deco-');
+        tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -155,19 +167,19 @@ suite('Profiler — Decoration Contracts', () => {
             totalSamples: 3000,
             outputFile: '/tmp/multi.speedscope.json',
             hotFunctions: [
-                { name: 'hot_func', file: '/nonexistent/a.py', line: 1, samples: 1500, percentage: 50.0, selfPercentage: 40.0 },
-                { name: 'warm_func', file: '/nonexistent/b.py', line: 10, samples: 300, percentage: 10.0, selfPercentage: 8.0 },
-                { name: 'cool_func', file: '/nonexistent/c.py', line: 20, samples: 60, percentage: 2.0, selfPercentage: 1.5 },
+                { name: 'hot_func', file: '/nonexistent/a.py', line: 1, samples: 1500, percentage: 50, selfPercentage: 40 },
+                { name: 'warm_func', file: '/nonexistent/b.py', line: 10, samples: 300, percentage: 10, selfPercentage: 8 },
+                { name: 'cool_func', file: '/nonexistent/c.py', line: 20, samples: 60, percentage: 2, selfPercentage: 1.5 },
             ],
             hotLines: [
-                { file: '/nonexistent/a.py', line: 3, samples: 1200, percentage: 40.0 },
+                { file: '/nonexistent/a.py', line: 3, samples: 1200, percentage: 40 },
                 { file: '/nonexistent/b.py', line: 12, samples: 200, percentage: 6.7 },
-                { file: '/nonexistent/c.py', line: 22, samples: 30, percentage: 1.0 },
+                { file: '/nonexistent/c.py', line: 22, samples: 30, percentage: 1 },
             ],
         };
 
-        assert.doesNotThrow(() => {
-            applyProfileDecorations(result);
+        await assert.doesNotReject(async () => {
+            await applyProfileDecorations(result);
         }, 'applyProfileDecorations should handle multi-file results');
 
         assert.strictEqual(result.hotFunctions.length, 3, 'Should have 3 hot functions');
@@ -178,7 +190,7 @@ suite('Profiler — Decoration Contracts', () => {
 
     test('heat level classification boundary at exactly 1%', () => {
         const atBoundary: ProfileHotLine = {
-            file: '/src/boundary.py', line: 1, samples: 10, percentage: 1.0,
+            file: '/src/boundary.py', line: 1, samples: 10, percentage: 1,
         };
         const belowBoundary: ProfileHotLine = {
             file: '/src/boundary.py', line: 2, samples: 9, percentage: 0.99,
@@ -191,7 +203,7 @@ suite('Profiler — Decoration Contracts', () => {
 
     test('heat level classification boundary at exactly 5%', () => {
         const atBoundary: ProfileHotLine = {
-            file: '/src/boundary.py', line: 1, samples: 50, percentage: 5.0,
+            file: '/src/boundary.py', line: 1, samples: 50, percentage: 5,
         };
         const belowBoundary: ProfileHotLine = {
             file: '/src/boundary.py', line: 2, samples: 49, percentage: 4.99,
@@ -204,7 +216,7 @@ suite('Profiler — Decoration Contracts', () => {
 
     test('heat level classification boundary at exactly 10%', () => {
         const atBoundary: ProfileHotLine = {
-            file: '/src/boundary.py', line: 1, samples: 100, percentage: 10.0,
+            file: '/src/boundary.py', line: 1, samples: 100, percentage: 10,
         };
         const belowBoundary: ProfileHotLine = {
             file: '/src/boundary.py', line: 2, samples: 99, percentage: 9.99,
@@ -217,7 +229,7 @@ suite('Profiler — Decoration Contracts', () => {
 
     test('heat level classification boundary at exactly 20%', () => {
         const atBoundary: ProfileHotLine = {
-            file: '/src/boundary.py', line: 1, samples: 200, percentage: 20.0,
+            file: '/src/boundary.py', line: 1, samples: 200, percentage: 20,
         };
         const belowBoundary: ProfileHotLine = {
             file: '/src/boundary.py', line: 2, samples: 199, percentage: 19.99,
@@ -231,13 +243,13 @@ suite('Profiler — Decoration Contracts', () => {
 });
 
 suite('Profiler — Decoration Lifecycle', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-deco2-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-deco2-');
+        tmpDir = setupDir;
     });
 
-    suiteTeardown(() => {
-        teardownLspTestSuite(tmpDir);
+    suiteTeardown(async () => {
+        await teardownLspTestSuite(tmpDir);
     });
 
     teardown(async () => {
@@ -246,20 +258,20 @@ suite('Profiler — Decoration Lifecycle', () => {
         await closeAllEditors();
     });
 
-    test('clearProfileDecorations removes all decorations without error', () => {
+    test('clearProfileDecorations removes all decorations without error', async () => {
         const result: ProfileResult = {
             sessionId: 'clear-test',
-            duration: 1.0,
+            duration: 1,
             totalSamples: 100,
             outputFile: '',
             hotFunctions: [],
             hotLines: [
-                { file: '/tmp/test.py', line: 1, samples: 50, percentage: 50.0 },
+                { file: '/tmp/test.py', line: 1, samples: 50, percentage: 50 },
             ],
         };
 
-        assert.doesNotThrow(() => {
-            applyProfileDecorations(result);
+        await assert.doesNotReject(async () => {
+            await applyProfileDecorations(result);
         }, 'Applying decorations should not throw');
 
         assert.doesNotThrow(() => {
@@ -277,20 +289,20 @@ suite('Profiler — Decoration Lifecycle', () => {
 
         const result: ProfileResult = {
             sessionId: 'survive-test',
-            duration: 2.0,
+            duration: 2,
             totalSamples: 500,
             outputFile: '',
             hotFunctions: [],
             hotLines: [
-                { file: uri.fsPath, line: 2, samples: 250, percentage: 50.0 },
+                { file: uri.fsPath, line: 2, samples: 250, percentage: 50 },
             ],
         };
 
-        assert.doesNotThrow(() => { applyProfileDecorations(result); },
+        await assert.doesNotReject(async () => { await applyProfileDecorations(result); },
             'First apply should succeed');
         assert.doesNotThrow(() => { clearProfileDecorations(); },
             'Clear should succeed');
-        assert.doesNotThrow(() => { applyProfileDecorations(result); },
+        await assert.doesNotReject(async () => { await applyProfileDecorations(result); },
             'Re-apply should succeed');
         clearProfileDecorations();
     });

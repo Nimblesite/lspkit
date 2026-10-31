@@ -9,6 +9,10 @@ repository.workspace = true
 readme.workspace = true
 keywords = ["profiler", "lsp", "flamegraph", "memory", "language-server"]
 categories = ["development-tools::profiling"]
+# Lean tarball: ship sources + the release-staged license only. LICENSE-MIT is
+# gitignored (staged at publish time), so `include` forces it into the package.
+# [PROF-WIRE-PACKAGED]
+include = ["src/**/*", "LICENSE-MIT"]
 
 # The profiler's own lint set, stricter than the lspkit workspace's
 # ([PROF-INVARIANTS]): no unwrap, expect, panic, indexing or `as` casts.

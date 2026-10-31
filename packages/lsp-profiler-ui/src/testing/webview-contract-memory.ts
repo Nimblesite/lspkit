@@ -4,10 +4,12 @@
  * profiled-program data inert, and say plainly what they could not show.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import * as vm from 'node:vm';
-import { buildMemoryDashboardHtml, type MemoryDiffData } from '../memory-dashboard';
-import { buildRefGraphHtml, decodeRefGraph, type ReferenceGraphResult } from '../memory-ref-graph';
+import type { MemoryDiffData } from '../memory-dashboard';
+import { buildMemoryDashboardHtml } from '../memory-dashboard';
+import type { ReferenceGraphResult } from '../memory-ref-graph';
+import { buildRefGraphHtml, decodeRefGraph } from '../memory-ref-graph';
 import { buildFlamegraphHtml } from '../profiler-flamegraph-html';
 import { embedJson } from '../profiler-webview';
 import { stringField } from '../unknown-shape';
@@ -19,6 +21,41 @@ interface DrawnText {
     readonly fill: string;
 }
 
+/** A no-op for canvas methods the recording mock does not implement. */
+function noopCanvasMethod(): void {
+    // Recording mocks only implement the methods the graph script draws with.
+}
+
+/** A getComputedStyle stand-in: every CSS variable resolves to its own name. */
+const mockGetComputedStyle = (): { getPropertyValue: (name: string) => string } => ({
+    getPropertyValue: (name: string): string => name,
+});
+
+/** The recording canvas context's pen, typed for the proxy reads below. */
+interface RecordingPen {
+    fillStyle: string;
+    fillText: (text: string, x: number, y: number) => void;
+    readonly [key: string]: unknown;
+}
+
+/** The minimal canvas surface the inline graph script reads and draws on. */
+interface RecordingCanvas {
+    readonly width: number;
+    readonly height: number;
+    readonly clientWidth: number;
+    readonly parentElement: Record<string, never>;
+    readonly style: Record<string, never>;
+    readonly getContext: () => RecordingPen;
+}
+
+/** The minimal document surface the inline graph script queries. */
+interface RecordingDocument {
+    readonly getElementById: (id: string) => RecordingCanvas;
+    readonly documentElement: Record<string, never>;
+    readonly createElement: (tag: string) => { style: Record<string, never> };
+    readonly body: { appendChild: (child: unknown) => void };
+}
+
 /**
  * Run a retention graph's inline script against a recording canvas and return
  * every text it draws, with where and in which colour: the panel as a reader
@@ -26,17 +63,42 @@ interface DrawnText {
  * variables are two different colours.
  */
 function drawnTexts(html: string): DrawnText[] {
-    const script = /<script nonce="[^"]+">([\s\S]*)<\/script>/.exec(html)?.[1] ?? '';
+    const script = /<script nonce="[^"]+">(?<body>[\s\S]*)<\/script>/u.exec(html)?.groups?.body ?? '';
     const texts: DrawnText[] = [];
-    const pen: Record<string | symbol, unknown> = {
-        fillText(text: string, _x: number, y: number) { texts.push({ text, y, fill: String(pen.fillStyle) }); },
+    const pen: RecordingPen = {
+        fillStyle: '',
+        fillText: (text: string, _x: number, y: number): void => { texts.push({ text, y, fill: pen.fillStyle }); },
     };
-    const ctx = new Proxy(pen, { get: (target, key) => (key in target ? target[key] : () => undefined) });
-    const canvas = { width: 800, height: 500, clientWidth: 900, parentElement: {}, style: {}, getContext: () => ctx };
-    const document = { getElementById: () => canvas, documentElement: {}, createElement: () => ({ style: {} }), body: { appendChild: () => undefined } };
-    const getComputedStyle = (): { getPropertyValue: (name: string) => string } => ({ getPropertyValue: (name: string) => name });
-    vm.runInNewContext(script, { document, getComputedStyle, window: { addEventListener: () => undefined } });
+    const ctx = recordingCtx(pen);
+    const canvas = recordingCanvas(ctx);
+    const document = recordingDocument(canvas);
+    vm.runInNewContext(script, { document, getComputedStyle: mockGetComputedStyle, window: { addEventListener: noopCanvasMethod } });
     return texts;
+}
+
+function recordingCtx(pen: RecordingPen): RecordingPen {
+    return new Proxy(pen, {
+        get: (target: RecordingPen, key: string | symbol): unknown => {
+            if (typeof key !== 'string') { return noopCanvasMethod; }
+            return key in target ? target[key] : noopCanvasMethod;
+        },
+    });
+}
+
+function recordingCanvas(ctx: RecordingPen): RecordingCanvas {
+    return {
+        width: 800, height: 500, clientWidth: 900, parentElement: {}, style: {},
+        getContext: (): RecordingPen => ctx,
+    };
+}
+
+function recordingDocument(canvas: RecordingCanvas): RecordingDocument {
+    return {
+        getElementById: (): RecordingCanvas => canvas,
+        documentElement: {},
+        createElement: (): { style: Record<string, never> } => ({ style: {} }),
+        body: { appendChild: noopCanvasMethod },
+    };
 }
 
 function hostileDashboardIsInert(): void {
@@ -50,7 +112,7 @@ function hostileDashboardIsInert(): void {
     };
     const html = buildMemoryDashboardHtml(snapshot, diff);
     assert.ok(html.includes('Content-Security-Policy'), 'the dashboard must declare a CSP');
-    assert.ok(/script-src 'nonce-[^']+'/.test(html), 'the inline script must be nonce-gated');
+    assert.ok(/script-src 'nonce-[^']+'/u.test(html), 'the inline script must be nonce-gated');
     assert.ok(!html.includes('</script><img'), 'profiled-program data must not close the inline <script> element early');
     assert.ok(html.includes('escapeHtml(basename(a.file))'), 'allocation paths must be escaped before innerHTML');
     assert.ok(html.includes('escapeHtml(lk.reason)'), 'leak reasons must be escaped before innerHTML');
@@ -79,7 +141,7 @@ function hostileRetentionGraphIsInert(): void {
     };
     const html = buildRefGraphHtml(result);
     assert.ok(html.includes('Content-Security-Policy'), 'the retention graph must declare a CSP');
-    assert.ok(/script-src 'nonce-[^']+'/.test(html), 'the inline script must be nonce-gated');
+    assert.ok(/script-src 'nonce-[^']+'/u.test(html), 'the inline script must be nonce-gated');
     assert.ok(!html.includes('</script><img'), 'node reprs / retention path steps must not close the inline <script> early');
     assert.ok(html.includes('&lt;/script&gt;'), 'the target type in the heading must be HTML-escaped');
 }
@@ -137,11 +199,11 @@ function anEmptyWalkSaysSo(): void {
     assert.ok(html.includes('No reference graph data available'), 'an empty walk must say so, never show a blank canvas');
 }
 
-function viewsFollowTheEditorTheme(): void {
+async function viewsFollowTheEditorTheme(): Promise<void> {
     const surfaces = [
         buildMemoryDashboardHtml(dashboardSnapshot()),
         buildRefGraphHtml({ targetType: 'W', maxDepth: 5, maxNodes: 200, script: '' }),
-        buildFlamegraphHtml(profileResult()),
+        await buildFlamegraphHtml(profileResult()),
     ];
     for (const html of surfaces) {
         assert.ok(html.includes('var(--vscode-editor-background'), 'panel background must track the active VS Code theme');

@@ -12,14 +12,14 @@
  */
 
 import * as vscode from "vscode";
-import { cmd, debugType, brand } from "./ids";
+import { brand, cmd, debugType } from "./ids";
 import { effect } from "@preact/signals-core";
 import type { ProfilerStore as Store } from "./store";
 
 /** Status bar priority — lower than host's main item. */
 const MEMORY_STATUS_BAR_PRIORITY = 98;
 
-let memoryStatusBarItem: vscode.StatusBarItem | undefined;
+let memoryStatusBarItem: vscode.StatusBarItem | null = null;
 /** Last-rendered visibility, so the e2e seam knows when the item is hidden. */
 let memoryStatusVisible = false;
 
@@ -35,7 +35,7 @@ export function bindMemoryStatusBar(store: Store): vscode.Disposable[] {
   // Reactive leg: tracking state, and whether any runtime offers memory ([PROF-UI-CAPABILITIES]).
   const disposeEffect = effect(() => { refreshMemoryStatusBar(store); });
   refreshMemoryStatusBar(store);
-  const forget = (): void => { memoryStatusBarItem = undefined; memoryStatusVisible = false; };
+  const forget = (): void => { memoryStatusBarItem = null; memoryStatusVisible = false; };
   return [memoryStatusBarItem, { dispose: disposeEffect }, ...debugSessionRefresh(store), { dispose: forget }];
 }
 
@@ -56,7 +56,7 @@ function debugSessionRefresh(store: Store): vscode.Disposable[] {
  * click and the tracking state ([PROF-UI-STATE]).
  */
 function refreshMemoryStatusBar(store: Store): void {
-  if (memoryStatusBarItem === undefined) { return; }
+  if (memoryStatusBarItem === null) { return; }
 
   // Both signals are read on every pass, so the effect that calls this
   // re-runs when either changes ([PROF-UI-CAPABILITIES]).

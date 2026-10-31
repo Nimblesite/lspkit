@@ -127,7 +127,7 @@ async fn scan_in_background(
     cancel: &CancellationToken,
 ) -> Result<(), ScanError> {
     let computation = start_document(server, params, gate, uri);
-    let result = lspkit_sidecar::cancellation::until_cancelled(computation, Some(cancel))
+    let result = lspkit::sidecar::cancellation::until_cancelled(computation, Some(cancel))
         .await
         .map_err(|cancelled| {
             ScanError::Request(cancelled_error().with_data(json!(cancelled.to_string())))

@@ -7,18 +7,19 @@
  * user or the server can see it.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import * as vscode from 'vscode';
 import { brand, cmd, configSection, ctx, debugType, lsp, lspTable, processUriScheme, viewId } from '../../ids';
 import { buildFlamegraphHtml } from '../../profiler-flamegraph-html';
 import { buildMemoryDashboardHtml } from '../../memory-dashboard';
 import { buildRefGraphHtml } from '../../memory-ref-graph';
 import { brandHeading } from '../../profiler-styles';
+import { arrayField, rawField, recordField } from '../../unknown-shape';
 import { EXTENSION_ID, hostApi } from './test-helpers';
 
-const FOREIGN = /basilisk|sharplsp/i;
+const FOREIGN = /basilisk|sharplsp/iu;
 
-function flamegraph(): string {
+async function flamegraph(): Promise<string> {
     return buildFlamegraphHtml({
         sessionId: 's-1', duration: 1, totalSamples: 10, outputFile: '/tmp/p.json',
         hotFunctions: [{ name: 'f', file: '/a.txt', line: 1, samples: 10, percentage: 100, selfPercentage: 100 }],
@@ -60,18 +61,17 @@ suite('Host identity — ids follow the installed host', () => {
         const ours = all.filter((id) => id.startsWith('lspui.profiler.'));
         assert.ok(ours.includes('lspui.profiler.memoryStart'), `memoryStart registered: ${ours.join(', ')}`);
         assert.ok(ours.includes('lspui.profiler.profileStop'), `profileStop registered: ${ours.join(', ')}`);
-        const foreign = all.filter((id) => /^(basilisk|sharplsp)\./i.test(id));
+        const foreign = all.filter((id) => /^(?<product>basilisk|sharplsp)\./iu.test(id));
         assert.deepStrictEqual(foreign, [], 'no command under another product prefix');
     });
 
     test('no generated command title repeats its category — VS Code already shows "<category>: <title>"', () => {
         const manifest: unknown = vscode.extensions.getExtension(EXTENSION_ID)?.packageJSON;
-        const contributes: unknown = typeof manifest === 'object' && manifest !== null ? Reflect.get(manifest, 'contributes') : undefined;
-        const commands: unknown = typeof contributes === 'object' && contributes !== null ? Reflect.get(contributes, 'commands') : undefined;
-        assert.ok(Array.isArray(commands) && commands.length > 0, 'the manifest declares commands');
-        for (const entry of commands as unknown[]) {
-            const title = String(Reflect.get(entry as object, 'title'));
-            const category = String(Reflect.get(entry as object, 'category'));
+        const commands = arrayField(recordField(manifest, 'contributes'), 'commands');
+        assert.ok(commands.length > 0, 'the manifest declares commands');
+        for (const entry of commands) {
+            const title = String(rawField(entry, 'title'));
+            const category = String(rawField(entry, 'category'));
             assert.strictEqual(category, 'LspUi', `${title} sits under the host's category`);
             assert.ok(!title.startsWith(category), `"${title}" must not repeat "${category}"`);
         }
@@ -81,8 +81,8 @@ suite('Host identity — ids follow the installed host', () => {
 suite('Host identity — webviews render the host brand', () => {
     suiteSetup(async () => { await hostApi(); });
 
-    test('the CPU results heading is the host brand, upper-cased', () => {
-        const html = flamegraph();
+    test('the CPU results heading is the host brand, upper-cased', async () => {
+        const html = await flamegraph();
         assert.ok(html.includes('<span class="accent">LSPUI</span> PROFILER'), 'brand heading present');
         assert.ok(!FOREIGN.test(html), 'no other product named in the CPU results');
     });

@@ -7,7 +7,7 @@
  * as a `:0` link to nowhere.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import { toProfileResult } from '../../wire-adapters';
 import { buildFlamegraphHtml } from '../../profiler-flamegraph-html';
 import type { ProfileReport } from '../../wire-generated';
@@ -42,8 +42,8 @@ suite('CPU UI — a hot function with no location', () => {
         assert.deepStrictEqual([spin?.file, spin?.line], ['/src/Program.fs', 26], 'a located frame keeps its anchor');
     });
 
-    test('the results table embeds the unlocated frame without a location', () => {
-        const html = buildFlamegraphHtml(toProfileResult(report()));
+    test('the results table embeds the unlocated frame without a location', async () => {
+        const html = await buildFlamegraphHtml(toProfileResult(report()));
         assert.ok(html.includes(FRAMEWORK_FRAME), 'the frame is in the table data');
         assert.ok(!html.includes('"file":""'), 'no empty file is embedded');
         assert.ok(!html.includes('"line":0'), 'no line 0 is embedded');

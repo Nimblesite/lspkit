@@ -79,7 +79,7 @@ fn helper_binary_path() -> PathBuf {
 
     // Fallback for `cargo test -p basilisk-lsp` without a prior workspace build.
     let status = Command::new(env!("CARGO"))
-        .args(["build", "-p", "lsp-profiler-helper"])
+        .args(["build", "-p", "lsp-profiler-python", "--bin", "lsp-profiler-helper"])
         .status()
         .expect("run cargo build for helper");
     assert!(status.success(), "failed to build lsp-profiler-helper");

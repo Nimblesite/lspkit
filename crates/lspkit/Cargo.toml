@@ -1,6 +1,6 @@
 [package]
 name = "lspkit"
-description = "Generic Rust infrastructure for building LSP+MCP servers — façade crate exposing the EngineApi contract."
+description = "Foundation for building LSP+MCP servers: the EngineApi contract, layered TOML config, a rope-backed open-document store, framed-IPC sidecars and an optional tree-sitter parse cache."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,25 +15,40 @@ documentation = "https://docs.rs/lspkit"
 # [SWR-REL-LICENSE]
 include = ["src/**/*", "LICENSE-MIT"]
 
+# The L0 toolkit crate: no internal dependencies. [CRATE-LAYOUT-LAYERS]
 [lints]
 workspace = true
 
 [dependencies]
 async-trait.workspace = true
+dashmap.workspace = true
 futures-core.workspace = true
+rmp-serde.workspace = true
+ropey.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
 tokio-util.workspace = true
+toml.workspace = true
+tracing.workspace = true
 
+# Optional: tree-sitter compiles a C runtime, so LSP-only consumers opt in.
+# [CRATE-LAYOUT-FEATURES]
+tree-sitter = { workspace = true, optional = true }
 # Optional: feature-gated tracing-subscriber bootstrap.
-tracing = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
-thiserror = { workspace = true, optional = true }
 
 [features]
 default = []
-tracing-setup = ["dep:tracing", "dep:tracing-subscriber", "dep:thiserror"]
+tracing-setup = ["dep:tracing-subscriber"]
+treesitter = ["dep:tree-sitter"]
 
 [dev-dependencies]
-tokio = { workspace = true }
+# The sidecar inbound-routing integration drives the real compiled
+# `diagnostic-reference --backend` child over OS stdio, so the test runtime
+# needs process spawning plus framed IO.
+tokio = { workspace = true, features = ["rt", "macros", "process", "io-util"] }
 futures-util.workspace = true
-async-trait.workspace = true
-tokio-util.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tree-sitter-rust = "0.24"

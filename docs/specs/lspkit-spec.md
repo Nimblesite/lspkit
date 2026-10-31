@@ -2,56 +2,48 @@
 
 ## Identity
 
-`lspkit` is a public, fully generic Rust workspace published as `lspkit-*` crates that supplies the cross-cutting infrastructure every LSP+MCP server reimplements. Its headline contribution is the **"one engine, two surfaces"** contract: a single `EngineApi` trait that an LSP backend and an MCP server both consume, so live analysis state computed once is vended two ways.
+`lspkit` is a public, fully generic Rust workspace published as four crates — `lspkit`, `lspkit-server`, `lsp-profiler` and `lsp-profiler-dotnet` — that supplies the cross-cutting infrastructure every LSP+MCP server reimplements. Its headline contribution is the **"one engine, two surfaces"** contract: a single `EngineApi` trait that an LSP backend and an MCP server both consume, so live analysis state computed once is vended two ways.
 
 ## Hard invariants
 
 These are non-negotiable. Any patch violating one is illegal.
 
 - **Generic only.** Toolkit code, docs, READMEs, comments, and examples MUST NOT reference any specific consumer, domain, language ecosystem, or product. A grep for known consumer names returns zero hits in `crates/` and `README.md`.
-- **No language-specific backend code.** No Roslyn, FCS, Pyright, Ruff, tree-sitter grammar bundling, nor any other language ecosystem glue lives in any crate. `lspkit-sidecar` is pure transport — its public surface MUST NOT name any backend technology.
+- **No language-specific backend code.** No Roslyn, FCS, Pyright, Ruff, tree-sitter grammar bundling, nor any other language ecosystem glue lives in any crate. `lspkit::sidecar` is pure transport — its public surface MUST NOT name any backend technology.
 - **Maintained bedrock or self-owned.** Toolkit MUST NOT depend on unmaintained crates for core protocol handling. `tower-lsp` is forbidden (last release 2023). The toolkit depends on `lsp-types` (maintained) and ships its own JSON-RPC server loop inside `lspkit-server`.
-- **Third-party LSP/MCP types stay hidden.** No `rmcp::*` or `lsp_types::*` request/response type appears in a `pub` signature of any `lspkit-*` crate. Newtype wrappers are required at every boundary.
+- **Third-party LSP/MCP types stay hidden.** No `rmcp::*` or `lsp_types::*` request/response type appears in a `pub` signature of `lspkit` or `lspkit-server`. Newtype wrappers are required at every boundary.
 - **No wire-format coupling.** The toolkit ships no typeDiagram-generated types. Consumers define their own wire schemas case-by-case.
-- **Locks never span `.await`.** `lspkit-vfs` MUST scope all `DashMap` and `Mutex` guards inside synchronous blocks; methods MUST NOT return guards.
+- **Locks never span `.await`.** `lspkit::vfs` MUST scope all `DashMap` and `Mutex` guards inside synchronous blocks; methods MUST NOT return guards.
 
 ## Public crate inventory
 
-Eight crates. The split is locked.
+Four published crates. The split is locked.
 
 | Crate | Public surface (intent) |
 |---|---|
-| **lspkit** | Façade. Exposes `EngineApi` trait + `Generation`, `Snapshot<R>`, `GenerationEvent`, `Cause`, `RescanScope`, `RescanTicket` types. Feature `tracing-setup` exposes a stdio-safe `tracing-subscriber` builder. `prelude` module re-exports the headline items. |
-| **lspkit-server** | LSP server scaffolding built on `lsp-types`: Content-Length framing, JSON-RPC request/response/notification dispatcher, capability builder, URI ↔ `PathBuf` helpers, workspace-folders abstraction, diagnostics fan-out bus, progress sink, cancellation plumbing. Consumers register handlers; the crate routes them to an `EngineApi` + VFS pair. |
-| **lspkit-vfs** | Concurrent open-document store with LSP version tracking, `didOpen` / `didChange` / `didClose` helpers, rope-based incremental edits, and position-encoding negotiation (UTF-8 / UTF-16 / UTF-32). |
-| **lspkit-live** | File-watcher → debouncer → single-flight scheduler → session lifecycle. Produces values that implement `EngineApi`. Configurable debounce and quiet windows. Stable `0.0.x` until the watcher/scheduler interplay is proven. |
-| **lspkit-mcp** | `rmcp` adapter. Mounts an `EngineApi` impl as MCP tools, resources, and prompts. Provides hooks for tool descriptions that encourage prevention-first agent behavior; the descriptions themselves are consumer-supplied. |
-| **lspkit-config** | Layered TOML loader. Walks up from a workspace root, merges LSP `initializationOptions`, exposes an optional hot-reload signal. Generic over the consumer's `serde::Deserialize` config struct. |
-| **lspkit-treesitter** | `LanguageParser` trait, content-hash-keyed parse cache, incremental parse helper. Bundles no grammars. Optional dependency cone. |
-| **lspkit-sidecar** | Framed IPC primitives only: length-prefixed envelope over Unix-socket / Windows-named-pipe, pluggable wire format, lifecycle manager (spawn, health-ping with timeout, exponential-backoff respawn, request correlation via `AtomicU64` ID). No backend-specific code of any kind. |
+| **lspkit** | Façade. Exposes `EngineApi` trait + `Generation`, `Snapshot<R>`, `GenerationEvent`, `Cause`, `RescanScope`, `RescanTicket` types. Feature `tracing-setup` exposes a stdio-safe `tracing-subscriber` builder. `prelude` module re-exports the headline items. Modules `config` (layered TOML loader), `vfs` (concurrent open-document store), `sidecar` (framed IPC transport) and `treesitter` (parse cache, behind the `treesitter` feature). |
+| **lspkit-server** | LSP server scaffolding built on `lsp-types`: Content-Length framing, JSON-RPC request/response/notification dispatcher, capability builder, URI ↔ `PathBuf` helpers, workspace-folders abstraction, diagnostics fan-out bus, progress sink, cancellation plumbing. Consumers register handlers; the crate routes them to an `EngineApi` + VFS pair. Modules `live` (file-watcher → debouncer → single-flight scheduler → session lifecycle) and `mcp` (`rmcp` adapter, behind the `mcp` feature). |
+| **lsp-profiler** | Language-neutral CPU and memory profiler core: sessions, hotspots, flame graphs, speedscope/V8 exports, heap snapshots, leak scoring, one JSON-RPC protocol. Spec: [LSP-PROFILER-SPEC.md](LSP-PROFILER-SPEC.md). |
+| **lsp-profiler-dotnet** | The profiler's .NET runtime: EventPipe CPU sampling and heap snapshots through the engine in `dotnet/`. |
 
-The profiler crates, `lsp-profiler` (core) and `lsp-profiler-dotnet` (the .NET runtime), sit beside these eight with their own spec: [LSP-PROFILER-SPEC.md](LSP-PROFILER-SPEC.md).
+## Crate layout
+
+Implementation tracker: [docs/plans/crate-consolidation-plan.md](../plans/crate-consolidation-plan.md). The layer graph is under [Dependency direction](#dependency-direction-acyclic).
+
+- **[CRATE-LAYOUT]** The workspace publishes exactly four crates in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `lsp-profiler-python` is parked: it stays in the repo, excluded from the workspace and unpublished.
+- **[CRATE-LAYOUT-LAYERS]** An L1 crate depends only on its own tree's L0 crate. An L0 crate has no internal dependencies.
+- **[CRATE-LAYOUT-MODULES]** Each absorbed crate becomes a top-level module with the same name: `lspkit::config`, `lspkit::vfs`, `lspkit::treesitter`, `lspkit::sidecar`, `lspkit_server::live`, `lspkit_server::mcp`. Each module keeps its absorbed crate's coverage floor as a `<crate>::<module>` key in `coverage-thresholds.json`.
+- **[CRATE-LAYOUT-FEATURES]** Heavy dependency cones are opt-in cargo features, all default off: `lspkit-server/mcp` (`rmcp`), `lspkit-server/pull` (`salsa`), `lspkit/treesitter` (`tree-sitter`, a C runtime) and `lspkit/tracing-setup` (`tracing-subscriber`). `lspkit::sidecar` is always on; its dependencies are already in `lspkit`'s core.
+- **[CRATE-LAYOUT-HELPER]** `lsp-profiler-helper` is a `[[bin]]` target of `lsp-profiler-python` (`src/bin/lsp-profiler-helper/`), not a crate.
+- **[CRATE-RETIRE]** The six absorbed `lspkit-*` names are already on crates.io at 0.0.1. After the consolidated release ships, delete `lspkit-config`, `lspkit-treesitter`, `lspkit-sidecar`, `lspkit-mcp` and `lspkit-live` on crates.io, and yank `lspkit-vfs` 0.0.1 with a deprecation README pointing to `lspkit::vfs`.
 
 ## Dependency direction (acyclic)
 
 ```mermaid
 flowchart TD
-    lspkit["lspkit<br/><i>hosts EngineApi</i>"]
-    lspkit-server["lspkit-server"]
-    lspkit-mcp["lspkit-mcp<br/><i>rmcp adapter</i>"]
-    lspkit-live["lspkit-live<br/><i>notify + sched</i>"]
-    lspkit-config["lspkit-config"]
-    lspkit-vfs["lspkit-vfs"]
-    lspkit-treesitter["lspkit-treesitter<br/><i>optional cone</i>"]
-    lspkit-sidecar["lspkit-sidecar<br/><i>standalone</i>"]
-
-    lspkit-server --> lspkit
-    lspkit-server --> lspkit-vfs
-    lspkit-mcp --> lspkit
-    lspkit-live --> lspkit
-    lspkit-config
-    lspkit-treesitter
-    lspkit-sidecar
+    lspkit-server["lspkit-server (L1)"] --> lspkit["lspkit (L0)"]
+    lsp-profiler-dotnet["lsp-profiler-dotnet (L1)"] --> lsp-profiler["lsp-profiler (L0)"]
+    lsp-profiler-python["lsp-profiler-python (L1, parked)"] --> lsp-profiler
 ```
 
 ## `EngineApi` contract
@@ -98,7 +90,7 @@ pub trait EngineApi: Send + Sync + 'static {
 
 ## Cross-cutting helpers — required behavior
 
-- **Position encoding** (`lspkit-vfs::PositionEncoding`): negotiates encoding at `initialize` per LSP 3.17 client capabilities; converts on every read; round-trips byte/char offsets correctly across multi-byte scalars and surrogate pairs.
+- **Position encoding** (`lspkit::vfs::PositionEncoding`): negotiates encoding at `initialize` per LSP 3.17 client capabilities; converts on every read; round-trips byte/char offsets correctly across multi-byte scalars and surrogate pairs.
 - **URI ↔ `PathBuf`** (`lspkit-server::uri`): handles `file://`, percent-decoding, Windows drive letters, UNC paths, and non-UTF-8 paths.
 - **Cancellation** (`lspkit-server::dispatch`): a `CancellationToken` is plumbed through every request handler and triggered when the client sends `$/cancelRequest`.
 - **Progress** (`lspkit-server::progress`): wraps LSP `window/workDoneProgress`; the `Progress` sink is a no-op when the client did not advertise the capability.
@@ -111,7 +103,7 @@ pub trait EngineApi: Send + Sync + 'static {
 - `lsp-types` (current major).
 - `rmcp` (current minor, pinned).
 - `notify` 7.x, `ropey` 1.x, `dashmap` 6.x, `tokio-util` (for `CancellationToken`).
-- `rmp-serde` available as the default wire format for `lspkit-sidecar`; transport is generic over `serde`.
+- `rmp-serde` available as the default wire format for `lspkit::sidecar`; transport is generic over `serde`.
 - **No `tower-lsp`.** Ever.
 
 ## Public API hygiene
@@ -124,25 +116,34 @@ pub trait EngineApi: Send + Sync + 'static {
 
 ## Release & publishing
 
-The toolkit ships eight crates to crates.io as a single coordinated release. Rules are non-negotiable; spec IDs below are referenced by the release workflow and the implementation plan in [docs/plans/publishing-plan.md](../plans/publishing-plan.md).
+lspkit runs a **release-only** regime modelled on [Shipwright](https://github.com/Nimblesite/Shipwright/tree/main/docs/specs) and the AgentPMO repo standard. The one way to ship is to push a version tag: [.github/workflows/release.yml](../../.github/workflows/release.yml) gates the tagged commit, cuts a signed GitHub Release and publishes the four crates to crates.io and every package under `packages/` to npm. Spec IDs below are cited by the workflows and by the plan in [docs/plans/publishing-plan.md](../plans/publishing-plan.md).
 
-- **[REL-TRIGGER]** Releases are triggered by an annotated tag matching `v[0-9]+.[0-9]+.[0-9]+` (or `v*.*.*-*` for prereleases) pushed to `main`. No `workflow_dispatch`. No publishing from feature branches.
-- **[REL-OIDC]** Publishing to crates.io uses OIDC trusted publishing via `rust-lang/crates-io-auth-action`. No `CARGO_REGISTRY_TOKEN` secret is stored in the repo. Each of the eight crates registers `Nimblesite/lspkit` + workflow `.github/workflows/release.yml` + environment `release` as a Trusted Publisher on crates.io.
-- **[REL-VERSION]** A single workspace version is the source of truth. `[workspace.package].version` carries the placeholder `0.0.0-dev` in source; the release workflow stamps the tag-derived version into `Cargo.toml` (and the internal `[workspace.dependencies]` pins for `lspkit-*`) before build. All eight crates inherit via `version.workspace = true`. The stamp is never committed back to `main`.
-- **[REL-ORDER]** Publish order respects the dep graph above; one 30-second sleep between batches lets the crates.io index propagate:
-  1. **Batch 1 (leaves):** `lspkit`, `lspkit-vfs`, `lspkit-config`, `lspkit-sidecar`, `lspkit-treesitter`
-  2. **Batch 2 (dependents):** `lspkit-server`, `lspkit-mcp`, `lspkit-live`
+- **[REL-REGIME]** Workflow triggers are fixed:
 
-  `cargo publish -p <crate>` per crate; the publish step is idempotent (skip if the version is already on the index).
-- **[REL-GATES]** Pre-publish gates — all must pass, in order:
-  1. `make ci` (lint + test + coverage thresholds + build) green on the tagged commit.
-  2. `cargo publish --dry-run -p <crate>` succeeds for each crate.
-  3. `cargo deny check` clean against committed `deny.toml`.
-  4. Every `uses:` in the release workflow pinned to a 40-char commit SHA (Dependabot tracks).
-  5. Top-level workflow `permissions: contents: read`; `id-token: write` job-scoped to the publish job only.
-  6. `--locked` on every cargo invocation in the release workflow; `Cargo.lock` committed.
-- **[REL-METADATA]** Every published crate carries `license = "MIT"`, `repository`, `description`, `readme`, and `documentation` fields. A single `LICENSE-MIT` file ships in each crate, staged from the workspace-root `LICENSE-MIT` at publish time. The declared SPDX license matches the one license file that actually ships. `[SWR-REL-LICENSE]`
-- **[REL-PROVENANCE]** GitHub Release artifacts (if any) carry `actions/attest-build-provenance` attestations. Provenance for crates.io packages is roadmap; not blocking for `0.0.x`.
+  | Workflow | Trigger | Purpose |
+  |---|---|---|
+  | `ci.yml` | PR to `main` | `make ci` gate |
+  | `supply-chain.yml` | PR to `main`, weekly cron | cargo-deny + osv-scanner |
+  | `codeql.yml` | PR to `main`, weekly cron, `workflow_call` from release | CodeQL scan; a hard gate when called by release |
+  | `release.yml` | push of a `v*` tag | gate, GitHub Release, crates.io, npm |
+  | `dependabot-automerge.yml` | Dependabot PR | sweep the bump into `dependabot-upgrades` |
+
+  A push or merge to `main` triggers nothing. Nothing publishes on a schedule, from a branch or from `workflow_dispatch`.
+- **[REL-TRIGGER]** A release starts when a tag matching `v[0-9]+.[0-9]+.[0-9]+` (or `v[0-9]+.[0-9]+.[0-9]+-*` for a prerelease) is pushed at a commit on `main`. Publishing a GitHub Release from the UI or with `gh release create vX.Y.Z` creates that tag and so starts the same workflow; the workflow then fills in that release instead of creating a new one.
+- **[REL-VERSION]** Every source version is the placeholder `0.0.0-dev`: `[workspace.package].version`, the internal `[workspace.dependencies]` pins and each `packages/*/package.json`. The release stamps the tag version into every carrier with `shipwright-version-stamp` in the runner working tree, and never commits it back. `[SWR-VERSION-BUILD-STAMPING]`
+- **[REL-GATES]** Before anything publishes, all of these pass on the tagged commit, in order:
+  1. The CodeQL gate (`codeql.yml` with `gate: true`) finds nothing at High or Critical severity.
+  2. `make ci` (format, lint, test, coverage thresholds, build).
+  3. `cargo deny check advisories bans licenses sources` against the stamped, relocked graph.
+  4. `cargo package --workspace --locked` builds every crate tarball against its siblings.
+
+  Every `uses:` is pinned to a 40-character commit SHA. Workflows default to `permissions: contents: read` and elevate per job. Installs are frozen (`npm ci`, `--locked`), and the release job uses no caches.
+- **[REL-GITHUB]** The release attaches every crate tarball, every npm tarball, a CycloneDX SBOM and one `SHA256SUMS` over them all, cosign keyless-signed (`SHA256SUMS.sigstore.json`). Build provenance and the SBOM are attested against `SHA256SUMS`, so consumers can run `gh attestation verify <file> --repo Nimblesite/lspkit`. `[SWR-SEC-CHECKSUM]` `[SWR-SEC-PROVENANCE]` `[SWR-SEC-SBOM]`
+- **[REL-OIDC]** crates.io and npm both publish through OIDC Trusted Publishing from `release.yml` in the protected `release` environment. The repo stores no `CARGO_REGISTRY_TOKEN` or `NPM_TOKEN`. npm packages also publish with `--provenance`. `[SWR-SEC-OIDC-PUBLISH]`
+- **[REL-ORDER]** Crates publish in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `cargo publish` waits for each crate to appear in the index, so no sleeps are needed. The npm package (`@nimblesite/lsp-profiler-ui`) publishes after the crates. Both publish wrappers skip a version that is already on the registry, so a re-run after a failure partway through is safe.
+- **[REL-METADATA]** Every published crate and npm package declares `license = "MIT"` and a repository. The root `LICENSE-MIT` is staged into each crate (`LICENSE-MIT`) and each npm package (`LICENSE`) at publish time, so the declared license ships with the package. `[SWR-REL-LICENSE]`
+- **[REL-PACKAGED-BUILD]** A published crate builds without the workspace around it. `lsp-profiler`'s `build.rs` runs the typeDiagram generator only when the workspace generator exists. Otherwise it requires the generated `src/wire_generated.rs` that the crate's `include` packs. `[PROF-WIRE-PACKAGED]`
+- **[REL-DEPENDABOT]** Every Dependabot bump lands on the unprotected `dependabot-upgrades` staging branch. CI, CodeQL and supply-chain skip Dependabot PRs, and the batch reaches `main` through one consolidation PR.
 
 ## Acceptance — externally verifiable
 
@@ -156,6 +157,7 @@ A patch is acceptable iff:
 6. `grep -R 'tower_lsp\|rmcp::' crates/*/src/lib.rs` returns **zero hits** in `pub` signatures (manual review against the rule).
 7. The `EngineApi` trait skeleton compiles and is exercised by a smoke test that constructs a no-op implementation and calls each method.
 8. Each of the four source repos has a "Migration to `lspkit`" section in its AI-guidance file.
-9. **[REL-OIDC]** `.github/workflows/release.yml` exists, uses `rust-lang/crates-io-auth-action` under `environment: release`, declares no `CARGO_REGISTRY_TOKEN` secret, and pins every `uses:` to a 40-char SHA.
-10. **[REL-VERSION]** `[workspace.package].version = "0.0.0-dev"` in source; release workflow stamps from `${{ github.ref_name }}`; every crate uses `version.workspace = true`.
-11. **[REL-ORDER]** Release workflow publishes the eight crates in the two batches above with a sleep between, and uses an idempotent skip-if-already-published wrapper.
+9. **[REL-OIDC]** `.github/workflows/release.yml` publishes crates.io (`rust-lang/crates-io-auth-action`) and npm (`--provenance`) under `environment: release`, references no registry token secret, and pins every `uses:` to a 40-char SHA.
+10. **[REL-VERSION]** Every source version is `0.0.0-dev`, and the release stamps from `${{ github.ref_name }}`.
+11. **[REL-ORDER]** The release publishes all four crates and both npm packages in the order above, through the idempotent skip-if-published wrappers.
+12. **[REL-REGIME]** No workflow triggers on `push` to a branch. `actionlint` and `zizmor --min-severity medium` report nothing for `.github/workflows/`.

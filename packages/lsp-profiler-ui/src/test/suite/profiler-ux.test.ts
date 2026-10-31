@@ -7,17 +7,15 @@
 // progress assertions live inside the CPU/memory e2e suites where the real
 // flows run; this suite covers the panel chrome and the manifest gating.
 
-import * as assert from "assert";
+import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { recordedOperations } from "../../progress-ops";
 import {
   setupLspTestSuite,
   teardownLspTestSuite,
 } from "./test-helpers";
-import {
-  manifestViewsWelcome,
-  type WelcomeContribution
-} from "./extension-manifest";
+import type { WelcomeContribution } from "./extension-manifest";
+import { manifestViewsWelcome } from "./extension-manifest";
 
 /** One viewsWelcome contribution. */
 /** The pythonProcesses panel's welcome entries from the live manifest. */
@@ -30,14 +28,14 @@ function pythonProcessesWelcome(): WelcomeContribution[] {
 suite("Profiler UX — loading & progress states", () => {
   let tmpDir = "";
 
-  suiteSetup(async function () {
+  suiteSetup(async function setupSuite(this: Mocha.Context): Promise<void> {
     this.timeout(60_000);
-    const result = await setupLspTestSuite("lspui-ux-");
-    tmpDir = result.tmpDir;
+    const { tmpDir: created } = await setupLspTestSuite("lspui-ux-");
+    tmpDir = created;
   });
 
-  suiteTeardown(() => {
-    teardownLspTestSuite(tmpDir);
+  suiteTeardown(async () => {
+    await teardownLspTestSuite(tmpDir);
   });
 
   test("panel empty state is server-state aware — never 'no processes' while connecting", () => {

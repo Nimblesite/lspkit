@@ -6,10 +6,12 @@
  */
 
 import * as vscode from "vscode";
+import type { LanguageClient } from "vscode-languageclient/node";
 import { brand, cmd, debugType } from "./ids";
 import { Logger } from "./logger";
 import type { ProfilerStore as Store } from "./store";
 import { errorText } from "./failure";
+import { isMemoryBusy } from "./profiler-state";
 import { openMemoryDashboard } from "./memory-dashboard";
 import { clearMemoryDecorations } from "./memory-decorations";
 import {
@@ -51,11 +53,15 @@ export function scheduleSnapshotCleanup(store: Store): void {
  * Fire-and-forget: a sticky notification must not block the flow.
  */
 export function showActionableToast(message: string, action: string, command: string): void {
-  void vscode.window.showInformationMessage(message, action).then((choice) => {
-    if (choice === action) {
-      void vscode.commands.executeCommand(command);
-    }
-  });
+  void offerToastAction(message, action, command);
+}
+
+/** Await the toast choice and run the offered command when it is picked. */
+async function offerToastAction(message: string, action: string, command: string): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(message, action);
+  if (choice === action) {
+    await vscode.commands.executeCommand(command);
+  }
 }
 
 /** Settle the UI's tracking state to idle. */
@@ -72,7 +78,7 @@ export function handleMemoryStop(store: Store): void {
  * tracking. A manually stopped session deletes its orphaned at-exit file.
  */
 export function settleMemoryOnSessionEnd(store: Store, session: vscode.DebugSession): void {
-  if (store.profiler.value.memory !== "idle" && isTrackedSession(store, session)) {
+  if (isMemoryBusy(store.profiler.value) && isTrackedSession(store, session)) {
     pendingSnapshotCleanup.delete(session.id);
     void finalizeMemorySessionOnEnd(store);
     return;
@@ -80,7 +86,8 @@ export function settleMemoryOnSessionEnd(store: Store, session: vscode.DebugSess
   const orphan = pendingSnapshotCleanup.get(session.id);
   if (orphan !== undefined) {
     pendingSnapshotCleanup.delete(session.id);
-    void readFinalSnapshot(orphan); // reads + unlinks; the payload is discarded
+    // Reads + unlinks; the payload is discarded.
+    void readFinalSnapshot(orphan);
   }
 }
 
@@ -92,7 +99,7 @@ export function settleMemoryOnSessionEnd(store: Store, session: vscode.DebugSess
  */
 function isTrackedSession(store: Store, session: vscode.DebugSession): boolean {
   const trackedId = store.profiler.value.memoryDebugSessionId;
-  return trackedId !== undefined ? session.id === trackedId : session.type === debugType();
+  return trackedId === undefined ? session.type === debugType() : session.id === trackedId;
 }
 
 /**
@@ -110,16 +117,26 @@ async function finalizeMemorySessionOnEnd(store: Store): Promise<void> {
   const { memorySessionId, memoryFinalSnapshotFile: finalSnapshotFile } = store.profiler.value;
   handleMemoryStop(store);
   if (memorySessionId === undefined || finalSnapshotFile === undefined) { return; }
+  await presentFinalSnapshotFile(store, memorySessionId, finalSnapshotFile);
+}
+
+/** Read the at-exit snapshot and present it, warning when it never arrived. */
+async function presentFinalSnapshotFile(store: Store, memorySessionId: string, finalSnapshotFile: string): Promise<void> {
   const output = await readFinalSnapshot(finalSnapshotFile);
   if (output === null) {
-    // No tracked allocations, or an exit too abrupt for even the SIGTERM/SIGINT
-    // hook (a native crash, SIGKILL, os._exit). Never claim it "finished" (ux-1).
-    void vscode.window.showInformationMessage(
-      `${brand()}: No final memory snapshot was captured — the program either made no tracked allocations or exited abruptly (a crash, kill, or os._exit). Set a breakpoint and take a snapshot to inspect allocations.`,
-    );
+    warnNoFinalSnapshot();
     return;
   }
   await presentFinalSnapshot(store, memorySessionId, output);
+}
+
+/** The at-exit snapshot never arrived; say why without claiming it finished. */
+function warnNoFinalSnapshot(): void {
+  // No tracked allocations, or an exit too abrupt for even the SIGTERM/SIGINT
+  // hook (a native crash, SIGKILL, os._exit). Never claim it "finished" (ux-1).
+  void vscode.window.showInformationMessage(
+    `${brand()}: No final memory snapshot was captured — the program either made no tracked allocations or exited abruptly (a crash, kill, or os._exit). Set a breakpoint and take a snapshot to inspect allocations.`,
+  );
 }
 
 /** A final snapshot was captured at exit, `but` something then went wrong. */
@@ -138,17 +155,22 @@ async function presentFinalSnapshot(store: Store, memorySessionId: string, outpu
     return;
   }
   try {
-    const result = await ingestOutput(client, memorySessionId, output);
-    if (result?.kind !== "snapshot") {
-      warnCapturedBut("it could not be analyzed into an allocation view");
-      return;
-    }
-    presentSnapshot(result, { openResultsView: true });
-    void vscode.window.showInformationMessage(`${brand()}: Captured a final memory snapshot at exit — opened the allocation view.`);
-  } catch (err: unknown) {
-    Logger.warn(`[Memory] final snapshot ingest failed: ${errorText(err)}`);
-    warnCapturedBut(`analyzing it failed — ${errorText(err)}`);
+    await presentIngestedSnapshot(client, memorySessionId, output);
+  } catch (error: unknown) {
+    Logger.warn(`[Memory] final snapshot ingest failed: ${errorText(error)}`);
+    warnCapturedBut(`analyzing it failed — ${errorText(error)}`);
   }
+}
+
+/** The snapshot was captured: turn the ingest reply into the allocation view. */
+async function presentIngestedSnapshot(client: LanguageClient, memorySessionId: string, output: string): Promise<void> {
+  const result = await ingestOutput(client, memorySessionId, output);
+  if (result?.kind !== "snapshot") {
+    warnCapturedBut("it could not be analyzed into an allocation view");
+    return;
+  }
+  await presentSnapshot(result, { openResultsView: true });
+  void vscode.window.showInformationMessage(`${brand()}: Captured a final memory snapshot at exit — opened the allocation view.`);
 }
 
 /**

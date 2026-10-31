@@ -14,18 +14,16 @@
  */
 
 import * as vscode from "vscode";
-import { cmd, brand } from "./ids";
+import { brand, cmd } from "./ids";
 import { Logger } from "./logger";
 import type { MemoryAllocation } from "./memory-decorations";
 import { openNativeTraceViewer, openSpeedscopeImport } from "./trace-actions";
 import { formatBytes as formatBytesShared } from "./profiler-styles";
 import { buildMemoryDashboardHtml } from "./memory-dashboard-html";
+import { SingletonWebviewPanel, handleSourceNavigation } from "./profiler-webview";
+import type { WebviewMessage } from "./profiler-webview";
+
 export { buildMemoryDashboardHtml } from "./memory-dashboard-html";
-import {
-  handleSourceNavigation,
-  SingletonWebviewPanel,
-  type WebviewMessage,
-} from "./profiler-webview";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -90,19 +88,17 @@ const memoryDashboardPanel = new SingletonWebviewPanel(() => cmd("memoryDashboar
 /** The dashboard action buttons' message → command routing ([PROF-UI-MEMORY]). */
 function dashboardActionCommand(type: string): string | undefined {
   switch (type) {
-    case "takeSnapshot": return cmd("memorySnapshot");
-    case "compareSnapshots": return cmd("memoryDiff");
-    default: return undefined;
+    case "takeSnapshot": { return cmd("memorySnapshot"); }
+    case "compareSnapshots": { return cmd("memoryDiff"); }
+    default: { return undefined; }
   }
 }
 
 /**
- * Route a dashboard action-button message to its real memory command, so the
- * dashboard's "take more snapshots" advice is a button, not homework
- * ([PROF-UI-MEMORY], #263). Returns whether the message was one of
- * the dashboard's actions (source-navigation clicks fall through).
+ * Route a heap-profile open message to its viewer; false when the message is
+ * not one of the dashboard's heap-profile opens.
  */
-export function handleMemoryDashboardMessage(msg: WebviewMessage): boolean {
+function openHeapProfileFromMessage(msg: WebviewMessage): boolean {
   const file = msg.file ?? "";
   // The dashboard is the landing view; the raw V8 `.heapprofile` opens on demand
   // in VS Code's built-in viewer ([PROF-CPU-START]), or in speedscope, which
@@ -115,6 +111,17 @@ export function handleMemoryDashboardMessage(msg: WebviewMessage): boolean {
     void openSpeedscopeImport(file);
     return true;
   }
+  return false;
+}
+
+/**
+ * Route a dashboard action-button message to its real memory command, so the
+ * dashboard's "take more snapshots" advice is a button, not homework
+ * ([PROF-UI-MEMORY], #263). Returns whether the message was one of
+ * the dashboard's actions (source-navigation clicks fall through).
+ */
+export function handleMemoryDashboardMessage(msg: WebviewMessage): boolean {
+  if (openHeapProfileFromMessage(msg)) { return true; }
   const command = dashboardActionCommand(msg.type);
   if (command !== undefined) { void vscode.commands.executeCommand(command); }
   return command !== undefined;

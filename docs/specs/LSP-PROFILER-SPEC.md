@@ -69,7 +69,7 @@ flowchart LR
 | `lsp-profiler-dotnet` | `crates/lsp-profiler-dotnet` | .NET runtime: process classification, engine driver, mapping engine output to the neutral model |
 | `lsp-profiler-dotnet-engine` | `dotnet/LspProfiler.DotNet.Engine` | C# tool that does the .NET capture and analysis ([PROF-DOTNET-ENGINE]) |
 | `lsp-profiler-python` | `crates/lsp-profiler-python` | Python runtime (parked, [PROF-PY]) |
-| `lsp-profiler-helper` | `crates/lsp-profiler-helper` | Elevated macOS sampling helper (parked with Python, [PROF-HELPER-PROTOCOL]) |
+| `lsp-profiler-helper` | `crates/lsp-profiler-python/src/bin/lsp-profiler-helper` | Elevated macOS sampling helper (parked with Python, [PROF-HELPER-PROTOCOL]) |
 | `lsp-profiler-ui` | `packages/lsp-profiler-ui` | TypeScript UI library for VS Code-family editors ([PROF-UI]) |
 
 ## [PROF-LSP] LSP mapping
@@ -135,6 +135,10 @@ A memory diagnostic about type `T` offers "Show what keeps `T` alive" and "List 
 - the TypeScript types, `packages/lsp-profiler-ui/src/wire-generated.ts` ([PROF-WIRE-GEN-TS]).
 
 Comments directly above a type, variant or field become doc comments on both sides ([PROF-WIRE-GEN-DOCS]). Generated files are never edited by hand. A build fails if they are stale.
+
+#### [PROF-WIRE-PACKAGED] Published crate build
+
+A crates.io tarball has no workspace, so the generator is absent. `lsp-profiler` packs the generated `src/wire_generated.rs` and its LICENSE through the crate's `include`. `build.rs` runs the generator when `scripts/typediagram/generate.mjs` exists and otherwise requires the packed model, failing with a precise error if it is missing.
 
 #### [PROF-WIRE-GEN-RUST] Rust emission
 
@@ -804,7 +808,7 @@ Same-user processes attach through the diagnostics IPC without elevation. Anothe
 
 ## [PROF-PY] Python runtime (parked)
 
-Runtime ID `python`. The code moved from Basilisk into `crates/lsp-profiler-python` (with `crates/lsp-profiler-helper`). It is not a workspace member until it is un-parked. Its citations of the legacy Basilisk IDs map onto the IDs below when it rejoins.
+Runtime ID `python`. The code moved from Basilisk into `crates/lsp-profiler-python`, which also hosts the `lsp-profiler-helper` binary (see [Crate layout](lspkit-spec.md#crate-layout)). It is not a workspace member until it is un-parked. Its citations of the legacy Basilisk IDs map onto the IDs below when it rejoins.
 
 ### [PROF-PY-SCAFFOLD] Frame filter
 

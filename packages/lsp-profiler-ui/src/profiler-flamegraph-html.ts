@@ -12,31 +12,32 @@
  * host ([PROF-UI-WEBVIEW], profiler-webview.ts).
  */
 
-import { sampledView, sampledParts } from "./sampled-view";
-import { loadFlamegraphSvgDataUri, flamegraphHeroHtml } from "./flamegraph-artifact";
-export { loadFlamegraphSvgDataUri } from "./flamegraph-artifact";
-import { cmd, brand } from "./ids";
+import { sampledParts, sampledView } from "./sampled-view";
+import { flamegraphHeroHtml, loadFlamegraphSvgDataUri } from "./flamegraph-artifact";
+import { brand, cmd } from "./ids";
 import * as vscode from "vscode";
 import { Logger } from "./logger";
 import { errorText } from "./failure";
 import { openNativeTraceViewer, openSpeedscopeImport, revealTraceFile, traceFileFor } from "./trace-actions";
 import type { ProfileResult } from "./profiler-decorations";
 import {
-  PROFILER_CSS_VARS,
-  PROFILER_CSS_RESET,
   PROFILER_CSS_CARDS,
-  PROFILER_CSS_TABLE,
   PROFILER_CSS_HEADING,
+  PROFILER_CSS_RESET,
+  PROFILER_CSS_TABLE,
+  PROFILER_CSS_VARS,
   PROFILER_JS_UTILS,
   brandHeading,
 } from "./profiler-styles";
 import {
+  SingletonWebviewPanel,
   buildWebviewDocument,
   embedJson,
   handleSourceNavigation,
-  SingletonWebviewPanel,
-  type WebviewMessage,
 } from "./profiler-webview";
+import type { WebviewMessage } from "./profiler-webview";
+
+export { loadFlamegraphSvgDataUri } from "./flamegraph-artifact";
 
 // Implements [PROF-CPU-START]. See docs/specs/LSP-PROFILER-SPEC.md
 // ── Result presentation (#145) ─────────────────────────────────────────────
@@ -76,12 +77,12 @@ export function profileHasNoUsableData(
  * button, or the `${brand()}: Show Profile Results` re-entry command — so the
  * user is never stranded and never dumped somewhere confusing.
  */
-export function presentProfileResult(result: ProfileResult): void {
+export async function presentProfileResult(result: ProfileResult): Promise<void> {
   if (profileHasNoUsableData(result)) {
     presentNoUsableData(result);
     return;
   }
-  openFlamegraphWebview(result);
+  await openFlamegraphWebview(result);
   Logger.info(`Profiling stopped: ${String(result.totalSamples)} samples, ${result.duration.toFixed(1)}s, output: ${result.outputFile}`);
   // A failed/refused export is never silent — even when there is still data to
   // show, surface why an artifact is missing ([PROF-EXPORT-VALIDATE]).
@@ -91,9 +92,7 @@ export function presentProfileResult(result: ProfileResult): void {
   // Fire-and-forget: a notification carrying action buttons is sticky (VS Code
   // does not auto-dismiss it), so awaiting it would block the stop handler until
   // the user clicks. Its actions open their views when chosen; a rejection is logged.
-  void offerProfileResultActions(result).catch((err: unknown) => {
-    Logger.warn(`Profile completion action failed: ${errorText(err)}`);
-  });
+  void offerProfileResultActionsSafely(result);
 }
 
 /**
@@ -134,6 +133,15 @@ async function offerProfileResultActions(result: ProfileResult): Promise<void> {
   }
 }
 
+/** Offer the completion actions, turning a failed action into a logged warning. */
+async function offerProfileResultActionsSafely(result: ProfileResult): Promise<void> {
+  try {
+    await offerProfileResultActions(result);
+  } catch (error: unknown) {
+    Logger.warn(`Profile completion action failed: ${errorText(error)}`);
+  }
+}
+
 // ── Webview panel ─────────────────────────────────────────────────────────
 
 /** Route a message posted from the results webview; a host that keeps its own results panel routes through it too. */
@@ -160,8 +168,8 @@ export function handleFlamegraphMessage(msg: WebviewMessage): void {
 const flamegraphPanel = new SingletonWebviewPanel(() => cmd("flamegraph"), handleFlamegraphMessage);
 
 /** Open (or reveal) the profile results panel beside the source. */
-export function openFlamegraphWebview(result: ProfileResult): void {
-  flamegraphPanel.show(`${brand()} Profiler`, buildFlamegraphHtml(result));
+export async function openFlamegraphWebview(result: ProfileResult): Promise<void> {
+  flamegraphPanel.show(`${brand()} Profiler`, await buildFlamegraphHtml(result));
 }
 
 /** The open results panel's view type, title and HTML (e2e seam). */
@@ -347,9 +355,9 @@ const TRACE_ACTIONS_SCRIPT = `
     }`;
 
 /** Build the complete results-panel HTML for the profiler webview. */
-export function buildFlamegraphHtml(result: ProfileResult): string {
-  const svgDataUri = loadFlamegraphSvgDataUri(result.flamegraphPath);
-  const sampled = sampledParts(sampledView(result));
+export async function buildFlamegraphHtml(result: ProfileResult): Promise<string> {
+  const [svgDataUri, view] = await Promise.all([loadFlamegraphSvgDataUri(result.flamegraphPath), sampledView(result)]);
+  const sampled = sampledParts(view);
   return buildWebviewDocument({
     title: `${brand()} Profiler`,
     css: `${sampled.css}${FLAMEGRAPH_CSS}`,

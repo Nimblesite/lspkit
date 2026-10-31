@@ -38,12 +38,21 @@ export interface ProfileSummary {
   hotLines: HotLineInfo[];
 }
 
-const formatSeconds = (seconds: number): string =>
-  seconds > 0 && seconds < 0.1 ? `${(seconds * 1000).toFixed(1)}ms` : `${seconds >= 100 ? seconds.toFixed(0) : seconds.toFixed(1)}s`;
+const SECONDS_SMALL_LIMIT = 0.1;
+const MS_PER_SECOND = 1000;
+const SECONDS_LARGE_LIMIT = 100;
+const PERCENT = 100;
+
+function formatSeconds(seconds: number): string {
+  if (seconds > 0 && seconds < SECONDS_SMALL_LIMIT) {
+    return `${(seconds * MS_PER_SECOND).toFixed(1)}ms`;
+  }
+  return `${seconds >= SECONDS_LARGE_LIMIT ? seconds.toFixed(0) : seconds.toFixed(1)}s`;
+}
 
 /** `4182 samples · 997Hz · 4.2s wall · 3.9s CPU · 3 fibers` (+ dropped). */
 export function formatSummaryHeader(summary: ProfileSummary): string {
-  if (summary.schedulingKnown === false) return `${String(summary.sampleCount)} samples · ${formatSeconds(summary.wallSeconds)} wall · ${String(summary.fibers.length)} threads`;
+  if (summary.schedulingKnown === false) { return `${String(summary.sampleCount)} samples · ${formatSeconds(summary.wallSeconds)} wall · ${String(summary.fibers.length)} threads`; }
   const fibers = `${String(summary.fibers.length)} ${summary.fibers.length === 1 ? "fiber" : "fibers"}`;
   const dropped =
     summary.droppedSamples > 0 ? ` · ${String(summary.droppedSamples)} dropped` : "";
@@ -57,6 +66,6 @@ export function formatSummaryHeader(summary: ProfileSummary): string {
 /** A fiber's on-CPU share as a whole percentage (0 when it never sampled). */
 export function onCpuPct(fiber: FiberInfo): number {
   return fiber.samples > 0
-    ? Math.round((100 * fiber.oncpuSamples) / fiber.samples)
+    ? Math.round((PERCENT * fiber.oncpuSamples) / fiber.samples)
     : 0;
 }

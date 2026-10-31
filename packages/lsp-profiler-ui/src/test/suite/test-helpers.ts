@@ -1,36 +1,62 @@
 // Shared helpers of the UI suites: reach the test host, wait for its mock
 // server, and poll for reactive outcomes. Tests [PROF-TESTING].
-import { signal, type ReadonlySignal, type Signal } from "@preact/signals-core";
-import type { LaunchMetric, ProfilerHost } from "../../host";
-import { nullSink } from "../../logger";
-import type { ProcessInfo } from "../../process-explorer-rows";
-import type { ProfilerStore } from "../../store";
+import type { ReadonlySignal, Signal } from "@preact/signals-core";
+import { signal } from "@preact/signals-core";
+import type { LaunchMetric, ProcessInfo, ProfilerHost, ProfilerStore } from "../../index";
+import { nullSink } from "../../index";
 import type { ProcessInfo as WireProcess } from "../../wire-generated";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
-import { delay } from "../../timeouts";
+import { closeAllEditors, pollUntilResult, removeTestDir } from "../../testing/webview-contract-helpers";
 import type { TestHostApi } from "../host/extension";
 
+export { closeAllEditors, pollUntilResult, removeTestDir } from "../../testing/webview-contract-helpers";
+export type { PollOptions } from "../../testing/webview-contract-helpers";
 export { POLL_INTERVAL_MS, WAIT_MS } from "../../timeouts";
 
 /** The host extension's identifier (`publisher.name` of src/test/host/package.json). */
 export const EXTENSION_ID = "lspui.lsp-profiler-ui-test-host";
 export const SUITE_SETUP_TIMEOUT_MS = 90_000;
 export const SERVER_START_WAIT_MS = 60_000;
-export const COMMAND_WAIT_MS = 1_000;
+export const COMMAND_WAIT_MS = 1000;
 export const DEFAULT_POLL_INTERVAL_MS = 100;
 
+/**
+ * Yield one microtask.
+ *
+ * A stub standing in for an async API call must be `async` (the type it stands
+ * in for demands a promise) yet has nothing real to wait for. Yielding once
+ * keeps it behaving like the call it replaces instead of resolving eagerly.
+ */
+export async function nextMicrotask(): Promise<void> {
+  await Promise.resolve();
+}
+
 /** Write to a signal a consumer only reads (test seams). */
-export function seedSignal<T>(signal: ReadonlySignal<T>, value: T): void {
-  (signal as Signal<T>).value = value;
+export function seedSignal<TValue>(target: ReadonlySignal<TValue>, value: TValue): void {
+  (target as Signal<TValue>).value = value;
+}
+
+/**
+ * True for an object that stands in for a language client.
+ *
+ * Test doubles fabricate the handful of members a suite exercises, so the only
+ * honest check available is that the value is an object; the predicate names
+ * that licensing point instead of hiding it in a double assertion.
+ */
+export function isClientStub(value: unknown): value is LanguageClient {
+  return typeof value === "object" && value !== null;
 }
 
 /** A language client stand-in exposing only `members`. */
 export function fakeLanguageClient(members: Record<string, unknown>): LanguageClient {
-  return members as unknown as LanguageClient;
+  if (!isClientStub(members)) {
+    throw new Error("a language client stand-in must be an object");
+  }
+  return members;
 }
 
 /** The test host's API once it is active. */
@@ -92,16 +118,16 @@ export async function configureMock(options: Record<string, unknown>): Promise<v
   await api.client.sendRequest("workspace/executeCommand", { command: "lspui.mock.configure", arguments: [options] });
 }
 
+/** Wait until the mock language server reports itself running. */
 export async function waitForLspReady(): Promise<void> {
   const api = await hostApi();
-  const deadline = Date.now() + SERVER_START_WAIT_MS;
-  while (Date.now() < deadline) {
-    if (api.store.client.value?.isRunning() === true) {
-      return;
-    }
-    await delay(DEFAULT_POLL_INTERVAL_MS);
-  }
-  throw new Error("the mock language server did not start");
+  await pollUntilResult({
+    fn: () => api.store.client.value?.isRunning() === true,
+    until: (running) => running,
+    timeoutMs: SERVER_START_WAIT_MS,
+    intervalMs: DEFAULT_POLL_INTERVAL_MS,
+    description: "the mock language server start",
+  });
 }
 
 /** The launch configuration the test host builds for `metric`; asserts it exists. */
@@ -125,17 +151,17 @@ function testHostLaunchConfig(metric: LaunchMetric, program: string): vscode.Deb
 
 /** A temp workspace dir plus a hot source file the mock server's reports point at. */
 export async function setupLspTestSuite(tmpDirPrefix: string): Promise<{ tmpDir: string; hotFile: string }> {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), tmpDirPrefix));
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), tmpDirPrefix));
   const hotFile = path.join(tmpDir, "hot.txt");
-  fs.writeFileSync(hotFile, "def main():\n    pass\ndef hot_function():\n    total = 0\n    return total\n");
+  await fs.writeFile(hotFile, "def main():\n    pass\ndef hot_function():\n    total = 0\n    return total\n");
   await waitForLspReady();
   await configureMock({ hotFile, processes: null, memoryMode: "Direct" });
   await closeAllEditors();
   return { tmpDir, hotFile };
 }
 
-export function teardownLspTestSuite(tmpDir: string): void {
-  removeTestDir(tmpDir);
+export async function teardownLspTestSuite(tmpDir: string): Promise<void> {
+  await removeTestDir(tmpDir);
 }
 
 /** A detached host for store-level tests: no client, no debuggee, `lspui` identity. */
@@ -162,12 +188,9 @@ export async function openSourceFile(
   content: string,
 ): Promise<{ doc: vscode.TextDocument; uri: vscode.Uri }> {
   const filePath = path.join(tmpDir, filename);
-  fs.writeFileSync(filePath, content, "utf8");
+  await fs.writeFile(filePath, content, "utf8");
   const uri = vscode.Uri.file(filePath);
   const doc = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(doc, { preview: false });
   return { doc, uri };
 }
-
-export { PollOptions, pollUntilResult, closeAllEditors, removeTestDir } from '../../testing/webview-contract-helpers';
-import { closeAllEditors, removeTestDir } from '../../testing/webview-contract-helpers';

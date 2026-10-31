@@ -1,10 +1,11 @@
 # agent-pmo:74cf183
 name: CI
 
+# Release-only regime: CI gates PRs to `main` and nothing else. A merge to
+# `main` triggers nothing (every commit on it arrived through a green PR), and
+# shipping happens only when release.yml fires on a `v*` tag. [REL-REGIME] [CI-WORKFLOWS]
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 
 concurrency:
@@ -19,6 +20,9 @@ permissions:
 jobs:
   ci:
     name: CI
+    # Dependabot PRs are swept into `dependabot-upgrades` and reach `main` only
+    # through one consolidation PR, where CI runs once. [GITHUB-DEPENDABOT]
+    if: github.actor != 'dependabot[bot]'
     # Public repositories can use standard runners without larger-runner charges.
     runs-on: ubuntu-22.04
     timeout-minutes: 15
@@ -53,7 +57,7 @@ jobs:
       # rustc-version-aware key, and target/ cleanup before save (avoids bloat).
       # Survives Cargo.toml dev-dep changes via partial restore, unlike the
       # previous hashFiles(**/Cargo.toml) key.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-on-failure: true
           # Cache the workspace across all steps in this job; key already
@@ -63,7 +67,7 @@ jobs:
       # Prebuilt binaries via taiki-e/install-action — seconds vs. minutes
       # compared to `cargo install --locked` building from source.
       - name: Install cargo-llvm-cov + cargo-nextest
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-llvm-cov,cargo-nextest
 

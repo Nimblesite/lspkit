@@ -8,7 +8,7 @@
  * pause, which a direct runtime never does. Each test here fails on that.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import { describeLeak, isLocated, leakToOffer } from '../../memory-leak-offer';
 import { stoppedWithoutSnapshot, trackingGuidance } from '../../memory-guidance';
 import { toDiffResult } from '../../memory-dashboard-mapping';

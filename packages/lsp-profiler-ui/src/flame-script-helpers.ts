@@ -17,13 +17,14 @@ export function fitLabelText(
   avail: number,
   measure: (text: string) => number,
 ): string {
-  if (measure(name) <= avail) return name;
-  let keep = name.length;
-  while (keep > 2) {
-    keep -= Math.max(1, Math.ceil(keep * 0.15));
+  // The fraction of the remaining name each mid-ellipsis step carves out.
+  const KEEP_SHRINK_RATIO = 0.15;
+  if (measure(name) <= avail) { return name; }
+  for (let keep = name.length; keep > 2; ) {
+    keep -= Math.max(1, Math.ceil(keep * KEEP_SHRINK_RATIO));
     const half = Math.floor(keep / 2);
-    const candidate = name.slice(0, half) + "…" + name.slice(name.length - (keep - half));
-    if (measure(candidate) <= avail) return candidate;
+    const candidate = `${name.slice(0, half)}…${name.slice(name.length - (keep - half))}`;
+    if (measure(candidate) <= avail) { return candidate; }
   }
   return "…";
 }
@@ -31,7 +32,7 @@ export function fitLabelText(
 /** Case-insensitive substring match over frame names → set of frame indexes. */
 export function searchMatches(frames: readonly { name: string }[], query: string): Set<number> {
   const needle = query.trim().toLowerCase();
-  if (needle === "") return new Set();
+  if (needle === "") { return new Set(); }
   return new Set(frames.flatMap((frame, i) => (frame.name.toLowerCase().includes(needle) ? [i] : [])));
 }
 
@@ -42,11 +43,11 @@ export function searchMatches(frames: readonly { name: string }[], query: string
  * search over a whole budget of slabs stays interactive.
  */
 export function coveredSpan(slabs: [number, number][]): number {
-  const sorted = slabs.slice().sort((a, b) => a[0] - b[0]);
+  const sorted = slabs.toSorted((left, right) => left[0] - right[0]);
   let covered = 0;
   let reach = -Infinity;
   for (const [x0, x1] of sorted) {
-    if (x1 > reach) covered += x1 - Math.max(x0, reach);
+    if (x1 > reach) { covered += x1 - Math.max(x0, reach); }
     reach = Math.max(reach, x1);
   }
   return covered;

@@ -72,23 +72,23 @@ export const IDLE_PROFILER_SESSION: ProfilerSession = {
 /** The only way to mutate profiling state — exposed on the Store. */
 export interface ProfilerActions {
   /** A CPU start is in flight (click → before the first sample batch). */
-  profilerStarting(): void;
+  readonly profilerStarting: () => void;
   /** A CPU session is live for `pid`/`sessionId`; resets the live counters. */
-  profilerActive(pid: number, sessionId: string): void;
+  readonly profilerActive: (pid: number, sessionId: string) => void;
   /** Live progress for the active CPU session (ignored when not active). */
-  profilerProgress(sampleCount: number, durationSecs: number, topFunction: string): void;
+  readonly profilerProgress: (sampleCount: number, durationSecs: number, topFunction: string) => void;
   /** The CPU session ended (or its start failed). */
-  profilerStopped(): void;
+  readonly profilerStopped: () => void;
   /** A memory-tracking start is in flight. */
-  memoryTrackingStarting(): void;
+  readonly memoryTrackingStarting: () => void;
   /**
    * Memory tracking is live for `sessionId`. `finalSnapshotFile` is the path the
    * debuggee writes a final snapshot to at exit, and `debugSessionId` is the VS
    * Code debug session whose termination finalises the run ([PROF-PY-MEMORY-FINAL]).
    */
-  memoryTrackingActive(sessionId: string, finalSnapshotFile?: string, debugSessionId?: string): void;
+  readonly memoryTrackingActive: (sessionId: string, finalSnapshotFile?: string, debugSessionId?: string) => void;
   /** Memory tracking ended (or its start failed). */
-  memoryTrackingStopped(): void;
+  readonly memoryTrackingStopped: () => void;
 }
 
 /** True while any CPU or memory profiling activity is starting or running. */

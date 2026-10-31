@@ -1,0 +1,160 @@
+import * as assert from "node:assert";
+import {
+  makeBreakpointTools,
+  makeSessionWaiters,
+} from "../testing/vscode-harness";
+import type {
+  BreakpointSpec,
+  DebugSessionHandle,
+  VscodeBreakpointApi,
+  VscodeSessionApi,
+} from "../testing/vscode-harness";
+
+/** True when a breakpoint condition is actually set. */
+function hasCondition(condition: string | undefined): condition is string {
+  return condition !== undefined && condition !== "";
+}
+
+/** A disposable for an API whose owner has nothing to release. */
+function noopDisposable(): { dispose: () => void } {
+  return {
+    dispose: () => {
+      // Nothing to release: the fake API only tracks the registration.
+    },
+  };
+}
+
+function fakeBreakpointApi(): VscodeBreakpointApi & { added: unknown[] } {
+  const state = { current: [] as unknown[], added: [] as unknown[] };
+  return {
+    get breakpoints() {
+      return state.current;
+    },
+    get added() {
+      return state.added;
+    },
+    addBreakpoints(bps: unknown[]) {
+      state.current = [...state.current, ...bps];
+      state.added.push(...bps);
+    },
+    removeBreakpoints(bps: readonly unknown[]) {
+      const drop = new Set(bps);
+      state.current = state.current.filter((breakpoint) => !drop.has(breakpoint));
+    },
+  };
+}
+
+suite("makeBreakpointTools", () => {
+  test("setSourceBreakpoints clears then adds one breakpoint per spec", () => {
+    const api = fakeBreakpointApi();
+    const made: string[] = [];
+    const tools = makeBreakpointTools(api, (file, line, condition) => {
+      const bp = `${file}:${line}${hasCondition(condition) ? `?${condition}` : ""}`;
+      made.push(bp);
+      return bp;
+    });
+
+    const specs: BreakpointSpec[] = [3, { line: 7, condition: "n == 3" }, { line: 9 }];
+    tools.setSourceBreakpoints("/src/a.osp", specs);
+
+    assert.deepStrictEqual(made, ["/src/a.osp:3", "/src/a.osp:7?n == 3", "/src/a.osp:9"]);
+    assert.deepStrictEqual(api.breakpoints, made);
+  });
+
+  test("setSourceBreakpoints replaces a previous set rather than appending", () => {
+    const api = fakeBreakpointApi();
+    const tools = makeBreakpointTools(api, (file, line) => `${file}:${line}`);
+    tools.setSourceBreakpoints("/a.osp", [1]);
+    tools.setSourceBreakpoints("/a.osp", [2]);
+    assert.deepStrictEqual(api.breakpoints, ["/a.osp:2"]);
+  });
+
+  test("clearBreakpoints removes everything", () => {
+    const api = fakeBreakpointApi();
+    const tools = makeBreakpointTools(api, (file, line) => `${file}:${line}`);
+    tools.setSourceBreakpoints("/a.osp", [1, 2]);
+    tools.clearBreakpoints();
+    assert.deepStrictEqual(api.breakpoints, []);
+  });
+});
+
+suite("makeSessionWaiters.waitForDebugSessionStart", () => {
+  test("resolves with the next started session and disposes the listener", async () => {
+    const captured: { listener?: (session: DebugSessionHandle) => void } = {};
+    let disposed = false;
+    const api: VscodeSessionApi = {
+      onDidStartDebugSession(sessionListener) {
+        captured.listener = sessionListener;
+        return { dispose: () => { disposed = true; } };
+      },
+      activeDebugSession: undefined,
+    };
+    const waiters = makeSessionWaiters(api);
+    const started = waiters.waitForDebugSessionStart(2000);
+    captured.listener?.({ id: "session-1" });
+    const session = await started;
+    assert.strictEqual(session.id, "session-1");
+    assert.ok(disposed, "the start listener is disposed");
+  });
+
+  test("rejects (and disposes) when no session starts before the timeout", async () => {
+    let disposed = false;
+    const api: VscodeSessionApi = {
+      onDidStartDebugSession() {
+        return { dispose: () => { disposed = true; } };
+      },
+      activeDebugSession: undefined,
+    };
+    const waiters = makeSessionWaiters(api);
+    await assert.rejects(
+      async () => waiters.waitForDebugSessionStart(30),
+      /did not start within 30ms/u,
+    );
+    assert.ok(disposed, "the listener is disposed on timeout");
+  });
+});
+
+suite("makeSessionWaiters.waitForDebugSessionEnd", () => {
+  test("resolves once the active session clears", async () => {
+    let active: DebugSessionHandle | undefined = { id: "s1" };
+    const waiters = makeSessionWaiters(apiWithActive(() => active));
+    const ended = waiters.waitForDebugSessionEnd(2000, "s1");
+    setTimeout(() => { active = undefined; }, 50);
+    await ended;
+  });
+
+  test("resolves immediately when a different session is active", async () => {
+    const waiters = makeSessionWaiters(apiWithActive(() => ({ id: "other" })));
+    await waiters.waitForDebugSessionEnd(2000, "s1");
+  });
+
+  test("throws when the matching session never ends", async () => {
+    const waiters = makeSessionWaiters(apiWithActive(() => ({ id: "s1" })));
+    await assert.rejects(
+      async () => waiters.waitForDebugSessionEnd(40, "s1"),
+      /did not end within 40ms/u,
+    );
+  });
+
+  test("resolves when no session is active and no id filter is given", async () => {
+    const waiters = makeSessionWaiters(apiWithActive(sessionNeverActive));
+    await waiters.waitForDebugSessionEnd(2000);
+  });
+});
+
+/** A session API that reports `getActive()` as the active session. */
+function apiWithActive(getActive: () => DebugSessionHandle | undefined): VscodeSessionApi {
+  return {
+    onDidStartDebugSession() {
+      return noopDisposable();
+    },
+    get activeDebugSession() {
+      return getActive();
+    },
+  };
+}
+
+/** A getter for the "no session is active" case. */
+function sessionNeverActive(): DebugSessionHandle | undefined {
+  return undefined;
+}

@@ -7,17 +7,18 @@
 // the PID a one-click profiling action needs. No getCommands()/whenCommandReady.
 
 
-import * as assert from "assert";
+import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { ProcessDecorationProvider, ProcessesProvider } from "../../process-explorer";
 import { createProcessRowActions, memoryTrackRoute } from "../../process-launch";
-import { type ProfilerStore as Store } from "../../store";
+import type { ProfilerStore as Store } from "../../store";
 import { seedSignal } from "./test-helpers";
+import type { RecordedRequest } from "./process-explorer-fixtures";
 import {
   MACHINERY,
-  type RecordedRequest,
   STUB_PROCESSES,
   colorId,
+  disposeProviders,
   iconId,
   labelText,
   loadedProvider,
@@ -25,56 +26,54 @@ import {
   pidOf,
   processRows,
   profilerStarts,
+  recordingRunner,
   resourceUri,
   startPid,
   storeWith,
   tooltipText,
+  tracked,
 } from "./process-explorer-fixtures";
 
 suite("Processes Panel", () => {
-  let provider: ProcessesProvider;
-
-  teardown(() => {
-    provider.dispose();
-  });
+  teardown(disposeProviders);
 
   test("lists every process sorted by CPU descending by default", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     const rows = processRows(provider.getChildren());
-    assert.deepStrictEqual(rows.map(pidOf), [200, 100, 300], "CPU 42 > 5 > 1");
+    assert.deepStrictEqual(rows.map((row) => pidOf(row)), [200, 100, 300], "CPU 42 > 5 > 1");
   });
 
   test("opens grouped by runtime version; the group action cycles through flat and back", async () => {
     const store = storeWith(STUB_PROCESSES);
-    provider = new ProcessesProvider(store);
+    const provider = tracked(new ProcessesProvider(store));
     await provider.refreshNow();
     assert.strictEqual(store.processes.value.groupMode, "version", "the default grouping is the runtime version");
     const groups = processRows(provider.getChildren());
-    assert.deepStrictEqual(groups.map(labelText), ["3.11.7", "3.12.1"], "one header per version, sorted");
+    assert.deepStrictEqual(groups.map((group) => labelText(group)), ["3.11.7", "3.12.1"], "one header per version, sorted");
     assert.deepStrictEqual(groups.map((group) => String(group.description)), ["1", "2"], "each header counts its members");
     const twelve = groups.find((group) => labelText(group) === "3.12.1");
     assert.ok(twelve, "3.12.1 group must exist");
-    assert.deepStrictEqual((provider.getChildren(twelve)).map(pidOf), [100, 300], "members stay CPU-ordered");
+    assert.deepStrictEqual((provider.getChildren(twelve)).map((row) => pidOf(row)), [100, 300], "members stay CPU-ordered");
 
     const modes = [1, 2, 3, 4].map(() => {
       provider.cycleGroupMode();
       return store.processes.value.groupMode;
     });
     assert.deepStrictEqual(modes, ["interpreter", "user", "parent", "none"], "every grouping, then flat");
-    assert.deepStrictEqual(processRows(provider.getChildren()).map(pidOf), [200, 100, 300], "flat rows, CPU-ordered");
+    assert.deepStrictEqual(processRows(provider.getChildren()).map((row) => pidOf(row)), [200, 100, 300], "flat rows, CPU-ordered");
 
     provider.cycleGroupMode();
     assert.strictEqual(store.processes.value.groupMode, "version", "one more press returns to the default");
-    assert.deepStrictEqual(processRows(provider.getChildren()).map(labelText), ["3.11.7", "3.12.1"], "regrouped");
+    assert.deepStrictEqual(processRows(provider.getChildren()).map((group) => labelText(group)), ["3.11.7", "3.12.1"], "regrouped");
   });
 
   test("each row carries its PID so inline Profile starts with no input box", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     const rows = processRows(provider.getChildren());
     for (const row of rows) {
       assert.strictEqual(typeof pidOf(row), "number", "row must carry a numeric pid for the command arg");
     }
-    const worker = rows.find((r) => pidOf(r) === 200);
+    const worker = rows.find((row) => pidOf(row) === 200);
     assert.ok(worker, "the worker process row must exist");
     assert.ok(
       String(worker.description).includes("PID 200"),
@@ -83,55 +82,57 @@ suite("Processes Panel", () => {
   });
 
   test("rows needing elevation get a distinct contextValue for the lock affordance", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     const rows = provider.getChildren();
-    const elevated = rows.find((r) => pidOf(r) === 200);
-    const normal = rows.find((r) => pidOf(r) === 100);
+    const elevated = rows.find((row) => pidOf(row) === 200);
+    const normal = rows.find((row) => pidOf(row) === 100);
     assert.strictEqual(elevated?.contextValue, "processElevated");
     assert.strictEqual(normal?.contextValue, "process");
   });
 
   test("sort by memory orders rows by resident size descending", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
-    provider.cycleSortMode(); // cpu → memory
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
+    // Cycle: cpu → memory.
+    provider.cycleSortMode();
     const rows = processRows(provider.getChildren());
-    assert.deepStrictEqual(rows.map(pidOf), [300, 100, 200], "memory 99 > 50 > 10 MB");
+    assert.deepStrictEqual(rows.map((row) => pidOf(row)), [300, 100, 200], "memory 99 > 50 > 10 MB");
   });
 
   test("group by runtime version buckets processes under collapsible headers", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
-    provider.cycleGroupMode(); // none → version
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
+    // Cycle: none → version.
+    provider.cycleGroupMode();
     const groups = processRows(provider.getChildren());
     assert.deepStrictEqual(
-      groups.map(labelText),
+      groups.map((group) => labelText(group)),
       ["3.11.7", "3.12.1"],
       "groups are sorted by version label",
     );
-    const twelve = groups.find((g) => labelText(g) === "3.12.1");
+    const twelve = groups.find((group) => labelText(group) === "3.12.1");
     assert.ok(twelve, "3.12.1 group must exist");
     assert.strictEqual(String(twelve.description), "2", "group shows its member count");
 
     const members = provider.getChildren(twelve);
-    assert.deepStrictEqual(members.map(pidOf), [100, 300], "both 3.12 processes, CPU-ordered");
+    assert.deepStrictEqual(members.map((row) => pidOf(row)), [100, 300], "both 3.12 processes, CPU-ordered");
   });
 
   test("filter narrows rows by name, script, or PID substring", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     provider.setFilter("worker");
     let rows = processRows(provider.getChildren());
-    assert.deepStrictEqual(rows.map(pidOf), [200], "only worker.py matches");
+    assert.deepStrictEqual(rows.map((row) => pidOf(row)), [200], "only worker.py matches");
 
     provider.setFilter("300");
     rows = processRows(provider.getChildren());
-    assert.deepStrictEqual(rows.map(pidOf), [300], "PID substring matches");
+    assert.deepStrictEqual(rows.map((row) => pidOf(row)), [300], "PID substring matches");
   });
 
-  // procexp-2: VS Code shows the "No processes running" welcome whenever
+  // [PROF-UI-PROCESSES] procexp-2: VS Code shows the "No processes running" welcome whenever
   // getChildren returns []. When a filter hides a NON-empty process list, the
   // tree must NOT be empty — it must say processes are running but filtered
   // (the pinned launch rows stay too).
   test("a filter that hides every running process shows an honest placeholder, not 'no processes' (procexp-2)", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     provider.setFilter("nonexistent-zzz");
     const nonAction = processRows(provider.getChildren());
     assert.strictEqual(nonAction.length, 1, "must return a placeholder row, not an empty list that triggers the welcome");
@@ -144,10 +145,10 @@ suite("Processes Panel", () => {
   });
 
   test("group members expose the full member set for the count badge", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     provider.cycleGroupMode();
     const groups = provider.getChildren();
-    const eleven = groups.find((g) => labelText(g) === "3.11.7");
+    const eleven = groups.find((group) => labelText(group) === "3.11.7");
     assert.ok(eleven, "3.11.7 group must exist");
     assert.deepStrictEqual(memberPids(eleven), [200]);
   });
@@ -157,14 +158,10 @@ suite("Processes Panel", () => {
 // buttons arrive with `item === undefined` at runtime and must still profile
 // the row the user clicked instead of warning "Select a Python process".
 suite("Processes Panel — inline launch actions (#79)", () => {
-  let provider: ProcessesProvider;
-
-  teardown(() => {
-    provider.dispose();
-  });
+  teardown(disposeProviders);
 
   test("rows keep a stable id across refreshes so inline buttons survive the auto-refresh", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     const before = provider.getChildren();
     provider.refresh();
     const after = provider.getChildren();
@@ -183,7 +180,7 @@ suite("Processes Panel — inline launch actions (#79)", () => {
   test("inline Profile CPU invoked without an argument profiles the selected row", async () => {
     const requests: RecordedRequest[] = [];
     const store = storeWith(STUB_PROCESSES, requests);
-    provider = await loadedProvider(store);
+    const provider = tracked(await loadedProvider(store));
     const rows = provider.getChildren();
     const selectedRow = rows.find((row) => pidOf(row) === 200);
     assert.ok(selectedRow !== undefined, "PID 200 row must exist");
@@ -204,7 +201,7 @@ suite("Processes Panel — inline launch actions (#79)", () => {
   test("an explicitly passed row wins over a different selection", async () => {
     const requests: RecordedRequest[] = [];
     const store = storeWith(STUB_PROCESSES, requests);
-    provider = await loadedProvider(store);
+    const provider = tracked(await loadedProvider(store));
     const rows = provider.getChildren();
     const clicked = rows.find((row) => pidOf(row) === 300);
     const selected = rows.find((row) => pidOf(row) === 200);
@@ -221,7 +218,7 @@ suite("Processes Panel — inline launch actions (#79)", () => {
   test("with no item and no selection, nothing is profiled", async () => {
     const requests: RecordedRequest[] = [];
     const store = storeWith(STUB_PROCESSES, requests);
-    provider = await loadedProvider(store);
+    const provider = tracked(await loadedProvider(store));
     provider.getChildren();
 
     const actions = createProcessRowActions(store, { selection: [] });
@@ -235,30 +232,30 @@ suite("Processes Panel — inline launch actions (#79)", () => {
   });
 });
 
+/** Drive the row's Track Memory action against PID 100 with the given session. */
+async function trackMemoryOnPid100(
+  session: { id: string; type: string } | undefined,
+  arrange?: (store: Store) => void,
+): Promise<{ requests: RecordedRequest[]; executed: string[] }> {
+  const requests: RecordedRequest[] = [];
+  const executed: string[] = [];
+  const store = storeWith(STUB_PROCESSES, requests);
+  arrange?.(store);
+  const provider = await loadedProvider(store);
+  const selectedRow = provider.getChildren().find((row) => pidOf(row) === 100);
+  assert.ok(selectedRow !== undefined, "PID 100 row must exist");
+
+  const actions = createProcessRowActions(store, { selection: [selectedRow] }, {
+    runCommand: recordingRunner(executed),
+    activeSession: () => session,
+  });
+  await actions.memoryTrackProcess(undefined);
+  return { requests, executed };
+}
+
 suite("Processes Panel — Track Memory routing", () => {
   // Tests for the memory leg of [PROF-UI-PROCESSES]: tracemalloc rides
   // the DAP courier, so the row action may only ever target the live debuggee.
-
-  /** Drive the row's Track Memory action against PID 100 with the given session. */
-  async function trackMemoryOnPid100(
-    session: { id: string; type: string } | undefined,
-    arrange: (store: Store) => void = () => undefined,
-  ): Promise<{ requests: RecordedRequest[]; executed: string[] }> {
-    const requests: RecordedRequest[] = [];
-    const executed: string[] = [];
-    const store = storeWith(STUB_PROCESSES, requests);
-    arrange(store);
-    const rows = (await loadedProvider(store)).getChildren();
-    const selectedRow = rows.find((row) => pidOf(row) === 100);
-    assert.ok(selectedRow !== undefined, "PID 100 row must exist");
-
-    const actions = createProcessRowActions(store, { selection: [selectedRow] }, {
-      runCommand: async (command) => { executed.push(command); },
-      activeSession: () => session,
-    });
-    await actions.memoryTrackProcess(undefined);
-    return { requests, executed };
-  }
 
   test("on the live debuggee it routes to real memory tracking — never a CPU start", async () => {
     const { requests, executed } = await trackMemoryOnPid100(
@@ -310,13 +307,12 @@ suite("Processes Panel — Track Memory routing", () => {
 // shows EVERY process (zero filters) and renders cues — launcher chips, a green
 // workspace row, and a 🚫 / greyed / sunk row for anything it can't profile.
 suite("Processes Panel — zero-filter display cues", () => {
-  let provider: ProcessesProvider;
-  teardown(() => { provider.dispose(); });
+  teardown(disposeProviders);
 
   test("launchers are always listed and carry a framework chip (zero filters)", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     const rows = provider.getChildren();
-    const uvicorn = rows.find((r) => pidOf(r) === 300);
+    const uvicorn = rows.find((row) => pidOf(row) === 300);
     assert.ok(uvicorn, "the uvicorn launcher must always be listed — nothing is hidden");
     assert.ok(
       String(uvicorn.description).includes("[uvicorn]"),
@@ -325,12 +321,14 @@ suite("Processes Panel — zero-filter display cues", () => {
   });
 
   test("a workspace process resolves to a green decoration; an outside one does not", async () => {
-    provider = await loadedProvider(storeWith(STUB_PROCESSES));
+    const provider = tracked(await loadedProvider(storeWith(STUB_PROCESSES)));
     const decorations = new ProcessDecorationProvider(provider);
     try {
       const rows = provider.getChildren();
-      const inside = rows.find((r) => pidOf(r) === 100); // inWorkspace: true
-      const outside = rows.find((r) => pidOf(r) === 300); // inWorkspace: false, debuggable
+      // The workspace row: inWorkspace is true.
+      const inside = rows.find((row) => pidOf(row) === 100);
+      // The outside row: inWorkspace is false, and the row is debuggable.
+      const outside = rows.find((row) => pidOf(row) === 300);
       assert.ok(inside && outside, "both the workspace and outside rows must exist");
       const insideUri = resourceUri(inside);
       const outsideUri = resourceUri(outside);
@@ -359,16 +357,18 @@ suite("Processes Panel — zero-filter display cues", () => {
 
   test("a non-debuggable process is 🚫-marked, greyed, and sorted to the bottom", async () => {
     // MACHINERY has the highest CPU (99%) but must still sink below the others.
-    provider = await loadedProvider(storeWith([MACHINERY, ...STUB_PROCESSES]));
+    const provider = tracked(await loadedProvider(storeWith([MACHINERY, ...STUB_PROCESSES])));
     const decorations = new ProcessDecorationProvider(provider);
     try {
       const rows = provider.getChildren();
+      const lastRow = rows.at(-1);
+      assert.ok(lastRow !== undefined, "the panel must list the non-debuggable row");
       assert.strictEqual(
-        pidOf(rows[rows.length - 1]),
+        pidOf(lastRow),
         900,
         "the non-debuggable row sinks to the bottom despite the highest CPU",
       );
-      const machineryRow = rows.find((r) => pidOf(r) === 900);
+      const machineryRow = rows.find((row) => pidOf(row) === 900);
       assert.ok(machineryRow, "the machinery process must still be LISTED, not hidden");
       assert.ok(
         labelText(machineryRow).startsWith("🚫"),

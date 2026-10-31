@@ -11,8 +11,9 @@
 import { profilerPalette } from "./palette";
 import * as vscode from "vscode";
 import { Logger } from "./logger";
-import { recordApplied, type AppliedDecoration } from "./profiler-decorations";
-import { pathKeyer } from "./editor-path-key";
+import { recordApplied } from "./profiler-decorations";
+import type { AppliedDecoration } from "./profiler-decorations";
+import { groupByFile, rowAndEditorKeyer } from "./editor-path-key";
 import { formatBytes } from "./profiler-styles";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -95,20 +96,17 @@ class MemoryLayer {
   public get decorations(): readonly AppliedDecoration[] { return this.applied; }
 
   /** Replace this layer's paint with `lines`, on every visible editor. */
-  public paint(lines: readonly PaintedLine[]): void {
+  public async paint(lines: readonly PaintedLine[]): Promise<void> {
     this.clear();
     // Keyed, not compared raw: tracemalloc reports the interpreter's own
     // filename and the editor reports what VS Code resolved. On win32 those
     // differ in drive-letter case and 8.3 short components, so a raw compare
     // matches nothing and the memory track silently paints nothing at all
     // ([PROF-TESTING]).
-    const keyOf = pathKeyer();
-    const byFile = new Map<string, PaintedLine[]>();
-    for (const line of lines) {
-      const key = keyOf(line.file);
-      byFile.set(key, [...(byFile.get(key) ?? []), line]);
-    }
-    for (const editor of vscode.window.visibleTextEditors) {
+    const editors = vscode.window.visibleTextEditors;
+    const keyOf = await rowAndEditorKeyer(lines, editors);
+    const byFile = groupByFile(lines, keyOf);
+    for (const editor of editors) {
       const painted = byFile.get(keyOf(editor.document.uri.fsPath));
       if (painted !== undefined) { this.paintEditor(editor, painted); }
     }
@@ -206,28 +204,49 @@ function leakColor(confidence: LeakConfidence): string {
   const palette = profilerPalette();
   switch (confidence) {
     case "DEFINITE":
-    case "HIGH": return palette.leak;
-    case "MEDIUM": return palette.warm;
-    case "LOW": return palette.memoryHot; // warming up: not yet a leak
+    case "HIGH": {
+      return palette.leak;
+    }
+    case "MEDIUM": {
+      return palette.warm;
+    }
+    // Warming up: not yet a leak.
+    case "LOW": {
+      return palette.memoryHot;
+    }
+    default: {
+      return palette.memoryHot;
+    }
   }
 }
 
 function confidenceBadge(confidence: LeakConfidence): string {
   switch (confidence) {
-    case "DEFINITE": return "\u26d4 DEFINITE";
-    case "HIGH":     return "\u26a0 HIGH";
-    case "MEDIUM":   return "\u25cf MEDIUM";
-    case "LOW":      return "\u25cb LOW";
+    case "DEFINITE": {
+      return "\u26D4 DEFINITE";
+    }
+    case "HIGH": {
+      return "\u26A0 HIGH";
+    }
+    case "MEDIUM": {
+      return "\u25CF MEDIUM";
+    }
+    case "LOW": {
+      return "\u25CB LOW";
+    }
+    default: {
+      return "\u25CB LOW";
+    }
   }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
 
 /** Apply memory allocation decorations to visible editors; a new snapshot drops the last diff's badges. */
-export function applyMemoryDecorations(result: MemorySnapshotResult): void {
+export async function applyMemoryDecorations(result: MemorySnapshotResult): Promise<void> {
   leakLayer.clear();
   // A site with no location still lists in the dashboard but paints no line.
-  allocationLayer.paint(result.topAllocations.flatMap(({ file, line, size, count }) =>
+  await allocationLayer.paint(result.topAllocations.flatMap(({ file, line, size, count }) =>
     file === undefined || line === undefined ? [] : [{
       file,
       line,
@@ -238,8 +257,8 @@ export function applyMemoryDecorations(result: MemorySnapshotResult): void {
 }
 
 /** Apply leak indicator decorations with confidence badges, replacing the last diff's. */
-export function applyLeakDecorations(result: MemoryDiffResult): void {
-  leakLayer.paint(result.suspectedLeaks.map((leak) => ({
+export async function applyLeakDecorations(result: MemoryDiffResult): Promise<void> {
+  await leakLayer.paint(result.suspectedLeaks.map((leak) => ({
     file: leak.file,
     line: leak.line,
     color: leakColor(leak.confidence),

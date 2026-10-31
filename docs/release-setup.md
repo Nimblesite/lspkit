@@ -3,9 +3,9 @@
 One-time steps, in order. Every Trusted Publisher form takes: Owner `Nimblesite`, Repository `lspkit`, Workflow `release.yml`, Environment `release`.
 
 1. **crates.io:** `cargo login` with a token scoped `publish-new` + `trusted-publishing`, then `scripts/bootstrap-crates.sh v0.0.1`. It publishes `lsp-profiler` and `lsp-profiler-dotnet` once, and attaches the Trusted Publisher to all 4 published crates through the crates.io API.
-2. **npm:** `npm login` (npm >= 11.5.1), then `scripts/bootstrap-npm.sh v0.0.1` to publish `@nimblesite/lsp-profiler-ui` once.
-3. **Yank the absorbed crates:** `for c in lspkit-config lspkit-live lspkit-mcp lspkit-sidecar lspkit-vfs lspkit-treesitter; do cargo yank --version 0.0.1 "$c"; done`, then revoke the token.
-4. **npm Trusted Publisher:** open `https://www.npmjs.com/package/@nimblesite/lsp-profiler-ui/access` → Trusted Publisher → GitHub Actions, and set **Require 2FA and disallow tokens**.
+2. **npm:** `npm install -g npm@latest && npm login`, then `scripts/bootstrap-npm.sh v0.0.1`. It publishes `@nimblesite/lsp-profiler-ui` once and attaches its Trusted Publisher with `npm trust`.
+3. **Delete the absorbed crates** [CRATE-RETIRE]: `lspkit-config`, `lspkit-live`, `lspkit-mcp`, `lspkit-sidecar`, `lspkit-vfs`, `lspkit-treesitter`. Open `https://crates.io/crates/<crate>/settings` → Delete crate. Delete `lspkit-live` before `lspkit-vfs`, because a crate with a dependent can't be deleted. If crates.io refuses, yank instead: `cargo yank --version 0.0.1 <crate>`. Then revoke the bootstrap token.
+4. **npm:** on `https://www.npmjs.com/package/@nimblesite/lsp-profiler-ui/access`, set **Require 2FA and disallow tokens**.
 5. **GitHub settings:**
    - Environments → `release`: add yourself as Required reviewer.
    - Branches → `main`: require a PR and the `CI` check.

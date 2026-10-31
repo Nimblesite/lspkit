@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# One-time first publish of the npm packages that do not exist yet; a Trusted
-# Publisher can only be attached to an existing package, and every later
-# version ships from release.yml. Idempotent: a published version is skipped.
+# One-time npm setup. Publishes each package that does not exist yet (a Trusted
+# Publisher can only be attached to an existing package), then attaches
+# release.yml in the `release` environment as its Trusted Publisher, so every
+# later version ships over OIDC. Idempotent: a published version and an
+# existing trust are both skipped.
 # [REL-OIDC] [REL-ORDER]
 #
 #   scripts/bootstrap-npm.sh v0.0.1
 #
-# Needs `npm login` (npm >= 11.5.1).
+# Needs `npm login` with npm >= 11.10 (for `npm trust`).
 set -euo pipefail
 
 # shellcheck source=scripts/bootstrap-common.sh
@@ -18,3 +20,10 @@ npm pack "$work/packages/lsp-profiler-ui" --pack-destination "$work/dist"
 for tarball in "$work"/dist/*.tgz; do
     bash "$work/scripts/npm-publish-or-skip.sh" "$tarball"
 done
+
+readonly PACKAGE=@nimblesite/lsp-profiler-ui
+if [ "$(npm trust list "$PACKAGE" --json)" != "[]" ]; then
+    echo "==> $PACKAGE already has a Trusted Publisher"
+else
+    npm trust github "$PACKAGE" --file release.yml --repo Nimblesite/lspkit --env release --allow-publish --yes
+fi

@@ -1,11 +1,13 @@
 # lspkit website
 
+Prose examples: `/docs/prose/` shows the documentation layout; `/prose/` shows a standalone reading page. Both share a Markdown specimen and the same `.prose` stylesheet as `/blog/one-engine/`. All reading pages include responsive header illustrations. Run `make website-test` (Python 3 required) for lint and generated-site regression checks; PR CI runs the same target.
+
+From the repository root, `make website-build` installs locked dependencies and builds the static site; `make website-run` installs them and starts the live-reloading development server. Stop the server with Ctrl+C.
+
 Small Eleventy 3 site built on [eleventy-plugin-techdoc](https://www.npmjs.com/package/eleventy-plugin-techdoc). Design: [Fieldwork](../docs/specs/website-design-system.md). One original SVG header illustration, one example journal post, and minimal docs. No runtime service or remote fonts.
 
 ```sh
-cd website
-npm ci
-npm run dev
+make website-run
 ```
 
 Open `http://localhost:8080`. `npm run lint` runs Oxlint with repository rules and warnings treated as errors; `npm run build` renders into ignored `_site/`. Set `SITE_URL` to the production origin before a production build. This sketch is local; deployment remains governed by the repository's release workflow.

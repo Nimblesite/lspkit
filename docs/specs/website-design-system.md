@@ -45,7 +45,7 @@ Content spans at most 1200 px, with 32 px desktop gutters and 20 px mobile gutte
 - **Journal row:** issue number, title, excerpt, publication date and arrow. One real example post, sourced from the plugin's collection.
 - **Article:** metadata, large heading, full-width header image, narrow body and a clear back link. Use techdoc's shared blog layout.
 - **Code:** quiet panel with overflow scrolling; inherit syntax highlighting from techdoc with accessible token colours.
-- **Footer:** compact project identity and links to the repository and Atom feed.
+- **Footer:** compact project identity and a link to the repository.
 
 ## [WEB-CONTENT] Minimal information architecture
 
@@ -60,5 +60,17 @@ All actions are real links or buttons. Keep the plugin's skip link, semantic hea
 Check the homepage, docs, blog and article at desktop and 390 px mobile widths, with both colour themes and the mobile menu. Confirm no horizontal overflow, no broken local navigation or assets, valid generated structured data, and a successful Eleventy production build. The design is a starter, not a claim of a full accessibility audit.
 
 ## Implementation map
+
+### [WEB-CONTENT-JOURNAL] Journal navigation and listing
+
+The main navigation contains exactly Docs (`/docs/`) and Journal (`/blog/`). Prose is a shared styling class, not a navigation section. The journal index has an accessible header illustration, dated post summaries with H2 titles, and a direct article link. Its two-column desktop rows stack on mobile. The pinned techdoc 0.2 virtual blog index is configured to render `journal.njk`, retaining its collections, article layouts and tag/category routes. The illustration markup is shared with article pages through `header-image.njk`.
+
+### [WEB-ACCESS-PROSE] Shared responsive reading surface
+
+Every docs and blog article body uses an explicit `.prose` class via the shared `prose-content.njk` include. Standalone prose pages use it too. One stylesheet supplies heading hierarchy, lists, quotes, inline code, scrollable code blocks, tables, figures and disclosures; the CSS budget is 2,000 lines. The docs specimen at `/docs/prose/` and standalone `/prose/` render one shared Markdown source.
+
+At 768 px and below, docs navigation becomes an in-flow, wrapping list above the article. It never competes with the main menu as a second overlay. Article columns shrink with `minmax(0, 1fr)`; long tokens wrap, while tables and code scroll within their own containers. Header images preserve their intrinsic aspect ratio and scale to available width. Docs, posts and standalone prose use the shared image include; journal listing headers use the same illustration as a decorative background. Heading permalink links have no underline until hovered or focused.
+
+`website/tests/prose_test.py` drives the real Eleventy build and parses generated HTML to verify navigation, shared stylesheet references, prose classes, header images, all specimen elements and local links. These checks do not replace browser viewport and interaction testing.
 
 `website/src/assets/css/styles.css` implements the visual tokens and components. `website/eleventy.config.js` registers `eleventy-plugin-techdoc`; `website/src/_data/` supplies shared metadata. The image is `website/src/assets/images/engine.svg`. Track completion in [the website plan](../plans/website-plan.md).

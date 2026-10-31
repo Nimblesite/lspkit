@@ -1,5 +1,5 @@
 ---
-layout: layouts/blog.njk
+layout: post.njk
 title: Build the engine. Share the intelligence.
 description: A small architectural idea that keeps language tools working from the same picture.
 date: 2026-10-31
@@ -9,8 +9,6 @@ category: field-notes
 excerpt: One source of analysis. Two ways to use it. A quieter foundation for developer tools.
 ---
 <!-- [WEB-CONTENT] The single example journal post. -->
-![One orange engine routes to two dark terminal surfaces, representing LSP and MCP.](/assets/images/engine.svg)
-
 The editor and the assistant should see the same project. That sounds obvious, until each grows its own caches, background jobs and interpretation of what changed.
 
 ## Start with one source of truth
@@ -32,3 +30,4 @@ Framing messages, tracking open files and coordinating background work are neces
 That's the starting point. A small foundation, with room to build.
 
 [Explore the toolkit →](/docs/)
+

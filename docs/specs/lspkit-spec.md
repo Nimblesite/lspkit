@@ -125,11 +125,10 @@ lspkit runs a **release-only** regime modelled on [Shipwright](https://github.co
   | `ci.yml` | PR to `main` | `make ci` gate |
   | `supply-chain.yml` | PR to `main`, weekly cron | cargo-deny + osv-scanner |
   | `codeql.yml` | PR to `main`, weekly cron | CodeQL scan |
-  | `release.yml` | push of a `v*` tag | package security checks, GitHub Release, crates.io, npm |
-  | `pages.yml` | push of a `v*` tag, `workflow_dispatch` | build the website and deploy it to GitHub Pages |
+  | `release.yml` | push of a `v*` tag | package security checks, GitHub Release, crates.io, npm, GitHub Pages |
   | `dependabot-automerge.yml` | Dependabot PR | sweep the bump into `dependabot-upgrades` |
 
-  A push or merge to `main` triggers nothing. No package publishes on a schedule, from a branch or from `workflow_dispatch`; only the website redeploys by dispatch.
+  A push or merge to `main` triggers nothing. Nothing publishes on a schedule, from a branch or from `workflow_dispatch`.
 - **[REL-TRIGGER]** A release starts when a tag matching `v[0-9]+.[0-9]+.[0-9]+` (or `v[0-9]+.[0-9]+.[0-9]+-*` for a prerelease) is pushed at a commit on `main`. Publishing a GitHub Release from the UI or with `gh release create vX.Y.Z` creates that tag and so starts the same workflow; the workflow then fills in that release instead of creating a new one.
 - **[REL-VERSION]** Every source version is the placeholder `0.0.0-dev`: `[workspace.package].version`, the internal `[workspace.dependencies]` pins and each `packages/*/package.json`. The release stamps the tag version into every carrier with `shipwright-version-stamp` in the runner working tree, and never commits it back. `[SWR-VERSION-BUILD-STAMPING]`
 - **[REL-GATES]** Releases run no tests: `main` accepts only squash-merged PRs that passed the `CI` check, so a tagged `main` commit has already passed `make ci`. Before anything publishes, only the package security checks run on the stamped, relocked graph:
@@ -143,6 +142,7 @@ lspkit runs a **release-only** regime modelled on [Shipwright](https://github.co
 - **[REL-ORDER]** Crates publish in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `cargo publish` waits for each crate to appear in the index, so no sleeps are needed. The npm package (`@nimblesite/lsp-profiler-ui`) publishes after the crates. Both publish wrappers skip a version that is already on the registry, so a re-run after a failure partway through is safe.
 - **[REL-METADATA]** Every published crate and npm package declares `license = "MIT"` and a repository. The root `LICENSE-MIT` is staged into each crate (`LICENSE-MIT`) and each npm package (`LICENSE`) at publish time, so the declared license ships with the package. `[SWR-REL-LICENSE]`
 - **[REL-PACKAGED-BUILD]** A published crate builds without the workspace around it. `lsp-profiler`'s `build.rs` runs the typeDiagram generator only when the workspace generator exists. Otherwise it requires the generated `src/wire_generated.rs` that the crate's `include` packs. `[PROF-WIRE-PACKAGED]`
+- **[REL-PAGES]** After the packages publish, `release.yml` builds the Eleventy website with the GitHub Pages base path and deploys it to `https://nimblesite.github.io/lspkit/` through the `github-pages` environment, which allows `v*` tags.
 - **[REL-DEPENDABOT]** Every Dependabot bump lands on the unprotected `dependabot-upgrades` staging branch. CI, CodeQL and supply-chain skip Dependabot PRs, and the batch reaches `main` through one consolidation PR.
 
 ## Acceptance — externally verifiable

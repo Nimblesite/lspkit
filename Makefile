@@ -5,6 +5,7 @@
 # =============================================================================
 
 .PHONY: build test lint fmt clean ci setup help doc profiler-ui profiler-ui-test
+.PHONY: website-build website-run website-test _website_setup
 
 # ---------------------------------------------------------------------------
 # OS Detection
@@ -111,6 +112,9 @@ help:
 	@echo "  doc    - Build cargo workspace documentation (no deps)"
 	@echo "  profiler-ui      - Build the profiler's VS Code UI package"
 	@echo "  profiler-ui-test - Test the profiler UI package against a mock server"
+	@echo "  website-build    - Install dependencies and build the Eleventy website"
+	@echo "  website-run      - Install dependencies and serve the website locally"
+	@echo "  website-test     - Lint and verify the generated website"
 
 # ---------------------------------------------------------------------------
 # Private sub-recipes (NOT in .PHONY public list; underscore-prefixed)
@@ -126,7 +130,6 @@ _dotnet_build:
 	dotnet build -c Release dotnet/LspProfiler.DotNet.Engine
 	dotnet build -c Release dotnet/fixtures/HotLeakApp
 	dotnet build -c Release dotnet/fixtures/HotLeakAppFs
-	dotnet build -c Release dotnet/LspKit.Sidecar
 
 ## The profiler's gitignored wire model ([PROF-WIRE-GEN]). build.rs regenerates
 ## it on every build; rustfmt needs it before anything has been built.
@@ -205,3 +208,20 @@ profiler-ui:
 ## profiler-ui-test: Test the UI library against a mock language server.
 profiler-ui-test: profiler-ui
 	cd packages/lsp-profiler-ui && npm test
+
+# [WEB-CONTENT] Share dependency setup; npm owns the build and dev commands.
+_website_setup:
+	npm ci --prefix website --no-audit --no-fund
+
+## website-build: Build the static website into website/_site.
+website-build: _website_setup
+	npm run build --prefix website
+
+## website-run: Serve the website with live reload at http://localhost:8080.
+website-run: _website_setup
+	npm run dev --prefix website
+
+## website-test: Check the shared prose pages and all generated local links.
+website-test: _website_setup
+	npm run lint --prefix website
+	npm test --prefix website

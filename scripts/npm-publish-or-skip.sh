@@ -25,4 +25,5 @@ if [ -n "$(npm view "$spec" version 2>/dev/null)" ]; then
 fi
 
 echo "==> Publishing ${spec}"
-npm publish "$tarball" --access public
+# An absolute path: npm reads a bare `dist/x.tgz` as a GitHub `user/repo`.
+npm publish "$(realpath "$tarball")" --access public

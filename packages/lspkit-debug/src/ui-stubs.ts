@@ -127,7 +127,7 @@ function makeController(state: StubState): UiStubs {
       pushAnswers(state.queues.showErrorMessage, values);
       return controller;
     },
-    restore: () => restoreWindow(state.window, state.originals),
+    restore: (): void => { restoreWindow(state.window, state.originals); },
   };
   return controller;
 }

@@ -1,20 +1,67 @@
 version: 2
-# Keeps SHA-pinned actions and Cargo dependencies fresh. Each ecosystem is
-# grouped so a run opens a single combined PR, not one per package.
-# [SWR-SEC-ACTION-PINNING]
+# Keeps SHA-pinned actions and every dependency graph fresh without burning CI
+# on `main`. EVERY bump lands on the `dependabot-upgrades` staging branch:
+# version PRs target it directly, and dependabot-automerge.yml sweeps security
+# PRs (which GitHub always opens against `main`) into it too. ci.yml and
+# codeql.yml skip Dependabot PRs, so the batch reaches `main` through ONE
+# consolidation PR where CI runs once. Each language ecosystem collapses all
+# version bumps into one group and all security bumps into a `*-security`
+# group. [REL-DEPENDABOT] [GITHUB-DEPENDABOT] [SWR-SEC-ACTION-PINNING]
 updates:
   - package-ecosystem: github-actions
-    directory: "/"
+    directory: /
+    target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
     groups:
       github-actions:
         patterns: ["*"]
 
   - package-ecosystem: cargo
-    directory: "/"
+    directory: /
+    target-branch: "dependabot-upgrades"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
     groups:
       cargo:
+        applies-to: version-updates
+        patterns: ["*"]
+      cargo-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directories:
+      - /packages/lsp-profiler-ui
+      - /packages/lspkit-debug
+    target-branch: "dependabot-upgrades"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    groups:
+      npm:
+        applies-to: version-updates
+        patterns: ["*"]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: /dotnet
+    target-branch: "dependabot-upgrades"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    groups:
+      nuget:
+        applies-to: version-updates
+        patterns: ["*"]
+      nuget-security:
+        applies-to: security-updates
         patterns: ["*"]

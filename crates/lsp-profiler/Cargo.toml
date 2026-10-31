@@ -9,6 +9,11 @@ repository.workspace = true
 readme.workspace = true
 keywords = ["profiler", "lsp", "flamegraph", "memory", "language-server"]
 categories = ["development-tools::profiling"]
+# Lean tarball: ship sources + the release-staged license only. LICENSE-MIT is
+# gitignored (staged at publish time), so `include` forces it into the package.
+# `src/**/*` also carries the generated wire model, which build.rs cannot
+# regenerate outside the workspace. [SWR-REL-LICENSE] [PROF-WIRE-GEN]
+include = ["src/**/*", "build.rs", "LICENSE-MIT"]
 build = "build.rs"
 
 # The profiler's own lint set, stricter than the lspkit workspace's

@@ -67,6 +67,9 @@ Cargo.lock.bak
 # at release time; never committed). [SWR-VERSION-BUILD-STAMPING]
 build-info.json
 crates/*/LICENSE-MIT
+packages/*/LICENSE
+# Release assets (crate + npm tarballs, SBOM, signed SHA256SUMS). [SWR-REL-GITHUB]
+/dist/
 
 # =============================================================================
 # PROFILER (lsp-profiler crates, .NET engine, UI package)

@@ -1,11 +1,11 @@
 name: supply-chain
 
 # Vulnerability + license gate across the dependency graph. [SWR-SEC-VULN-GATE]
-# Runs on every PR/push and on a weekly schedule to catch newly disclosed advisories.
+# Runs on PRs to `main` and on a weekly schedule to catch newly disclosed
+# advisories; release.yml re-runs cargo-deny on the tagged SHA before it
+# publishes. Pushes to `main` trigger nothing. [REL-REGIME] [CI-WORKFLOWS]
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
@@ -21,6 +21,8 @@ permissions:
 jobs:
   cargo-deny:
     name: cargo-deny (advisories + licenses + bans + sources)
+    # Dependabot PRs are swept into `dependabot-upgrades`. [GITHUB-DEPENDABOT]
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -33,6 +35,8 @@ jobs:
 
   osv-scanner:
     name: osv-scanner (Cargo.lock)
+    # Dependabot PRs are swept into `dependabot-upgrades`. [GITHUB-DEPENDABOT]
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

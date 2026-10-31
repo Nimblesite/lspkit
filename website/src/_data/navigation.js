@@ -1,7 +1,7 @@
 // [WEB-CONTENT] Header and footer links. The repo is one click from every page.
 const repo = "https://github.com/Nimblesite/lspkit";
 
-export default {
+const navigation = {
   repo,
   main: [
     { text: "Docs", url: "/docs/" },
@@ -13,3 +13,5 @@ export default {
     { text: `© ${new Date().getFullYear()} Nimblesite ↗`, url: "https://www.nimblesite.co" },
   ] }],
 };
+
+export default navigation;

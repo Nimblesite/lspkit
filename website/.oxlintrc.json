@@ -3,7 +3,7 @@
   "overrides": [
     {
       // Eleventy requires default exports for config and JavaScript data entrypoints.
-      "files": ["eleventy.config.js", "src/_data/site.js"],
+      "files": ["eleventy.config.js", "src/_data/site.js", "src/_data/navigation.js"],
       "rules": { "import/no-default-export": "off" }
     },
     {

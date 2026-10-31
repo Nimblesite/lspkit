@@ -7,7 +7,7 @@
     "dev": "eleventy --serve",
     "build": "eleventy",
     "test": "python3 tests/prose_test.py",
-    "lint": "oxlint --deny-warnings eleventy.config.js src/_data/site.js"
+    "lint": "oxlint --deny-warnings eleventy.config.js src/_data/site.js src/_data/navigation.js"
   },
   "devDependencies": {
     "@11ty/eleventy": "3.1.7",

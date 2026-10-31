@@ -77,7 +77,12 @@ h3 { font-size: 25px; line-height: 1.25; letter-spacing: -.025em; }
 /* Shared techdoc article, list and documentation surfaces. */
 main > .blog-container { max-width: var(--max-width); margin: auto; padding: 56px 32px 72px; }
 .blog-header { padding-bottom: 32px; }
-.blog-header::after { content: ""; display: block; aspect-ratio: 12 / 5; margin-top: 32px; background: var(--color-panel) url("/assets/images/engine.svg") center / cover no-repeat; }
+.blog-header .eyebrow { margin-bottom: 20px; }
+.journal-entry { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; padding-block: 32px; border-top: 1px solid var(--color-border); }
+.journal-entry h2 { font-size: clamp(28px, 3.5vw, 44px); }
+.journal-entry h2 a { text-decoration: none; }
+.journal-entry h2 a:hover { text-decoration: underline; }
+.journal-entry p:not(.eyebrow) { max-width: 54ch; margin-block: 20px 12px; color: var(--color-muted); }
 .blog-subtitle { color: var(--color-muted); margin-top: 24px; }
 .blog-nav { display: flex; flex-wrap: wrap; gap: 24px; padding-bottom: 24px; font: 13px var(--font-mono); }
 .blog-nav-link { padding: 12px 0; }
@@ -156,6 +161,7 @@ main > .blog-post, .article-shell { width: 100%; max-width: 960px; margin-inline
   .section-heading { align-items: start; gap: 16px; }
   .section-heading .text-link { flex-shrink: 0; gap: 10px; }
   .journal-row { grid-template-columns: 1fr; gap: 16px; }
+  .journal-entry { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .journal-row time { text-align: left; }
   .footer-section, .footer-section ul { flex-wrap: wrap; }
   main > .blog-container, main > .blog-post, .article-shell { padding: 32px 20px 48px; }

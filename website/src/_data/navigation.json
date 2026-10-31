@@ -1,8 +1,7 @@
 {
   "main": [
     { "text": "Docs", "url": "/docs/" },
-    { "text": "Journal", "url": "/blog/" },
-    { "text": "Prose", "url": "/prose/" }
+    { "text": "Journal", "url": "/blog/" }
   ],
   "footer": [{ "title": "Tools for thoughtful engineering.", "items": [
     { "text": "GitHub ↗", "url": "https://github.com/Nimblesite/lspkit" }

@@ -31,4 +31,3 @@ That's the starting point. A small foundation, with room to build.
 
 [Explore the toolkit →](/docs/)
 
-[See the shared prose styles →](/prose/)

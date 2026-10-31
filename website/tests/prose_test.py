@@ -80,6 +80,16 @@ class ProsePages(unittest.TestCase):
         css = OUTPUT / "assets/css/styles.css"
         self.assertLessEqual(len(css.read_text().splitlines()), 2000)
 
+    def test_journal_has_illustrated_posts_and_only_docs_and_journal_navigation(self):
+        for path in OUTPUT.rglob("*.html"):
+            page = Document(path)
+            navigation = [a["href"] for a in page.attributes("a") if "nav-link" in a.get("class", "").split()]
+            self.assertEqual(navigation, ["/docs/", "/blog/"], path)
+        journal = self.check_page(OUTPUT / "blog/index.html")
+        self.assertTrue(journal.attributes("img"), "Journal needs a real header image")
+        self.assertTrue(journal.attributes("h2"), "Post titles need a heading hierarchy")
+        self.assertIn("/blog/one-engine/", [a.get("href") for a in journal.attributes("a")])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -61,6 +61,10 @@ Check the homepage, docs, blog and article at desktop and 390 px mobile widths, 
 
 ## Implementation map
 
+### [WEB-CONTENT-JOURNAL] Journal navigation and listing
+
+The main navigation contains exactly Docs (`/docs/`) and Journal (`/blog/`). Prose is a shared styling class, not a navigation section. The journal index has an accessible header illustration, dated post summaries with H2 titles, and a direct article link. Its two-column desktop rows stack on mobile. The pinned techdoc 0.2 virtual blog index is configured to render `journal.njk`, retaining its collections, article layouts and tag/category routes. The illustration markup is shared with article pages through `header-image.njk`.
+
 ### [WEB-ACCESS-PROSE] Shared responsive reading surface
 
 Every docs and blog article body uses an explicit `.prose` class via the shared `prose-content.njk` include. Standalone prose pages use it too. One stylesheet supplies heading hierarchy, lists, quotes, inline code, scrollable code blocks, tables, figures and disclosures; the CSS budget is 2,000 lines. The docs specimen at `/docs/prose/` and standalone `/prose/` render one shared Markdown source.

@@ -1,5 +1,13 @@
 # Website sketch
 
+## Navigation, journal and branch consolidation
+
+- [x] Consolidate `gh-pages-deploy` into `release-wire-model`, preserving PR #40 and both NuGet publishing and wire-model generation; resolve release comments/spec conflicts using the current main release policy.
+- [x] Remove the extra worktree and merged local/remote branch; retain only `main` and one feature branch.
+- [x] Reproduce the unwanted Prose navigation link in a failing generated-site regression.
+- [x] Restrict the main nav to Docs and Journal; build an illustrated journal index with semantic post headings and responsive rows [WEB-CONTENT-JOURNAL].
+- [x] Verify website regressions, lint and workflow analysis; no coverage gates or timeouts changed.
+
 ## Responsive prose follow-up [WEB-ACCESS-PROSE]
 
 - [x] Inspect techdoc layouts and identify missing shared prose coverage and off-canvas mobile docs navigation.

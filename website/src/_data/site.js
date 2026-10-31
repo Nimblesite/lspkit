@@ -1,5 +1,5 @@
 // [WEB-CONTENT] Set SITE_URL to the real origin when publishing.
-export default {
+const site = {
   name: "lspkit",
   title: "lspkit — One engine. Every surface.",
   description: "Reusable building blocks for language servers. Notes on thoughtful tools and the systems behind them.",
@@ -8,3 +8,5 @@ export default {
   themeColor: "#f4f1e9",
   favicon: "/assets/images/mark.svg",
 };
+
+export default site;

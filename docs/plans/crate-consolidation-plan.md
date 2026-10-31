@@ -52,6 +52,6 @@ Only a crate owner can delete a crate. Use the Settings → Delete crate page on
 - [x] `cargo package --workspace --locked` verifies all 4 published crates (2026-10-31).
 - [x] `diagnostic_reference unrepresentable` runs on Linux; on Apple, a sibling test asserts that APFS refuses the non-UTF-8 name (`EILSEQ`).
 - [x] Fix the 8 oxlint residuals in `packages/` (2026-10-31). The sync `fs` reads are now async and awaited at every caller, and `PROFILER_REVIEW_HTML` is replaced by `registerCpuCaptureContract(capture, { reviewHtmlPath })`. `npm run lint` is clean; 190 + 107 tests pass.
-- [ ] Confirm `make ci` is green on the PR's Linux CI. On macOS, `lspkit-server::live` stays at 92.23% < 94%: the uncovered watcher lines are the inotify `Access` and rescan paths plus race-only drop paths.
+- [x] Confirm `make ci` is green on the PR's Linux CI (PR #37, ubuntu-22.04, 2026-10-31: every check passes and every coverage floor holds, with `lspkit-server::live` at 94.82% ≥ 94%). On macOS, `lspkit-server::live` stays at 92.23% < 94%: the uncovered watcher lines are the inotify `Access` and rescan paths plus race-only drop paths.
 - [ ] Ship the first tagged release (see [publishing-plan.md](publishing-plan.md)).
 - [ ] Retire the old names per `[CRATE-RETIRE]`: delete 5 crates on crates.io, and yank and deprecate `lspkit-vfs`.

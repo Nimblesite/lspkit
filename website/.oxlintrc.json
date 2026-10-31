@@ -1,0 +1,15 @@
+{
+  "extends": ["../packages/.oxlintrc.json"],
+  "overrides": [
+    {
+      // Eleventy requires default exports for config and JavaScript data entrypoints.
+      "files": ["eleventy.config.js", "src/_data/site.js"],
+      "rules": { "import/no-default-export": "off" }
+    },
+    {
+      // The build-time metadata boundary reads the configured production origin.
+      "files": ["src/_data/site.js"],
+      "rules": { "node/no-process-env": "off" }
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 name: release
 
 # The ONLY path to ship. Pushing a `v*` tag runs the full CI gate on the tagged
-# SHA, cuts a signed GitHub Release, then publishes every crate to crates.io
-# and every package under packages/ to npm. Nothing ships on a merge to `main`
+# SHA, cuts a signed GitHub Release, then publishes every crate to crates.io,
+# every package under packages/ to npm and LspKit.Sidecar to NuGet. Nothing ships on a merge to `main`
 # or on a schedule. [REL-REGIME] [REL-TRIGGER] [CI-WORKFLOWS] [SWR-REL-WORKFLOW]
 #
 # lspkit is a library workspace with no executables, so there are no binary
@@ -47,7 +47,7 @@ jobs:
     environment: release
     permissions:
       contents: write # create the GitHub Release
-      id-token: write # OIDC: crates.io + npm Trusted Publishing, cosign keyless. [SWR-SEC-OIDC-PUBLISH]
+      id-token: write # OIDC: crates.io + npm + NuGet Trusted Publishing, cosign keyless. [SWR-SEC-OIDC-PUBLISH]
       attestations: write # build provenance + SBOM attestations. [SWR-SEC-PROVENANCE]
     env:
       DIST: dist
@@ -160,6 +160,9 @@ jobs:
           npm run build --prefix packages/lsp-profiler-ui
           npm pack ./packages/lsp-profiler-ui --pack-destination "${DIST}"
 
+      - name: Package NuGet packages
+        run: dotnet pack dotnet/LspKit.Sidecar -c Release -o "${DIST}"
+
       # One CycloneDX SBOM over the whole dependency graph. [SWR-SEC-SBOM]
       - name: Generate SBOM
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -240,3 +243,18 @@ jobs:
           for tarball in "${DIST}"/*.tgz; do
             bash scripts/npm-publish-or-skip.sh "${tarball}"
           done
+
+      # nuget.org Trusted Publishing: swap the OIDC token for a short-lived key.
+      # The policy is owned by the Nimblesite organization. [REL-OIDC]
+      - name: Authenticate to NuGet via OIDC
+        id: nuget_login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: Nimblesite
+
+      - name: Publish NuGet packages
+        env:
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push "${DIST}"/*.nupkg --api-key "${NUGET_API_KEY}" \
+            --source https://api.nuget.org/v3/index.json --skip-duplicate

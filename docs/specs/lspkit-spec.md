@@ -124,18 +124,18 @@ lspkit runs a **release-only** regime modelled on [Shipwright](https://github.co
   |---|---|---|
   | `ci.yml` | PR to `main` | `make ci` gate |
   | `supply-chain.yml` | PR to `main`, weekly cron | cargo-deny + osv-scanner |
-  | `codeql.yml` | PR to `main`, weekly cron, `workflow_call` from release | CodeQL scan; a hard gate when called by release |
-  | `release.yml` | push of a `v*` tag | gate, GitHub Release, crates.io, npm |
+  | `codeql.yml` | PR to `main`, weekly cron | CodeQL scan |
+  | `release.yml` | push of a `v*` tag | package security checks, GitHub Release, crates.io, npm |
+  | `pages.yml` | push of a `v*` tag, `workflow_dispatch` | build the website and deploy it to GitHub Pages |
   | `dependabot-automerge.yml` | Dependabot PR | sweep the bump into `dependabot-upgrades` |
 
-  A push or merge to `main` triggers nothing. Nothing publishes on a schedule, from a branch or from `workflow_dispatch`.
+  A push or merge to `main` triggers nothing. No package publishes on a schedule, from a branch or from `workflow_dispatch`; only the website redeploys by dispatch.
 - **[REL-TRIGGER]** A release starts when a tag matching `v[0-9]+.[0-9]+.[0-9]+` (or `v[0-9]+.[0-9]+.[0-9]+-*` for a prerelease) is pushed at a commit on `main`. Publishing a GitHub Release from the UI or with `gh release create vX.Y.Z` creates that tag and so starts the same workflow; the workflow then fills in that release instead of creating a new one.
 - **[REL-VERSION]** Every source version is the placeholder `0.0.0-dev`: `[workspace.package].version`, the internal `[workspace.dependencies]` pins and each `packages/*/package.json`. The release stamps the tag version into every carrier with `shipwright-version-stamp` in the runner working tree, and never commits it back. `[SWR-VERSION-BUILD-STAMPING]`
-- **[REL-GATES]** Before anything publishes, all of these pass on the tagged commit, in order:
-  1. The CodeQL gate (`codeql.yml` with `gate: true`) finds nothing at High or Critical severity.
-  2. `make ci` (format, lint, test, coverage thresholds, build).
-  3. `cargo deny check advisories bans licenses sources` against the stamped, relocked graph.
-  4. `cargo package --workspace --locked` builds every crate tarball against its siblings.
+- **[REL-GATES]** Releases run no tests: `main` accepts only squash-merged PRs that passed the `CI` check, so a tagged `main` commit has already passed `make ci`. Before anything publishes, only the package security checks run on the stamped, relocked graph:
+  1. `cargo deny check advisories bans licenses sources`.
+  2. `npm audit --omit=dev --audit-level=high` for each npm package.
+  3. `cargo package --workspace --locked` builds every crate tarball against its siblings.
 
   Every `uses:` is pinned to a 40-character commit SHA. Workflows default to `permissions: contents: read` and elevate per job. Installs are frozen (`npm ci`, `--locked`), and the release job uses no caches.
 - **[REL-GITHUB]** The release attaches every crate tarball, every npm tarball, a CycloneDX SBOM and one `SHA256SUMS` over them all, cosign keyless-signed (`SHA256SUMS.sigstore.json`). Build provenance and the SBOM are attested against `SHA256SUMS`, so consumers can run `gh attestation verify <file> --repo Nimblesite/lspkit`. `[SWR-SEC-CHECKSUM]` `[SWR-SEC-PROVENANCE]` `[SWR-SEC-SBOM]`

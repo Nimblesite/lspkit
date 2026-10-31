@@ -1,8 +1,9 @@
 name: release
 
-# The ONLY path to ship. Pushing a `v*` tag runs the full CI gate on the tagged
-# SHA, cuts a signed GitHub Release, then publishes every crate to crates.io
-# and every package under packages/ to npm. Nothing ships on a merge to `main`
+# The ONLY path to ship. Pushing a `v*` tag runs the package security checks,
+# cuts a signed GitHub Release, then publishes every crate to crates.io and
+# every package under packages/ to npm. Tests run on PRs only: `main` is
+# protected by the CI check, so a tagged `main` commit has already passed. Nothing ships on a merge to `main`
 # or on a schedule. [REL-REGIME] [REL-TRIGGER] [CI-WORKFLOWS] [SWR-REL-WORKFLOW]
 #
 # lspkit is a library workspace with no executables, so there are no binary
@@ -24,25 +25,12 @@ permissions:
   contents: read
 
 jobs:
-  # Hard gate: scan the exact tagged SHA and block publishing on any High or
-  # Critical finding. [REL-GATES] [GITHUB-CODE-SCANNING]
-  codeql:
-    name: CodeQL gate
-    uses: ./.github/workflows/codeql.yml
-    with:
-      gate: true
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-
   release:
     name: Release
-    needs: codeql
     runs-on: ubuntu-latest
-    # TIMEOUT EXCEPTION: one job stamps, runs the full `make ci` gate, packages,
+    # TIMEOUT EXCEPTION: one job stamps, runs the security checks, packages,
     # signs, cuts the GitHub Release and publishes 4 crates + 1 npm package.
-    timeout-minutes: 45
+    timeout-minutes: 30
     # Protected environment gates the OIDC publishes (reviewer + tag restriction).
     environment: release
     permissions:
@@ -59,13 +47,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
-          components: rustfmt, clippy, llvm-tools-preview
-
-      # The profiler's .NET engine and the fixture its e2e tests profile build in
-      # `make test` (net8.0, rolled forward to this SDK's runtime). [PROF-TESTING]
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: "10.0.x"
 
       # registry-url tells npm which registry to mint an OIDC publish token for.
       # No caches anywhere in this job: a poisoned cache entry must never reach
@@ -82,14 +63,10 @@ jobs:
       - name: Install npm + typeDiagram
         run: npm install -g npm@11.21.1 typediagram@0.11.0
 
-      - name: Install release tooling (coverage, test runner, version stamper, vuln gate)
+      - name: Install version stamper and vuln gate
         uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
-          tool: cargo-llvm-cov,cargo-nextest,shipwright-version-stamp,cargo-deny
-
-      # `make test` traces the profiled fixture's syscalls, as in ci.yml.
-      - name: Install syscall tracer
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends strace
+          tool: shipwright-version-stamp,cargo-deny
 
       # The single license source-of-truth MUST be committed at the repo root;
       # only the staged per-package copies are gitignored. [SWR-REL-LICENSE]
@@ -127,18 +104,13 @@ jobs:
           for crate in crates/*/; do cp LICENSE-MIT "${crate}LICENSE-MIT"; done
           for package in packages/*/; do cp LICENSE-MIT "${package}LICENSE"; done
 
-      # Full gate (fmt + lint + test + coverage + build) MUST pass before any publish.
-      # [REL-GATES]
-      - name: CI gate
-        run: make ci
-
-      # Re-run the supply-chain gate against the stamped + freshly-locked graph,
-      # so an advisory disclosed since the last PR still blocks. [SWR-SEC-VULN-GATE]
+      # Package security: block on a known advisory, banned crate, bad license
+      # or untrusted source in the stamped graph. [SWR-SEC-VULN-GATE]
       - name: Supply-chain gate (advisories + bans + licenses + sources)
         run: cargo deny check advisories bans licenses sources
 
-      # The npm half of the vuln gate: fail on a high advisory in anything the
-      # published packages pull in at runtime. [SWR-SEC-VULN-GATE]
+      # The npm half: fail on a high advisory in anything the published
+      # packages pull in at runtime. [SWR-SEC-VULN-GATE]
       - name: npm audit (runtime dependencies)
         run: |
           npm audit --omit=dev --audit-level=high --prefix packages/lsp-profiler-ui

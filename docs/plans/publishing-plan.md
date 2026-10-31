@@ -16,9 +16,8 @@ sequenceDiagram
     participant Npm as npm
 
     Dev->>GHA: push tag vX.Y.Z
-    GHA->>GHA: CodeQL gate on the tagged SHA (blocks on High/Critical)
     GHA->>GHA: npm ci, stamp 0.0.0-dev → X.Y.Z, cargo update --workspace
-    GHA->>GHA: make ci, cargo deny, cargo package --workspace, npm pack
+    GHA->>GHA: cargo deny, npm audit, cargo package --workspace, npm pack
     GHA->>GHA: SBOM, SHA256SUMS + cosign, provenance + SBOM attestations
     GHA->>Rel: create vX.Y.Z with every tarball, SBOM and signed sums
     GHA->>Crates: OIDC token, then 4 crates in dependency order
@@ -33,7 +32,7 @@ Neither registry allows deleting a version. On crates.io, `cargo yank --version 
 
 - [x] Release-only triggers: `ci.yml`, `supply-chain.yml` and `codeql.yml` run on PRs (plus a weekly cron for the scanners), and `release.yml` runs on `v*` tags.
 - [x] Source versions are `0.0.0-dev`, stamped from the tag.
-- [x] `release.yml` runs the CodeQL gate, `make ci`, cargo-deny, `npm audit` and `cargo package --workspace`. It then produces the SBOM, cosign-signed `SHA256SUMS`, provenance attestations and the GitHub Release, and publishes 4 crates and 2 npm packages via OIDC.
+- [x] `release.yml` runs no tests; it runs cargo-deny, `npm audit` and `cargo package --workspace`. It then produces the SBOM, cosign-signed `SHA256SUMS`, provenance attestations and the GitHub Release, and publishes 4 crates and 2 npm packages via OIDC.
 - [x] `lsp-profiler` builds from its published tarball ([PROF-WIRE-PACKAGED]).
 - [x] Dependabot staging branch config and auto-merge workflow.
 - [x] zizmor and osv-scanner (Cargo.lock + both npm lockfiles) in `supply-chain.yml`.

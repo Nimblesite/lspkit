@@ -19,7 +19,7 @@ readonly PUBLISHED_CRATES=(lsp-profiler lsp-profiler-dotnet lspkit lspkit-server
 readonly API=https://crates.io/api/v1/trusted_publishing/github_configs
 readonly AGENT="lspkit-bootstrap (https://github.com/Nimblesite/lspkit)"
 
-(cd "$work" && cargo update --workspace && node scripts/typediagram/generate.mjs)
+(cd "$work" && cargo update --workspace)
 for crate in "${NEW_CRATES[@]}"; do
     (cd "$work" && bash scripts/cargo-publish-or-skip.sh "$crate")
 done

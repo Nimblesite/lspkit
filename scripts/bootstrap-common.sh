@@ -13,3 +13,4 @@ for crate in "$work"/crates/*/; do cp "$work/LICENSE-MIT" "${crate}LICENSE-MIT";
 for package in "$work"/packages/*/; do cp "$work/LICENSE-MIT" "${package}LICENSE"; done
 (cd "$work" && npm ci --prefix packages/lsp-profiler-ui)
 shipwright-version-stamp --tag "$tag" --root "$work"
+(cd "$work" && node scripts/typediagram/generate.mjs)

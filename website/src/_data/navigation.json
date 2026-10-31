@@ -1,9 +1,0 @@
-{
-  "main": [
-    { "text": "Docs", "url": "/docs/" },
-    { "text": "Journal", "url": "/blog/" }
-  ],
-  "footer": [{ "title": "The foundation for any language's tooling.", "items": [
-    { "text": "GitHub ↗", "url": "https://github.com/Nimblesite/lspkit" }
-  ] }]
-}

@@ -72,19 +72,19 @@ export interface ProcessPanelActions {
    * never asserting the definitive "no processes" (#147) — and clears any rows
    * from a previous server session so the tree never shows stale processes.
    */
-  processesLoading(): void;
+  processesLoading: () => void;
   /** A fetch succeeded; only now is an empty list a genuine "no processes" (#147). */
-  processesLoaded(list: readonly ProcessInfo[]): void;
+  processesLoaded: (list: readonly ProcessInfo[]) => void;
   /** A fetch failed — the welcome says "couldn't load", not "no processes" (#147). */
-  processesFetchFailed(): void;
+  processesFetchFailed: () => void;
   /** Advance to the next sort mode and return it (for the status-bar hint). */
-  cycleProcessSort(): SortMode;
+  cycleProcessSort: () => SortMode;
   /** Advance to the next grouping mode and return it (for the status-bar hint). */
-  cycleProcessGroup(): GroupMode;
+  cycleProcessGroup: () => GroupMode;
   /** Set the search filter (normalised here so every reader sees one form). */
-  setProcessFilter(text: string): void;
+  setProcessFilter: (text: string) => void;
   /** Mark which PID is the active host debuggee; `undefined` clears it. */
-  setActiveDebuggeePid(pid: number | undefined): void;
+  setActiveDebuggeePid: (pid: number | undefined) => void;
 }
 
 /** The mode after `current` in `cycle`, wrapping round. */

@@ -2,16 +2,13 @@
 // screens render from them and mutate only through the actions. The host
 // supplies the client and the debuggee map; the library owns the rest.
 
-import * as vscode from "vscode";
-import { DEFAULT_PALETTE, configurePalette, resolvePalette } from "./palette";
 import { computed, signal } from "@preact/signals-core";
 import type { ReadonlySignal, Signal } from "@preact/signals-core";
 import type { LanguageClient } from "vscode-languageclient/node";
 import { isRecord } from "./unknown-shape";
 import type { ProfilerCapabilities, RuntimeInfo } from "./wire-generated";
 import type { ProfilerHost } from "./host";
-import { installIds } from "./ids";
-import { bindLogger } from "./logger";
+import { bindHost } from "./bind-host";
 import { IDLE_PROCESS_PANEL, createProcessPanelActions } from "./processes-state";
 import type { ProcessPanelActions, ProcessPanelState } from "./processes-state";
 import { IDLE_PROFILER_SESSION, createProfilerActions, isCpuBusy, isMemoryBusy, isProfilerBusy } from "./profiler-state";
@@ -29,19 +26,19 @@ export interface ProfilerStore extends ProfilerActions, ProcessPanelActions {
   readonly processesRevision: ReadonlySignal<number>;
   /** What the server's runtimes can do ([PROF-UI-CAPABILITIES]); `undefined` until the server initialised. */
   readonly capabilities: ReadonlySignal<ProfilerCapabilities | undefined>;
-  getDebuggeeProcessId(sessionId: string): number | undefined;
+  getDebuggeeProcessId: (sessionId: string) => number | undefined;
   /** Whether `runtime` reads its own heap, so any attachable process can be memory-tracked. */
-  memoryIsDirect(runtime: string): boolean;
+  memoryIsDirect: (runtime: string) => boolean;
   /** False once the server advertised its runtimes and none tracks memory, so no memory action is offered. */
-  memoryOffered(): boolean;
+  memoryOffered: () => boolean;
   /** False once the server advertised its runtimes and `runtime` is not one with a memory backend. */
-  tracksMemory(runtime: string): boolean;
+  tracksMemory: (runtime: string) => boolean;
   /** The runtime's advertised `display_name`, or its wire id when the server named none. */
-  runtimeName(runtime: string): string;
+  runtimeName: (runtime: string) => string;
   /** Whether `runtime`'s process entries are source files the editor can open. */
-  sourceEntries(runtime: string): boolean;
+  sourceEntries: (runtime: string) => boolean;
   /** Return every signal to idle (deactivation, test teardown). */
-  reset(): void;
+  reset: () => void;
 }
 
 /** The `experimental.lspProfiler` block of the server's initialize result, when present. */
@@ -69,19 +66,6 @@ function runtimeQueries(capabilities: ReadonlySignal<ProfilerCapabilities | unde
     runtimeName: (runtime) => find(runtime)?.display_name ?? runtime,
     sourceEntries: (runtime) => find(runtime)?.source_entries === true,
   };
-}
-
-/** The host palette under the user's `profiler.palette` overrides, read on every render. */
-function bindHostPalette(host: ProfilerHost): void {
-  configurePalette(() => resolvePalette(host.palette ?? DEFAULT_PALETTE,
-    vscode.workspace.getConfiguration(host.configSection).get("profiler.palette")));
-}
-
-/** Install `host`'s ids, palette and logger for every module that reads them. */
-function bindHost(host: ProfilerHost): void {
-  installIds(host);
-  bindHostPalette(host);
-  bindLogger(() => host.logger);
 }
 
 /** Create the profiler's reactive state bound to `host`. Factory, never a singleton. */

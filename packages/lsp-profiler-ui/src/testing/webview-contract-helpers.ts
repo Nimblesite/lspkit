@@ -36,16 +36,18 @@ export async function pollUntilResult<Value>(
   const options: PollOptions<Value> = typeof first === 'function'
     ? { fn: first, until: until ?? (() => true), timeoutMs: DEFAULT_POLL_TIMEOUT_MS }
     : first;
-  const deadline = Date.now() + options.timeoutMs;
-  let last: Value = await options.fn();
-  while (!options.until(last)) {
-    if (Date.now() >= deadline) {
-      throw new Error(`${options.description ?? 'condition'} not met within ${String(options.timeoutMs)}ms (last: ${JSON.stringify(last)})`);
-    }
-    await delay(options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS);
-    last = await options.fn();
+  return pollFor(options, Date.now() + options.timeoutMs);
+}
+
+/** Poll `options.fn` until `options.until` accepts a value or `deadline` passes. */
+async function pollFor<Value>(options: PollOptions<Value>, deadline: number): Promise<Value> {
+  const last = await options.fn();
+  if (options.until(last)) { return last; }
+  if (Date.now() >= deadline) {
+    throw new Error(`${options.description ?? 'condition'} not met within ${String(options.timeoutMs)}ms (last: ${JSON.stringify(last)})`);
   }
-  return last;
+  await delay(options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+  return pollFor(options, deadline);
 }
 
 export async function closeAllEditors(): Promise<void> {

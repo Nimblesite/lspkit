@@ -140,15 +140,18 @@ function payloadFilePath(out: string): string {
 
 /** The payload once the worker filled the file, which is then deleted; undefined when it is missing or stays empty. */
 async function readPayloadFile(path: string): Promise<string | undefined> {
-  const deadline = Date.now() + FILE_PAYLOAD_WAIT_MS;
-  for (;;) {
-    const contents = await readPayloadContents(path);
-    if (contents === undefined) { return undefined; }
-    if (contents.length > 0 || Date.now() >= deadline) {
-      return finalizePayloadFile(path, contents);
-    }
-    await delay(FILE_PAYLOAD_POLL_MS);
+  return readPayloadUntil(path, Date.now() + FILE_PAYLOAD_WAIT_MS);
+}
+
+/** Poll for the payload file until it holds data or `deadline` (epoch) passes. */
+async function readPayloadUntil(path: string, deadline: number): Promise<string | undefined> {
+  const contents = await readPayloadContents(path);
+  if (contents === undefined) { return undefined; }
+  if (contents.length > 0 || Date.now() >= deadline) {
+    return finalizePayloadFile(path, contents);
   }
+  await delay(FILE_PAYLOAD_POLL_MS);
+  return readPayloadUntil(path, deadline);
 }
 
 /** Read the payload file, warning and returning undefined when it cannot be read. */
@@ -187,19 +190,22 @@ async function removePayloadFile(path: string): Promise<void> {
  * the first `\n` after the marker reliably ends the payload.
  */
 async function waitForMarkerOutput(sessionId: string, cursor: number): Promise<string> {
-  const deadline = Date.now() + MARKER_WAIT_MS;
-  for (;;) {
-    const out = debugOutputSince(sessionId, cursor);
-    const markerAt = out.indexOf(MARKER_PREFIX);
-    // The payload line is complete once a newline follows the marker (the
-    // `print()` terminator); `includes(.., markerAt)` searches from the marker.
-    if (markerAt !== -1 && out.includes("\n", markerAt)) { return out; }
-    if (Date.now() >= deadline) {
-      warnMarkerWaitExpired(out, markerAt);
-      return out;
-    }
-    await delay(MARKER_POLL_MS);
+  return waitForMarkerUntil(sessionId, cursor, Date.now() + MARKER_WAIT_MS);
+}
+
+/** Poll for marker output until its line is newline-terminated or `deadline` passes. */
+async function waitForMarkerUntil(sessionId: string, cursor: number, deadline: number): Promise<string> {
+  const out = debugOutputSince(sessionId, cursor);
+  const markerAt = out.indexOf(MARKER_PREFIX);
+  // The payload line is complete once a newline follows the marker (the
+  // `print()` terminator); `includes(.., markerAt)` searches from the marker.
+  if (markerAt !== -1 && out.includes("\n", markerAt)) { return out; }
+  if (Date.now() >= deadline) {
+    warnMarkerWaitExpired(out, markerAt);
+    return out;
   }
+  await delay(MARKER_POLL_MS);
+  return waitForMarkerUntil(sessionId, cursor, deadline);
 }
 
 /**
@@ -249,11 +255,15 @@ async function stoppedFrameIdFor(session: vscode.DebugSession, stopped: readonly
 
 /** The top frame of the first of `threadIds` that is stopped, else null. */
 async function firstTopFrameId(session: vscode.DebugSession, threadIds: readonly number[]): Promise<number | null> {
-  for (const threadId of threadIds) {
-    const frameId = await topFrameIdIfStopped(session, threadId);
-    if (frameId !== null) { return frameId; }
-  }
-  return null;
+  return firstTopFrameAt(session, threadIds, 0);
+}
+
+/** The top frame of `threadIds[index]` (or later) if stopped, else null. */
+async function firstTopFrameAt(session: vscode.DebugSession, threadIds: readonly number[], index: number): Promise<number | null> {
+  const threadId = threadIds[index];
+  if (threadId === undefined) { return null; }
+  const frameId = await topFrameIdIfStopped(session, threadId);
+  return frameId ?? firstTopFrameAt(session, threadIds, index + 1);
 }
 
 /** Every thread id the debuggee reports (for `allThreadsStopped` stops). */
@@ -301,14 +311,17 @@ export async function acquireStoppedFrame(): Promise<AcquiredFrame | null> {
 
 /** Pause the running debuggee until it stops in an evaluable frame, retrying from bootstrap frames. */
 async function pauseForFrame(session: vscode.DebugSession): Promise<AcquiredFrame | null> {
-  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-  for (let attempt = 1; Date.now() < deadline; attempt += 1) {
-    if (!(await pauseDebuggee(session))) { return null; }
-    const acquired = await acquiredFrameOrResume(session, deadline, attempt);
-    if (acquired !== undefined) { return acquired; }
-    await delay(PAUSE_RETRY_BACKOFF_MS);
-  }
-  return null;
+  return pauseForFrameUntil(session, Date.now() + STARTUP_TIMEOUT_MS, 1);
+}
+
+/** One transparent-pause attempt; recurses with the next attempt until `deadline` passes. */
+async function pauseForFrameUntil(session: vscode.DebugSession, deadline: number, attempt: number): Promise<AcquiredFrame | null> {
+  if (Date.now() >= deadline) { return null; }
+  if (!(await pauseDebuggee(session))) { return null; }
+  const acquired = await acquiredFrameOrResume(session, deadline, attempt);
+  if (acquired !== undefined) { return acquired; }
+  await delay(PAUSE_RETRY_BACKOFF_MS);
+  return pauseForFrameUntil(session, deadline, attempt + 1);
 }
 
 /** An evaluable frame, or a resume-and-retry when the pause landed in bootstrap frames. */
@@ -327,12 +340,11 @@ async function acquiredFrameOrResume(session: vscode.DebugSession, deadline: num
 
 /** Poll for an evaluable stopped frame until `deadlineMs` (epoch), else null. */
 async function waitForFrameUntil(deadlineMs: number): Promise<number | null> {
-  while (Date.now() < deadlineMs) {
-    const frameId = await currentStoppedFrameId();
-    if (frameId !== null) { return frameId; }
-    await delay(POLL_INTERVAL_MS);
-  }
-  return null;
+  if (Date.now() >= deadlineMs) { return null; }
+  const frameId = await currentStoppedFrameId();
+  if (frameId !== null) { return frameId; }
+  await delay(POLL_INTERVAL_MS);
+  return waitForFrameUntil(deadlineMs);
 }
 
 /** Ask debugpy to pause the first reported thread. */

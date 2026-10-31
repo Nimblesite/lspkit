@@ -16,6 +16,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import * as http from "node:http";
 import path from "node:path";
@@ -78,30 +79,28 @@ async function ensureServer(): Promise<number> {
   if (serverState.server !== undefined && serverState.serverPort !== undefined) {
     return serverState.serverPort;
   }
-  return new Promise<number>((resolve, reject) => {
-    const created = http.createServer((req, res) => {
-      void handleRequest(req, res);
-    });
-    created.on("error", (error: Error) => {
-      Logger.warn(`Profile loopback server error: ${error.message}`);
-      reject(error);
-    });
-    // Port 0 = ephemeral; loopback only — never reachable off-machine.
-    created.listen(0, "127.0.0.1", () => { adoptListening(created, resolve, reject); });
+  const created = http.createServer((req, res) => {
+    void handleRequest(req, res);
   });
+  created.on("error", (error: Error) => {
+    Logger.warn(`Profile loopback server error: ${error.message}`);
+  });
+  // Port 0 = ephemeral; loopback only — never reachable off-machine.
+  created.listen(0, "127.0.0.1");
+  await once(created, "listening");
+  return adoptListening(created);
 }
 
 /** Keep the server once it is listening on a port; one bound without a port is closed. */
-function adoptListening(created: http.Server, resolve: (port: number) => void, reject: (err: Error) => void): void {
+function adoptListening(created: http.Server): number {
   const address = created.address();
   if (address === null || typeof address === "string") {
     created.close();
-    reject(new Error("profile loopback server bound without a port"));
-    return;
+    throw new Error("profile loopback server bound without a port");
   }
   serverState.server = created;
   serverState.serverPort = address.port;
-  resolve(address.port);
+  return address.port;
 }
 
 /** Speedscope.app fetches cross-origin; the token is the access control. */

@@ -6,7 +6,7 @@
 //! A published crates.io tarball has no workspace around it, so the generator
 //! is absent. The release generates the model before `cargo publish` and the
 //! crate's `include` ships it; in that packaged layout this script only checks
-//! the shipped model is present. [REL-PACKAGED-BUILD]
+//! the shipped model is present. [PROF-WIRE-PACKAGED]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

@@ -2,15 +2,7 @@
 
 Implements `[REL-REGIME]`, `[REL-TRIGGER]`, `[REL-VERSION]`, `[REL-GATES]`, `[REL-GITHUB]`, `[REL-OIDC]`, `[REL-ORDER]`, `[REL-METADATA]`, `[REL-PACKAGED-BUILD]` and `[REL-DEPENDABOT]` from [docs/specs/lspkit-spec.md](../specs/lspkit-spec.md#release--publishing). The model is Shipwright's deployment contract plus the AgentPMO `[CI-WORKFLOWS]` standard: CI gates pull requests, and only a version tag ships.
 
-## How to cut a release
-
-```bash
-# From an up-to-date main that CI has already passed:
-gh release create v0.1.0 --target main --generate-notes
-# or: git tag -s v0.1.0 -m "lspkit 0.1.0" && git push origin v0.1.0
-```
-
-Then approve the `release` environment gate on the workflow run. To retry after a failure, re-run the failed workflow run. Both publish wrappers skip versions already on the registry, and the GitHub Release step refreshes assets in place.
+One-time setup and the release command live in [docs/release-setup.md](../release-setup.md).
 
 ## Release flow
 
@@ -37,14 +29,14 @@ sequenceDiagram
 
 Neither registry allows deleting a version. On crates.io, `cargo yank --version X.Y.Z -p <crate>`. On npm, `npm deprecate <pkg>@X.Y.Z "<reason>"`. Then fix forward on `main` and tag a new patch.
 
-## TODO — one-time setup (manual, outside the repo)
+## TODO
 
-- [x] `release` environment exists and only deploys from tags matching `v*.*.*`.
-- [ ] Add a required reviewer to the `release` environment (Settings → Environments → release).
-- [ ] **Bootstrap the four packages that are not on a registry yet.** Trusted Publishing can only be configured on a package that already exists, so each of these needs one manual publish with a short-lived token: `lsp-profiler` and `lsp-profiler-dotnet` on crates.io, and `@nimblesite/lsp-profiler-ui` and `@nimblesite/lspkit-debug` on npm. Publish `0.0.1`, the version already used by the other eight crates.
-- [ ] crates.io: add a Trusted Publisher to all ten crates (owner `Nimblesite`, repo `lspkit`, workflow `release.yml`, environment `release`).
-- [ ] npm: add the same Trusted Publisher to both `@nimblesite/*` packages. Then set "Require two-factor authentication and disallow tokens".
-- [ ] Delete any `CARGO_REGISTRY_TOKEN` or `NPM_TOKEN` secrets from the repository and its environments.
-- [ ] Merge this regime to `main`. Then cut the `dependabot-upgrades` branch from `main` and leave it unprotected. Both branches must carry `dependabot-automerge.yml`.
-- [ ] Code security settings: enable Dependabot alerts and security updates, and use the advanced CodeQL setup (turn off default setup).
-- [ ] Branch protection on `main`: require the `CI` check and pull requests; no direct pushes.
+- [x] Release-only triggers: `ci.yml`, `supply-chain.yml` and `codeql.yml` run on PRs (plus a weekly cron for the scanners), and `release.yml` runs on `v*` tags.
+- [x] Source versions are `0.0.0-dev`, stamped from the tag.
+- [x] `release.yml` runs the CodeQL gate, `make ci`, cargo-deny, `npm audit` and `cargo package --workspace`. It then produces the SBOM, cosign-signed `SHA256SUMS`, provenance attestations and the GitHub Release, and publishes 10 crates and 2 npm packages via OIDC.
+- [x] `lsp-profiler` builds from its published tarball ([PROF-WIRE-PACKAGED]).
+- [x] Dependabot staging branch config and auto-merge workflow.
+- [x] zizmor and osv-scanner (Cargo.lock + both npm lockfiles) in `supply-chain.yml`.
+- [x] The `release` environment only deploys from `v*.*.*` tags.
+- [ ] Manual steps 1–4 in [docs/release-setup.md](../release-setup.md).
+- [ ] First tagged release (`v0.0.2`).

@@ -138,6 +138,13 @@ jobs:
       - name: Supply-chain gate (advisories + bans + licenses + sources)
         run: cargo deny check advisories bans licenses sources
 
+      # The npm half of the vuln gate: fail on a high advisory in anything the
+      # published packages pull in at runtime. [SWR-SEC-VULN-GATE]
+      - name: npm audit (runtime dependencies)
+        run: |
+          npm audit --omit=dev --audit-level=high --prefix packages/lsp-profiler-ui
+          npm audit --omit=dev --audit-level=high --prefix packages/lspkit-debug
+
       # Package every crate and verify each tarball builds on its own, against
       # the other just-packaged crates. The tarballs are checksummed, attested
       # and attached to the release; `cargo publish` uploads the same packaged
@@ -237,6 +244,7 @@ jobs:
       - name: Publish npm packages
         env:
           NODE_AUTH_TOKEN: ""
+          NPM_CONFIG_PROVENANCE: "true" # [SWR-SEC-PROVENANCE]
         run: |
           set -euo pipefail
           for tarball in "${DIST}"/*.tgz; do

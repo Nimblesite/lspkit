@@ -12,7 +12,7 @@ categories = ["development-tools::profiling"]
 # Lean tarball: ship sources + the release-staged license only. LICENSE-MIT is
 # gitignored (staged at publish time), so `include` forces it into the package.
 # `src/**/*` also carries the generated wire model, which build.rs cannot
-# regenerate outside the workspace. [SWR-REL-LICENSE] [PROF-WIRE-GEN]
+# regenerate outside the workspace. [PROF-WIRE-PACKAGED]
 include = ["src/**/*", "build.rs", "LICENSE-MIT"]
 build = "build.rs"
 

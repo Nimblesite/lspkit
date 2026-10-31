@@ -136,6 +136,10 @@ A memory diagnostic about type `T` offers "Show what keeps `T` alive" and "List 
 
 Comments directly above a type, variant or field become doc comments on both sides ([PROF-WIRE-GEN-DOCS]). Generated files are never edited by hand. A build fails if they are stale.
 
+#### [PROF-WIRE-PACKAGED] Published crate build
+
+A crates.io tarball has no workspace, so the generator is absent. `lsp-profiler` packs the generated `src/wire_generated.rs` and its LICENSE through the crate's `include`. `build.rs` runs the generator when `scripts/typediagram/generate.mjs` exists and otherwise requires the packed model, failing with a precise error if it is missing.
+
 #### [PROF-WIRE-GEN-RUST] Rust emission
 
 Serde structs and externally tagged enums.

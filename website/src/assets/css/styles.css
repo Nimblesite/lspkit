@@ -53,7 +53,6 @@ h3 { font-size: 25px; line-height: 1.25; letter-spacing: -.025em; }
 .footer-section { display: flex; justify-content: space-between; gap: 24px; }
 .footer-section h3 { font-size: 16px; letter-spacing: -.02em; }
 .footer-section ul { display: flex; gap: 24px; font-size: 13px; }
-.footer-bottom { margin-top: 24px; padding: 0; font: 12px var(--font-mono); color: var(--color-muted); text-align: left; }
 /* [WEB-DESIGN-LAYOUT] Homepage editorial grid. */
 .home-shell { max-width: var(--max-width); margin: auto; padding: 0 32px; }
 .hero { display: grid; grid-template-columns: 1.8fr 1fr; align-items: end; gap: 64px; padding: 64px 0 48px; }
@@ -71,6 +70,10 @@ h3 { font-size: 25px; line-height: 1.25; letter-spacing: -.025em; }
 .registry svg { width: 22px; height: 22px; }
 .registry a { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; font: 14px var(--font-mono); text-decoration: none; }
 .registry a span { color: var(--color-primary); }
+.hero-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px; }
+.repo-link { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; background: var(--color-text); color: var(--color-bg); font-size: 14px; font-weight: bold; text-decoration: none; }
+.repo-link svg { width: 18px; height: 18px; }
+.footer-bottom { display: none; }
 .engineering-plate { border-top: 1px solid var(--color-border); }
 .engineering-plate img { width: 100%; height: auto; display: block; }
 .engineering-plate figcaption { display: flex; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--color-border); font: 10px/1.5 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--color-muted); }

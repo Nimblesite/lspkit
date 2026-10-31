@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlsplit
 SITE = Path(__file__).resolve().parents[1]
 OUTPUT = SITE / "_site"
 DOCS = ("docs/getting-started", "docs/crates", "docs/profiler", "docs/examples")
+REPO = "https://github.com/Nimblesite/lspkit"
 
 
 class Document(HTMLParser):
@@ -110,11 +111,18 @@ class ProsePages(unittest.TestCase):
         css = OUTPUT / "assets/css/styles.css"
         self.assertLessEqual(len(css.read_text().splitlines()), 2000)
 
-    def test_journal_has_illustrated_posts_and_only_docs_and_journal_navigation(self):
+    def test_journal_has_illustrated_posts_and_docs_journal_and_repo_navigation(self):
         for path in OUTPUT.rglob("*.html"):
             page = Document(path)
-            navigation = [a["href"] for a in page.attributes("a") if "nav-link" in a.get("class", "").split()]
-            self.assertEqual(navigation, ["/docs/", "/blog/"], path)
+            links = page.attributes("a")
+            navigation = [a["href"] for a in links if "nav-link" in a.get("class", "").split()]
+            self.assertEqual(navigation, ["/docs/", "/blog/", REPO], path)
+            self.assertIn("https://www.nimblesite.co", [a.get("href") for a in links], path)
+        home = [a.get("href") for a in Document(OUTPUT / "index.html").attributes("a")]
+        self.assertIn(REPO, home)
+        for package in ("crates.io/crates/lspkit", "crates.io/crates/lspkit-server", "crates.io/crates/lsp-profiler",
+                        "crates.io/crates/lsp-profiler-dotnet", "npmjs.com/package/@nimblesite/lsp-profiler-ui"):
+            self.assertTrue(any(href and href.endswith(package) for href in home), package)
         journal = self.check_page(OUTPUT / "blog/index.html")
         self.assertTrue(journal.attributes("img"), "Journal needs a real header image")
         self.assertTrue(journal.attributes("h2"), "Post titles need a heading hierarchy")

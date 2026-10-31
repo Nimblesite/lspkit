@@ -41,7 +41,7 @@ jobs:
     needs: codeql
     runs-on: ubuntu-latest
     # TIMEOUT EXCEPTION: one job stamps, runs the full `make ci` gate, packages,
-    # signs, cuts the GitHub Release and publishes 4 crates + 2 npm packages.
+    # signs, cuts the GitHub Release and publishes 4 crates + 1 npm package.
     timeout-minutes: 45
     # Protected environment gates the OIDC publishes (reviewer + tag restriction).
     environment: release

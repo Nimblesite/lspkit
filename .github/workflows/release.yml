@@ -219,45 +219,13 @@ jobs:
             bash scripts/npm-publish-or-skip.sh "${tarball}"
           done
 
-  # The website ships with the packages: build it with the Pages base path,
-  # then deploy it once every package is out. [REL-PAGES] [WEB-CONTENT]
-  pages-build:
-    name: Build website
+  # The website ships with the packages, deployed once every package is out.
+  # [REL-PAGES] [WEB-CONTENT]
+  pages:
+    name: Website
     needs: release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "22"
-          package-manager-cache: false
-      - id: pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - name: Build website
-        env:
-          SITE_URL: ${{ steps.pages.outputs.base_url }}
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
-        run: |
-          npm ci --prefix website --no-audit --no-fund
-          npm run build --prefix website -- --pathprefix="${BASE_PATH}/"
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: website/_site
-
-  pages-deploy:
-    name: Deploy website to GitHub Pages
-    needs: pages-build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
     permissions:
+      contents: read
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+    uses: ./.github/workflows/pages.yml

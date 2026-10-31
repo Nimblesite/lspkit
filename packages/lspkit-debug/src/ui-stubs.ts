@@ -22,13 +22,13 @@ export interface UiStubLog {
 export interface UiStubs {
   readonly log: UiStubLog;
   /** Queue the value the next showInformationMessage resolves to. */
-  queueInfo(...values: (string | undefined)[]): UiStubs;
+  queueInfo: (...values: (string | undefined)[]) => UiStubs;
   /** Queue the value the next showWarningMessage resolves to. */
-  queueWarning(...values: (string | undefined)[]): UiStubs;
+  queueWarning: (...values: (string | undefined)[]) => UiStubs;
   /** Queue the value the next showErrorMessage resolves to. */
-  queueError(...values: (string | undefined)[]): UiStubs;
+  queueError: (...values: (string | undefined)[]) => UiStubs;
   /** Restore the original window methods. */
-  restore(): void;
+  restore: () => void;
 }
 
 type ShowKey =
@@ -36,56 +36,114 @@ type ShowKey =
   | "showWarningMessage"
   | "showErrorMessage";
 
-function firstStringArg(args: unknown[]): string {
-  return typeof args[0] === "string" ? args[0] : String(args[0] ?? "");
+/** Everything a stub needs to log a prompt and hand back a queued answer. */
+interface StubState {
+  readonly window: WindowLike;
+  readonly originals: WindowLike;
+  readonly queues: Record<ShowKey, (string | undefined)[]>;
+  readonly log: UiStubLog;
 }
 
-/** Install the stubs onto `window`, returning a controller. Call restore(). */
-export function installUiStubs(window: WindowLike): UiStubs {
-  const infoMessages: string[] = [];
-  const warningMessages: string[] = [];
-  const errorMessages: string[] = [];
-  const queues: Record<ShowKey, (string | undefined)[]> = {
-    showInformationMessage: [],
-    showWarningMessage: [],
-    showErrorMessage: [],
+/** The text a `show*Message` call logged: its first argument, as a string. */
+function firstStringArg(args: readonly unknown[]): string {
+  const [first] = args;
+  if (typeof first === "string") {
+    return first;
+  }
+  if (
+    typeof first === "number" ||
+    typeof first === "boolean" ||
+    typeof first === "bigint"
+  ) {
+    return String(first);
+  }
+  return "";
+}
+
+/** Append queued answers to the queue one prompt will draw from. */
+function pushAnswers(
+  queue: (string | undefined)[],
+  values: readonly (string | undefined)[],
+): void {
+  queue.push(...values);
+}
+
+/** One patched window method: log its message, resolve the next queued answer. */
+function makeStub(
+  queue: (string | undefined)[],
+  sink: string[],
+): (...args: unknown[]) => unknown {
+  return (...args: unknown[]): unknown => {
+    sink.push(firstStringArg(args));
+    return Promise.resolve(queue.shift());
   };
-  const originals: Record<ShowKey, unknown> = {
+}
+
+/** Snapshot the three window methods so {@link UiStubs.restore} can put them back. */
+function snapshotWindow(window: WindowLike): WindowLike {
+  return {
     showInformationMessage: window.showInformationMessage,
     showWarningMessage: window.showWarningMessage,
     showErrorMessage: window.showErrorMessage,
   };
+}
 
-  const mutableWindow = window as unknown as Record<string, unknown>;
-  const patch = (key: ShowKey, sink: string[]): void => {
-    mutableWindow[key] = (...args: unknown[]) => {
-      sink.push(firstStringArg(args));
-      return Promise.resolve(queues[key].shift());
-    };
-  };
-  patch("showInformationMessage", infoMessages);
-  patch("showWarningMessage", warningMessages);
-  patch("showErrorMessage", errorMessages);
+/** Put the snapshotted methods back onto the window. */
+function restoreWindow(window: WindowLike, originals: WindowLike): void {
+  window.showInformationMessage = originals.showInformationMessage;
+  window.showWarningMessage = originals.showWarningMessage;
+  window.showErrorMessage = originals.showErrorMessage;
+}
 
+/** Replace the three window methods with queue-backed stubs. */
+function patchWindow(state: StubState): void {
+  state.window.showInformationMessage = makeStub(
+    state.queues.showInformationMessage,
+    state.log.infoMessages,
+  );
+  state.window.showWarningMessage = makeStub(
+    state.queues.showWarningMessage,
+    state.log.warningMessages,
+  );
+  state.window.showErrorMessage = makeStub(
+    state.queues.showErrorMessage,
+    state.log.errorMessages,
+  );
+}
+
+/** Build the controller the caller queues answers through. */
+function makeController(state: StubState): UiStubs {
   const controller: UiStubs = {
-    log: { infoMessages, warningMessages, errorMessages },
+    log: state.log,
     queueInfo(...values) {
-      queues.showInformationMessage.push(...values);
+      pushAnswers(state.queues.showInformationMessage, values);
       return controller;
     },
     queueWarning(...values) {
-      queues.showWarningMessage.push(...values);
+      pushAnswers(state.queues.showWarningMessage, values);
       return controller;
     },
     queueError(...values) {
-      queues.showErrorMessage.push(...values);
+      pushAnswers(state.queues.showErrorMessage, values);
       return controller;
     },
-    restore() {
-      for (const key of Object.keys(originals) as ShowKey[]) {
-        mutableWindow[key] = originals[key];
-      }
-    },
+    restore: () => restoreWindow(state.window, state.originals),
   };
   return controller;
+}
+
+/** Install the stubs onto `window`, returning a controller. Call restore(). */
+export function installUiStubs(window: WindowLike): UiStubs {
+  const state: StubState = {
+    window,
+    originals: snapshotWindow(window),
+    queues: {
+      showInformationMessage: [],
+      showWarningMessage: [],
+      showErrorMessage: [],
+    },
+    log: { infoMessages: [], warningMessages: [], errorMessages: [] },
+  };
+  patchWindow(state);
+  return makeController(state);
 }

@@ -13,8 +13,9 @@
  */
 
 import * as vscode from "vscode";
-import { cmd, brand } from "./ids";
-import { METHODS, type ProfileProgress } from "./wire-generated";
+import { brand, cmd } from "./ids";
+import { METHODS } from "./wire-generated";
+import type { ProfileProgress } from "./wire-generated";
 import { effect } from "@preact/signals-core";
 import type { LanguageClient } from "vscode-languageclient/node";
 import type { ProfilerStore as Store } from "./store";
@@ -27,7 +28,7 @@ const PROFILER_PROGRESS_NOTIFICATION = METHODS.CPU_PROGRESS;
 /** Status bar priority — slightly lower than the host's main item. */
 const PROFILER_STATUS_BAR_PRIORITY = 99;
 
-let statusBarItem: vscode.StatusBarItem | undefined;
+let statusBarItem: vscode.StatusBarItem | undefined = undefined;
 /** Last-rendered CPU activity, so the e2e seam knows when the item is hidden. */
 let renderedActivity: ProfilerActivity = "idle";
 
@@ -63,15 +64,19 @@ function renderStatusBar(item: vscode.StatusBarItem, session: ProfilerSession): 
     return;
   }
   if (session.cpu === "starting") {
-    // [PROF-UI-STATE] Click → spinner, never click → silence.
-    item.text = "$(loading~spin) Profiler starting…";
-    item.tooltip = `${brand()} is setting up CPU profiling for the program`;
-    item.backgroundColor = undefined;
-    item.show();
+    renderStarting(item);
     return;
   }
 
   renderActive(item, session);
+  item.show();
+}
+
+/** [PROF-UI-STATE] Click → spinner, never click → silence. */
+function renderStarting(item: vscode.StatusBarItem): void {
+  item.text = "$(loading~spin) Profiler starting…";
+  item.tooltip = `${brand()} is setting up CPU profiling for the program`;
+  item.backgroundColor = undefined;
   item.show();
 }
 
@@ -112,8 +117,8 @@ export function profilerStatusText(): string | undefined {
  * instance — so registering once per client *instance* is sufficient.
  */
 export function registerProgressListener(store: Store): vscode.Disposable {
-  let boundClient: LanguageClient | undefined;
-  let registration: vscode.Disposable | undefined;
+  let boundClient: LanguageClient | undefined = undefined;
+  let registration: vscode.Disposable | undefined = undefined;
 
   const disposeEffect = effect(() => {
     const client = store.client.value;

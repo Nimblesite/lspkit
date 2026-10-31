@@ -12,22 +12,23 @@
  * They exercise the real LSP protocol, not mocks.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import * as vscode from 'vscode';
-import { getStore, advertisedServerCommands } from './test-helpers';
 import { arrayField, isRecord, rawField } from '../../unknown-shape';
 import {
     EXTENSION_ID,
+    advertisedServerCommands,
+    closeAllEditors,
+    getStore,
     setupLspTestSuite,
     teardownLspTestSuite,
-    closeAllEditors,
 } from "./test-helpers";
 
 import {
   PROFILER_CLIENT_COMMANDS,
+  PROFILER_EXTRA_SETTINGS,
   PROFILER_SERVER_COMMANDS,
   PROFILER_SETTINGS,
-  PROFILER_EXTRA_SETTINGS
 } from './profiler-test-constants';
 import {
   manifestCommands,
@@ -37,23 +38,33 @@ import {
 
 let tmpDir = '';
 
-function assertCommandRegistered(commandId: string, label: string): void {
-    let threw = false;
-    let disposable: vscode.Disposable | undefined;
+/** The registration probe's handler: registering is the point, so it never runs. */
+function probeHandler(): void {
+    // Registration alone is what must collide; this handler is never invoked.
+}
+
+/** True when registering `commandId` collides with an existing registration. */
+function registerProbeThrows(commandId: string): boolean {
     try {
-        disposable = vscode.commands.registerCommand(commandId, () => { /* probe */ });
+        const probe = vscode.commands.registerCommand(commandId, probeHandler);
+        probe.dispose();
+        return false;
     } catch {
-        threw = true;
-    } finally {
-        disposable?.dispose();
+        return true;
     }
-    assert.ok(threw, `${label} "${commandId}" should be registered after activation`);
+}
+
+function assertCommandRegistered(commandId: string, label: string): void {
+    assert.ok(
+        registerProbeThrows(commandId),
+        `${label} "${commandId}" should be registered after activation`,
+    );
 }
 
 suite('Profiler — Command Registration', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-test-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-test-');
+        tmpDir = setupDir;
     });
 
     suiteTeardown(() => {
@@ -113,9 +124,9 @@ suite('Profiler — Command Registration', () => {
 });
 
 suite('Profiler — Configuration', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-cfg-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-cfg-');
+        tmpDir = setupDir;
     });
 
     suiteTeardown(() => {
@@ -137,12 +148,12 @@ suite('Profiler — Configuration', () => {
         );
         assert.strictEqual(
             config.get<number>('lineThreshold'),
-            1.0,
+            1,
             'lineThreshold should default to 1.0',
         );
         assert.strictEqual(
             config.get<number>('functionThreshold'),
-            2.0,
+            2,
             'functionThreshold should default to 2.0',
         );
         assert.strictEqual(
@@ -234,17 +245,17 @@ suite('Profiler — Configuration', () => {
         // silently ignores is the preset:"memory" defect — never reintroduce one.
         const expectedValues = ['default', 'quick', 'detailed', 'longRunning'];
         assert.deepStrictEqual(
-            [...presetProp.enum].sort(),
-            [...expectedValues].sort(),
+            presetProp.enum.toSorted((left, right) => left.localeCompare(right)),
+            expectedValues.toSorted((left, right) => left.localeCompare(right)),
             'every advertised preset must be one the LSP actually parses',
         );
     });
 });
 
 suite('Profiler — Status Bar', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-sb-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-sb-');
+        tmpDir = setupDir;
     });
 
     suiteTeardown(() => {
@@ -269,9 +280,9 @@ suite('Profiler — Status Bar', () => {
 });
 
 suite('Profiler — Keybindings', () => {
-    suiteSetup(async function () {
-        const result = await setupLspTestSuite('lspui-profiler-kb-');
-        tmpDir = result.tmpDir;
+    suiteSetup(async () => {
+        const { tmpDir: setupDir } = await setupLspTestSuite('lspui-profiler-kb-');
+        tmpDir = setupDir;
     });
 
     suiteTeardown(() => {
@@ -299,11 +310,11 @@ suite('Profiler — Keybindings', () => {
         assert.ok(extension, 'Extension should be found');
 
         const commands = manifestCommands();
-        const commandIds = commands.map((c) => c.command);
+        const commandIds = new Set(commands.map((command) => command.command));
 
         for (const cmd of PROFILER_CLIENT_COMMANDS) {
             assert.ok(
-                commandIds.includes(cmd),
+                commandIds.has(cmd),
                 `Command "${cmd}" should be in package.json contributes.commands`,
             );
         }
@@ -316,7 +327,7 @@ suite('Profiler — Keybindings', () => {
         const commands = manifestCommands();
 
         for (const cmd of PROFILER_CLIENT_COMMANDS) {
-            const entry = commands.find((c) => c.command === cmd);
+            const entry = commands.find((command) => command.command === cmd);
             assert.ok(entry, `Command entry for "${cmd}" should exist`);
             assert.ok(
                 entry.title !== undefined && entry.title.length > 0,

@@ -1,0 +1,81 @@
+{
+  // The one lint config for every TypeScript package in lspkit. Every category is
+  // an error. A rule is off or reshaped only with the reason beside it.
+  "$schema": "./lspkit-debug/node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise", "node"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error",
+    "style": "error",
+    "restriction": "error"
+  },
+  "env": { "node": true, "es2024": true },
+  "rules": {
+    // ES5-compatibility restrictions; TypeScript 7 targets ES2022, where these are the idiom.
+    "oxc/no-async-await": "off",
+    "oxc/no-optional-chaining": "off",
+    "oxc/no-rest-spread-properties": "off",
+    // Both packages compile to CommonJS for the VS Code extension host, where `__dirname` is the API.
+    "unicorn/prefer-module": "off",
+    // Named exports are the module contract; default exports stay banned.
+    "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
+    // Removing `undefined` from a call breaks parameters that are required but nullable.
+    "unicorn/no-useless-undefined": ["error", { "checkArguments": false }],
+    // Contradict co-locating each export with its declaration.
+    "import/group-exports": "off",
+    "import/exports-last": "off",
+    // `import * as vscode` is the VS Code API convention.
+    "import/no-namespace": "off",
+    // These packages run on Node and in the VS Code extension host.
+    "import/no-nodejs-modules": "off",
+    // Tests and shared modules import from parent directories by design.
+    "import/no-relative-parent-imports": "off",
+    // Contradicts unicorn/no-null: VS Code APIs and optional fields are `undefined`.
+    "eslint/no-undefined": "off",
+    // Ternaries are how "expressions over statements" is written in TypeScript.
+    "eslint/no-ternary": "off",
+    // Object key order is meaningful in rendered UI and wire payloads.
+    "eslint/sort-keys": "off",
+    // Deep-readonly parameters are impossible for VS Code API types.
+    "typescript/prefer-readonly-parameter-types": "off",
+    // Fights typescript/promise-function-async; typescript/require-await is the type-aware check.
+    "eslint/require-await": "off",
+    // LSP and DAP wire values use null; `=== null` checks on them are correct.
+    "unicorn/no-null": "off",
+    // Declaration order is grouped by meaning; members within an import stay sorted.
+    "eslint/sort-imports": ["error", { "ignoreDeclarationSort": true }],
+    // `import type` lines are split from value imports by import/consistent-type-specifier-style.
+    "eslint/no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
+    // `void promise` is how a deliberately unawaited promise is marked.
+    "eslint/no-void": ["error", { "allowAsStatement": true }],
+    // Wrapped comments continue mid-sentence on the next line.
+    "eslint/capitalized-comments": ["error", "always", { "ignoreConsecutiveComments": true }],
+    "eslint/func-style": ["error", "declaration", { "allowArrowFunctions": true }],
+    "eslint/one-var": ["error", "never"],
+    "eslint/no-use-before-define": ["error", { "functions": false }],
+    "eslint/id-length": ["error", { "min": 2, "exceptions": ["_", "i", "j", "x", "y"] }],
+    "eslint/no-magic-numbers": ["error", { "ignore": [-1, 0, 1, 2], "ignoreArrayIndexes": true, "ignoreDefaultValues": true }],
+    // AGENTS.md: functions < 20 lines, files < 500 lines.
+    "eslint/max-lines-per-function": ["error", { "max": 20, "skipBlankLines": true, "skipComments": true }],
+    "eslint/max-lines": ["error", { "max": 500, "skipBlankLines": true, "skipComments": true }]
+  },
+  "overrides": [
+    {
+      // Long user-interaction tests with many assertions are the house style.
+      "files": ["**/test/**/*.ts", "**/*.test.ts"],
+      "rules": {
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-statements": "off",
+        "eslint/no-magic-numbers": "off",
+        // Test doubles implement async interfaces without needing to await anything.
+        "typescript/require-await": "off",
+        // Shared contract suites (e.g. testing/webview-contract) register their tests on import.
+        "import/no-unassigned-import": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["**/out/**", "**/dist/**", "**/coverage/**", "**/node_modules/**", "**/.vscode-test/**", "**/wire-generated.ts"]
+}

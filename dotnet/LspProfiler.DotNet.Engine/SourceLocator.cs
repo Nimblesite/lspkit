@@ -73,19 +73,26 @@ internal sealed class SourceLocator : IDisposable
 
         public static ModuleSymbols? Open(string assembly)
         {
-            var pe = new PEReader(File.OpenRead(assembly));
+            // Ownership moves to the ModuleSymbols on success; every other path disposes both readers.
+            PEReader? pe = new(File.OpenRead(assembly));
+            MetadataReaderProvider? provider = null;
             try
             {
-                var found = pe.TryOpenAssociatedPortablePdb(assembly, OpenIfPresent, out var provider, out _);
-                if (found && provider is not null)
+                if (pe.TryOpenAssociatedPortablePdb(assembly, OpenIfPresent, out provider, out _) && provider is not null)
                 {
-                    return new ModuleSymbols(pe, provider);
+                    var symbols = new ModuleSymbols(pe, provider);
+                    (pe, provider) = (null, null);
+                    return symbols;
                 }
             }
             catch (Exception error) when (error is BadImageFormatException or IOException or InvalidOperationException)
             {
             }
-            pe.Dispose();
+            finally
+            {
+                provider?.Dispose();
+                pe?.Dispose();
+            }
             return null;
         }
 

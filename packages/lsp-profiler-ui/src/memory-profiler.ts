@@ -14,7 +14,7 @@
  */
 
 import * as vscode from "vscode";
-import { cmd, brand } from "./ids";
+import { brand, cmd } from "./ids";
 import type { ProfilerStore as Store } from "./store";
 import { bindMemoryStatusBar } from "./memory-status";
 import { withUserProgress } from "./progress-ops";
@@ -28,10 +28,10 @@ import {
 } from "./memory-decorations";
 import {
   LSP_MEM_CMD,
-  memStartTitle,
   endServerSession,
   hasCapturedSnapshot,
   isDirectMemorySession,
+  memStartTitle,
   presentDiff,
   presentSnapshot,
   resetCaptureState,
@@ -58,7 +58,7 @@ export { memoryStatusText } from "./memory-status";
 // ([PROF-UI-PROCESSES]); `boundStore` is the handle this module reads
 // it through (and the e2e seam reads it through `activeMemorySession`).
 
-let boundStore: Store | undefined;
+let boundStore: Store | undefined = undefined;
 
 // ── Registration ──────────────────────────────────────────────────────────
 

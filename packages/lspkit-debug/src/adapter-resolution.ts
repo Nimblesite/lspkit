@@ -6,7 +6,7 @@
 // optional platform probe (e.g. `xcrun -f`), then a list of common install
 // locations. This file owns that chain so no extension re-implements it.
 
-import * as path from "path";
+import path from "node:path";
 
 /** All host effects the resolver needs, injected so it is unit-testable. */
 export interface AdapterResolutionRequest {
@@ -38,41 +38,68 @@ export function looksLikePath(value: string): boolean {
   return value.includes("/") || value.includes("\\");
 }
 
+/** True when `value` holds actual text rather than being absent or empty. */
+function hasText(value: string | undefined): value is string {
+  return value !== undefined && value !== "";
+}
+
+/** First value that holds text, so an empty setting never shadows a real one. */
+function firstNonEmpty(values: readonly (string | undefined)[]): string | undefined {
+  return values.find((value) => hasText(value));
+}
+
+/** Split PATH into its non-empty directories. */
+function pathDirectories(env: NodeJS.ProcessEnv): string[] {
+  return (env.PATH ?? "").split(path.delimiter).filter((dir) => dir !== "");
+}
+
 /** First directory on PATH that contains `command`, or undefined. */
 export function findExecutableOnPath(
   command: string,
   env: NodeJS.ProcessEnv,
-  existsSync: (filePath: string) => boolean,
+  fileExists: (filePath: string) => boolean,
 ): string | undefined {
-  for (const dir of (env.PATH ?? "").split(path.delimiter)) {
-    if (!dir) {
-      continue;
-    }
-    const candidate = path.join(dir, command);
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
+  return pathDirectories(env)
+    .map((dir) => path.join(dir, command))
+    .find((candidate) => fileExists(candidate));
 }
 
 function resolveConfigured(
   configured: string,
   req: AdapterResolutionRequest,
 ): string | undefined {
+  const { existsSync: fileExists } = req;
   if (looksLikePath(configured)) {
-    return req.existsSync(configured) ? configured : undefined;
+    return fileExists(configured) ? configured : undefined;
   }
-  return findExecutableOnPath(configured, req.env, req.existsSync);
+  return findExecutableOnPath(configured, req.env, fileExists);
+}
+
+/** Every bare command name to try on PATH, primary name first. */
+function adapterCommandNames(req: AdapterResolutionRequest): string[] {
+  return [req.commandName, ...(req.legacyNames ?? [])];
+}
+
+function resolveFromPathNames(req: AdapterResolutionRequest): string | undefined {
+  const { existsSync: fileExists } = req;
+  return adapterCommandNames(req)
+    .map((name) => findExecutableOnPath(name, req.env, fileExists))
+    .find((found) => hasText(found));
+}
+
+function findExistingCandidate(req: AdapterResolutionRequest): string | undefined {
+  const { existsSync: fileExists } = req;
+  return req.candidates.find((candidate) => fileExists(candidate));
 }
 
 function probePlatform(req: AdapterResolutionRequest): string | undefined {
-  if (!req.probe) {
+  if (req.probe === undefined) {
     return undefined;
   }
+  const { existsSync: fileExists } = req;
   try {
     const resolved = req.probe("xcrun", ["-f", req.commandName]);
-    return resolved && req.existsSync(resolved) ? resolved : undefined;
+    return hasText(resolved) && fileExists(resolved) ? resolved : undefined;
   } catch {
     return undefined;
   }
@@ -87,25 +114,15 @@ function probePlatform(req: AdapterResolutionRequest): string | undefined {
 export function resolveAdapterPath(
   req: AdapterResolutionRequest,
 ): string | undefined {
-  const configured = req.configValue || req.settingValue;
-  if (configured) {
+  const configured = firstNonEmpty([req.configValue, req.settingValue]);
+  if (configured !== undefined) {
     return resolveConfigured(configured, req);
   }
-
-  const names = [req.commandName, ...(req.legacyNames ?? [])];
-  for (const name of names) {
-    const onPath = findExecutableOnPath(name, req.env, req.existsSync);
-    if (onPath) {
-      return onPath;
-    }
-  }
-
-  const probed = probePlatform(req);
-  if (probed) {
-    return probed;
-  }
-
-  return req.candidates.find(req.existsSync);
+  return (
+    resolveFromPathNames(req) ??
+    probePlatform(req) ??
+    findExistingCandidate(req)
+  );
 }
 
 /**
@@ -131,14 +148,21 @@ export interface MissingAdapterMessageInput {
   checkedSources?: string[];
 }
 
-/** A precise, actionable "adapter not found" message. */
-export function missingAdapterMessage(input: MissingAdapterMessageInput): string {
-  const checked = ["launch config", "VS Code setting", "PATH", ...(input.checkedSources ?? [])];
-  const configured = input.configuredValue
+/** The "Checked …" list every message ends with. */
+function checkedSourcesOf(input: MissingAdapterMessageInput): string {
+  return ["launch config", "VS Code setting", "PATH", ...(input.checkedSources ?? [])].join(
+    ", ",
+  );
+}
+
+/** The "Configured …" clause, present only when a value was configured. */
+function configuredClauseOf(input: MissingAdapterMessageInput): string {
+  return hasText(input.configuredValue)
     ? ` Configured ${input.settingKey}: ${input.configuredValue}.`
     : "";
-  return (
-    `${input.adapterName} was not found. ${input.installHint} or set ${input.settingKey} ` +
-    `to an existing ${input.adapterName} executable. Checked ${checked.join(", ")}.${configured}`
-  );
+}
+
+/** A precise, actionable "adapter not found" message. */
+export function missingAdapterMessage(input: MissingAdapterMessageInput): string {
+  return `${input.adapterName} was not found. ${input.installHint} or set ${input.settingKey} to an existing ${input.adapterName} executable. Checked ${checkedSourcesOf(input)}.${configuredClauseOf(input)}`;
 }

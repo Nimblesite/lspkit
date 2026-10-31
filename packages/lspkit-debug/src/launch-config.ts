@@ -6,7 +6,10 @@
 // applyDefaultOspreyDebugConfig, Basilisk's applyDebugConfigDefaults, and
 // SharpLsp's resolveDebugConfiguration defaulting are all instances of it).
 
-import * as path from "path";
+import path from "node:path";
+
+/** The request kind used when a policy does not ask for another one. */
+const DEFAULT_REQUEST_KIND = "launch";
 
 /** The fields of the active editor's document the synthesizer reads. */
 export interface DebugDocumentLike {
@@ -43,9 +46,45 @@ function defaultDerivedFields(program: string): DebugConfigLike {
   return { cwd: path.dirname(program) };
 }
 
+/** True when a config field carries no value at all. */
+function isAbsent(value: unknown): boolean {
+  return value === undefined || value === null || value === "";
+}
+
 /** True when a config has none of type/request/name (a blank F5 config). */
 export function isBlankConfig(config: DebugConfigLike): boolean {
-  return !config.type && !config.request && !config.name;
+  return isAbsent(config.type) && isAbsent(config.request) && isAbsent(config.name);
+}
+
+/** True when the editor holds a document this policy owns. */
+function ownsDocument(
+  activeEditor: ActiveEditorLike | undefined,
+  policy: LaunchConfigPolicy,
+): activeEditor is ActiveEditorLike {
+  return activeEditor !== undefined && policy.isLanguageDocument(activeEditor.document);
+}
+
+/**
+ * Copy the document-derived fields onto `config` and return it. Mutating
+ * `config` in place is the contract: the caller gets back what it passed in.
+ */
+function fillFromDocument(
+  config: DebugConfigLike,
+  activeEditor: ActiveEditorLike,
+  policy: LaunchConfigPolicy,
+): DebugConfigLike {
+  const program = activeEditor.document.fileName;
+  const derive = policy.deriveFields ?? defaultDerivedFields;
+  return Object.assign(
+    config,
+    {
+      type: policy.type,
+      name: policy.name,
+      request: policy.request ?? DEFAULT_REQUEST_KIND,
+      program,
+    },
+    derive(program),
+  );
 }
 
 /**
@@ -58,19 +97,10 @@ export function applyLaunchConfigDefaults(
   activeEditor: ActiveEditorLike | undefined,
   policy: LaunchConfigPolicy,
 ): DebugConfigLike {
-  if (!isBlankConfig(config)) {
+  if (!isBlankConfig(config) || !ownsDocument(activeEditor, policy)) {
     return config;
   }
-  if (!activeEditor || !policy.isLanguageDocument(activeEditor.document)) {
-    return config;
-  }
-  const program = activeEditor.document.fileName;
-  const derive = policy.deriveFields ?? defaultDerivedFields;
-  config.type = policy.type;
-  config.name = policy.name;
-  config.request = policy.request ?? "launch";
-  config.program = program;
-  return Object.assign(config, derive(program));
+  return fillFromDocument(config, activeEditor, policy);
 }
 
 /** Build a complete default config for a given document (or `{}` if foreign). */

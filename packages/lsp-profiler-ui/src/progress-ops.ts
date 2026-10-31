@@ -38,10 +38,17 @@ function settledPrefix(limit: number): number {
   let open = 0;
   let settled = 0;
   for (const [index, entry] of operationLog.slice(0, limit).entries()) {
-    open += entry.startsWith("begin:") ? 1 : entry.startsWith("end:") ? -1 : 0;
+    open += balanceChange(entry);
     settled = open === 0 ? index + 1 : settled;
   }
   return settled;
+}
+
+/** +1 for an operation start, -1 for its end, 0 otherwise. */
+function balanceChange(entry: string): number {
+  if (entry.startsWith("begin:")) { return 1; }
+  if (entry.startsWith("end:")) { return -1; }
+  return 0;
 }
 
 /** The operation log (e2e seam): `begin:<title>`, `step:<title>:<msg>`, `end:<title>`. */
@@ -64,16 +71,16 @@ function stageReporter(title: string, progress: vscode.Progress<{ message?: stri
  * results…"). The notification closes when the task settles — including on
  * throw, so a failed flow never leaves a zombie spinner.
  */
-export async function withUserProgress<T>(
+export async function withUserProgress<Value>(
   title: string,
-  task: (report: (message: string) => void) => Promise<T>,
-): Promise<T> {
+  task: (report: (message: string) => void) => Promise<Value>,
+): Promise<Value> {
   record(`begin:${title}`);
   Logger.info(`[Progress] begin: ${title}`);
   try {
     return await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title },
-      async (progress) => await task(stageReporter(title, progress)),
+      (progress) => task(stageReporter(title, progress)),
     );
   } finally {
     record(`end:${title}`);
@@ -86,11 +93,11 @@ export async function withUserProgress<T>(
  * bar atop the view) — the right surface for an in-panel refresh, where a
  * notification would be heavyweight.
  */
-export async function withViewProgress<T>(
+export async function withViewProgress<Value>(
   viewId: string,
   title: string,
-  task: () => Promise<T>,
-): Promise<T> {
+  task: () => Promise<Value>,
+): Promise<Value> {
   record(`begin:${title}`);
   try {
     return await vscode.window.withProgress({ location: { viewId } }, task);

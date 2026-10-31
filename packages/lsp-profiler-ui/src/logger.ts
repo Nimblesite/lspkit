@@ -8,16 +8,16 @@
  * no global mutable state lives in this module.
  */
 
-import * as fsModule from "fs";
+import * as fsModule from "node:fs";
 
 // ── Public interface ─────────────────────────────────────────────────────
 
 export enum LogLevel {
   Trace = 0,
-  Debug = 1,
-  Info = 2,
-  Warn = 3,
-  Error = 4,
+  Debug,
+  Info,
+  Warn,
+  Error,
 }
 
 /** Backend-agnostic logging interface. */
@@ -33,21 +33,34 @@ export interface LogSink {
 
 /** Sink that silently discards all messages. */
 export const nullSink: LogSink = {
-  trace(): void { /* noop */ },
-  debug(): void { /* noop */ },
-  info(): void { /* noop */ },
-  warn(): void { /* noop */ },
-  error(): void { /* noop */ },
+  trace(): void {
+    // Noop.
+  },
+  debug(): void {
+    // Noop.
+  },
+  info(): void {
+    // Noop.
+  },
+  warn(): void {
+    // Noop.
+  },
+  error(): void {
+    // Noop.
+  },
 };
 
 /** Sink that fans out to multiple backends. */
 export class CompositeSink implements LogSink {
-  constructor(private readonly sinks: LogSink[]) {}
-  public trace(message: string): void { for (const s of this.sinks) {s.trace(message);} }
-  public debug(message: string): void { for (const s of this.sinks) {s.debug(message);} }
-  public info(message: string): void { for (const s of this.sinks) {s.info(message);} }
-  public warn(message: string): void { for (const s of this.sinks) {s.warn(message);} }
-  public error(message: string): void { for (const s of this.sinks) {s.error(message);} }
+  private readonly sinks: LogSink[];
+  public constructor(sinks: LogSink[]) {
+    this.sinks = sinks;
+  }
+  public trace(message: string): void { for (const sink of this.sinks) {sink.trace(message);} }
+  public debug(message: string): void { for (const sink of this.sinks) {sink.debug(message);} }
+  public info(message: string): void { for (const sink of this.sinks) {sink.info(message);} }
+  public warn(message: string): void { for (const sink of this.sinks) {sink.warn(message);} }
+  public error(message: string): void { for (const sink of this.sinks) {sink.error(message);} }
 }
 
 /**
@@ -60,7 +73,7 @@ const LOG_FILE_MODE = 0o600;
 /** Sink that appends to a file on disk via synchronous writes. */
 export class FileLogSink implements LogSink {
   private readonly fd: number;
-  constructor(filePath: string) {
+  public constructor(filePath: string) {
     // Create+truncate with OWNER-ONLY (0o600) permissions so the log — which
     // can contain workspace paths — is never world-readable, even if a caller
     // ever points this at a shared directory (defense-in-depth for

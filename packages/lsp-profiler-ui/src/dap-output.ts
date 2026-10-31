@@ -27,10 +27,10 @@ import { booleanField, numberField, rawField, stringField } from "./unknown-shap
 
 const MAX_BUFFER_CHARS = 1_000_000;
 
-/** sessionId → accumulated output text. */
+/** Maps sessionId → accumulated output text. */
 const buffers = new Map<string, string>();
 
-/** sessionId → thread ids reported stopped (empty/absent = running). */
+/** Maps sessionId → thread ids reported stopped (empty/absent = running). */
 const stoppedThreads = new Map<string, Set<number>>();
 
 /** Sentinel for a `stopped` event carrying `allThreadsStopped` but no id. */
@@ -89,7 +89,7 @@ const RESUME_COMMANDS = new Set([
  *  says otherwise (`allThreadsContinued` defaults to true per the spec). */
 const ALL_THREAD_RESUMES = new Set(["continue", "reverseContinue"]);
 
-/** sessionId → seq of an in-flight resume request → its command + threadId. */
+/** Maps sessionId → seq of an in-flight resume request → its command + threadId. */
 const pendingResumes = new Map<string, Map<number, { command: string; threadId?: number }>>();
 
 /** Remember an outgoing resume-implying request (DAP tracker, editor → adapter). */
@@ -111,21 +111,35 @@ export function trackResumeRequest(sessionId: string, message: unknown): void {
  * re-arms the bookkeeping when the step lands.
  */
 export function trackResumeResponse(sessionId: string, message: unknown): void {
-  const requestSeq = numberField(message, "request_seq");
-  if (stringField(message, "type") !== "response" || requestSeq === undefined) { return; }
-  const pending = pendingResumes.get(sessionId);
-  const request = pending?.get(requestSeq);
-  if (pending === undefined || request === undefined) { return; }
-  pending.delete(requestSeq);
-  if (pending.size === 0) { pendingResumes.delete(sessionId); }
+  const pending = pendingResumeFor(sessionId, message);
+  if (pending === undefined) { return; }
+  clearPendingResume(sessionId, pending.requestSeq);
   if (booleanField(message, "success") !== true) { return; }
-  const allThreads =
-    ALL_THREAD_RESUMES.has(request.command) &&
-    booleanField(rawField(message, "body"), "allThreadsContinued") !== false;
   trackSuspensionEvent(sessionId, "continued", {
-    threadId: request.threadId,
-    allThreadsContinued: allThreads,
+    threadId: pending.request.threadId,
+    allThreadsContinued: resumeCoversAllThreads(message, pending.request),
   });
+}
+
+/** The in-flight resume request `message` answers, when it is a successful-looking response. */
+function pendingResumeFor(sessionId: string, message: unknown): { requestSeq: number; request: { command: string; threadId?: number } } | undefined {
+  const requestSeq = numberField(message, "request_seq");
+  if (stringField(message, "type") !== "response" || requestSeq === undefined) { return undefined; }
+  const request = pendingResumes.get(sessionId)?.get(requestSeq);
+  return request === undefined ? undefined : { requestSeq, request };
+}
+
+/** Drop one in-flight resume request and, when it was the last, the session's map. */
+function clearPendingResume(sessionId: string, requestSeq: number): void {
+  const pending = pendingResumes.get(sessionId);
+  pending?.delete(requestSeq);
+  if (pending !== undefined && pending.size === 0) { pendingResumes.delete(sessionId); }
+}
+
+/** Whether a successful resume covers every thread (`allThreadsContinued` defaults true). */
+function resumeCoversAllThreads(message: unknown, request: { command: string }): boolean {
+  return ALL_THREAD_RESUMES.has(request.command)
+    && booleanField(rawField(message, "body"), "allThreadsContinued") !== false;
 }
 
 /** Append a chunk of debuggee output for a session (called by the DAP tracker). */

@@ -61,6 +61,7 @@ endif
 # thresholds all have to fail closed). This regression cannot be dropped.
 	$(MAKE) _coverage_check_test
 	$(MAKE) _typediagram_test
+	npm test --prefix packages/lspkit-debug
 
 ## lint: Run all linters/analyzers (read-only). Does NOT format.
 lint:
@@ -69,6 +70,8 @@ lint:
 	$(MAKE) _profiler_spec_check
 	node scripts/link-skills.mjs --check
 	npm run lint --prefix packages/lsp-profiler-ui
+	npm run lint --prefix packages/lspkit-debug
+	$(MAKE) _dotnet_build
 
 ## fmt: Format all code in-place. Pass CHECK=1 for read-only check (CI use).
 fmt:
@@ -115,11 +118,15 @@ help:
 
 ## The profiler's .NET engine and the fixture its e2e tests profile (Release).
 ## lsp-profiler-dotnet's tests run both. [PROF-TESTING]
-_profiler_dotnet:
+_profiler_dotnet: _dotnet_build
+	dotnet test -c Release dotnet/LspProfiler.DotNet.Engine.Tests
+
+## Every .NET project, analyzers at latest-all, warnings as errors (dotnet/Directory.Build.props).
+_dotnet_build:
 	dotnet build -c Release dotnet/LspProfiler.DotNet.Engine
 	dotnet build -c Release dotnet/fixtures/HotLeakApp
 	dotnet build -c Release dotnet/fixtures/HotLeakAppFs
-	dotnet test -c Release dotnet/LspProfiler.DotNet.Engine.Tests
+	dotnet build -c Release dotnet/LspKit.Sidecar
 
 ## The profiler's gitignored wire model ([PROF-WIRE-GEN]). build.rs regenerates
 ## it on every build; rustfmt needs it before anything has been built.

@@ -1,5 +1,6 @@
 // Implements [PROF-UI-DEBUG-LINK]. Shared watch context in CPU, memory and retention panels.
 import { selectedProfileVariable } from "./debug-selection";
+
 export const DEBUG_LINK_BODY = `<section id="debug-variable" hidden aria-label="Debugger variable">
   <strong id="debug-variable-name"></strong><span id="debug-variable-type"></span>
   <pre id="debug-variable-value"></pre><button id="debug-variable-watch">Add to Watch</button>
@@ -31,7 +32,7 @@ const VARIABLE_RENDER = `const text = (id, value) => { document.getElementById(i
 
 /** The debug-link section's script, starting from the current selection. */
 export function debugLinkScript(): string {
-  const initial = JSON.stringify(selectedProfileVariable.value ?? null).split("<").join("\\u003c");
+  const initial = JSON.stringify(selectedProfileVariable.value ?? null).split("<").join(String.raw`\u003c`);
   return `(function () {
     const api = () => globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
     ${VARIABLE_RENDER}

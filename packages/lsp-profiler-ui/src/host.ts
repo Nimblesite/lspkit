@@ -33,5 +33,5 @@ export interface ProfilerHost {
   /** Debuggee PIDs by debug session ID, as the host learns them from DAP. */
   readonly sessionIdToPid: ReadonlySignal<ReadonlyMap<string, number>>;
   /** A launch configuration that runs `program` for profiling, or `undefined` when unsupported. */
-  launchConfig(metric: LaunchMetric, program: string): vscode.DebugConfiguration | undefined;
+  readonly launchConfig: (metric: LaunchMetric, program: string) => vscode.DebugConfiguration | undefined;
 }

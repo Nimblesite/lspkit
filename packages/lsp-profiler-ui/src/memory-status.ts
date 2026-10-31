@@ -12,14 +12,14 @@
  */
 
 import * as vscode from "vscode";
-import { cmd, debugType, brand } from "./ids";
+import { brand, cmd, debugType } from "./ids";
 import { effect } from "@preact/signals-core";
 import type { ProfilerStore as Store } from "./store";
 
 /** Status bar priority — lower than host's main item. */
 const MEMORY_STATUS_BAR_PRIORITY = 98;
 
-let memoryStatusBarItem: vscode.StatusBarItem | undefined;
+let memoryStatusBarItem: vscode.StatusBarItem | undefined = undefined;
 /** Last-rendered visibility, so the e2e seam knows when the item is hidden. */
 let memoryStatusVisible = false;
 

@@ -9,42 +9,30 @@
 // dumping the user on speedscope's empty "Browse" landing page.
 
 import { delay } from "../../timeouts";
-import * as assert from "assert";
-import * as fs from "fs";
-import * as http from "http";
-import * as os from "os";
-import * as path from "path";
+import * as assert from "node:assert";
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { disposeProfileServer, serveProfileForBrowser } from "../../profile-server";
 import { removeTestDir } from './test-helpers';
 
 /** GET a URL and resolve status, headers, and body. */
 async function fetchUrl(
   url: string,
-): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
-  return new Promise((resolve, reject) => {
-    http
-      .get(url, (res) => {
-        let body = "";
-        res.on("data", (chunk: Buffer) => {
-          body += chunk.toString();
-        });
-        res.on("end", () => {
-          resolve({ status: res.statusCode ?? 0, headers: res.headers, body });
-        });
-      })
-      .on("error", reject);
-  });
+): Promise<{ status: number; headers: Headers; body: string }> {
+  const response = await fetch(url);
+  return { status: response.status, headers: response.headers, body: await response.text() };
 }
 
 suite("Profile loopback server — speedscope deep links load automatically", () => {
-  let tmpDir: string;
-  let profilePath: string;
+  let tmpDir = "";
+  let profilePath = "";
   const profileJson = '{"$schema":"https://www.speedscope.app/file-format-schema.json"}';
 
-  suiteSetup(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bsk-profile-server-"));
+  suiteSetup(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "bsk-profile-server-"));
     profilePath = path.join(tmpDir, "profile.speedscope.json");
-    fs.writeFileSync(profilePath, profileJson);
+    await fs.writeFile(profilePath, profileJson);
   });
 
   suiteTeardown(() => {
@@ -67,12 +55,12 @@ suite("Profile loopback server — speedscope deep links load automatically", ()
     assert.strictEqual(response.status, 200, "the registered profile must be fetchable");
     assert.strictEqual(response.body, profileJson, "the body must be the exact exported JSON");
     assert.strictEqual(
-      response.headers["access-control-allow-origin"],
+      response.headers.get("access-control-allow-origin"),
       "*",
       "speedscope.app fetches cross-origin — without CORS the import fails silently",
     );
     assert.strictEqual(
-      response.headers["cache-control"],
+      response.headers.get("cache-control"),
       "no-store",
       "profiles must never be cached beyond the registration",
     );

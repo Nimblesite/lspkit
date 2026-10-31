@@ -21,20 +21,51 @@ export interface ProfilingFlags {
   memoryTrackOnLaunch?: boolean;
 }
 
+/** Options for {@link buildMetricLaunchConfig}. */
+interface MetricLaunchOptions {
+  platform: NodeJS.Platform;
+  darwinCpuStopOnEntry?: boolean;
+}
+
+/** Defaults used when a caller passes no options. */
+const DEFAULT_METRIC_OPTIONS: MetricLaunchOptions = { platform: "linux" };
+
+/** Commands whose breakpoint list is emptied during a profiling launch. */
+const BREAKPOINT_COMMANDS = ["setBreakpoints", "setFunctionBreakpoints"] as const;
+
+/** Fresh, empty breakpoint arguments (a new array per call, never shared). */
+function emptyBreakpointArguments(): { breakpoints: unknown[] } {
+  return { breakpoints: [] };
+}
+
+/** Fresh, empty exception-breakpoint filters, all three DAP forms. */
+function emptyExceptionArguments(): {
+  filters: unknown[];
+  filterOptions: unknown[];
+  exceptionOptions: unknown[];
+} {
+  return { filters: [], filterOptions: [], exceptionOptions: [] };
+}
+
 /** True when the config requests any profiling/tracking mode. */
 export function isProfilingLaunch(config: ProfilingFlags): boolean {
-  return Boolean(config.profileOnLaunch) || Boolean(config.memoryTrackOnLaunch);
+  return config.profileOnLaunch === true || config.memoryTrackOnLaunch === true;
 }
 
 /** The metric a config selects (memory takes precedence over cpu). */
 export function launchMetric(config: ProfilingFlags): LaunchMetric {
-  if (config.memoryTrackOnLaunch) {
+  if (config.memoryTrackOnLaunch === true) {
     return "memory";
   }
-  if (config.profileOnLaunch) {
+  if (config.profileOnLaunch === true) {
     return "cpu";
   }
   return "debug";
+}
+
+/** True for a request that sets breakpoints of some kind. */
+function isBreakpointRequest(command: string | undefined): boolean {
+  return BREAKPOINT_COMMANDS.some((candidate) => candidate === command);
 }
 
 /**
@@ -50,18 +81,13 @@ export function suppressBreakpointsForProfiling(
   if (!profilingLaunch || msg.type !== "request") {
     return msg;
   }
-  switch (msg.command) {
-    case "setBreakpoints":
-    case "setFunctionBreakpoints":
-      return { ...msg, arguments: { ...msg.arguments, breakpoints: [] } };
-    case "setExceptionBreakpoints":
-      return {
-        ...msg,
-        arguments: { ...msg.arguments, filters: [], filterOptions: [], exceptionOptions: [] },
-      };
-    default:
-      return msg;
+  if (isBreakpointRequest(msg.command)) {
+    return { ...msg, arguments: { ...msg.arguments, ...emptyBreakpointArguments() } };
   }
+  if (msg.command === "setExceptionBreakpoints") {
+    return { ...msg, arguments: { ...msg.arguments, ...emptyExceptionArguments() } };
+  }
+  return msg;
 }
 
 /**
@@ -73,9 +99,7 @@ export function suppressBreakpointsForProfiling(
 export function buildMetricLaunchConfig(
   base: DebugConfigLike,
   metric: LaunchMetric,
-  options: { platform: NodeJS.Platform; darwinCpuStopOnEntry?: boolean } = {
-    platform: "linux",
-  },
+  options: MetricLaunchOptions = DEFAULT_METRIC_OPTIONS,
 ): DebugConfigLike {
   if (metric === "memory") {
     return { ...base, memoryTrackOnLaunch: true, stopOnEntry: true };

@@ -7,7 +7,7 @@
  * as a `:0` link to nowhere.
  */
 
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import { toProfileResult } from '../../wire-adapters';
 import { buildFlamegraphHtml } from '../../profiler-flamegraph-html';
 import type { ProfileReport } from '../../wire-generated';

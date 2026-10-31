@@ -5,8 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <AnalysisLevel>latest-all</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- F#'s off-by-default warnings: unused bindings (1182) and malformed XML docs (3390). -->
+    <WarnOn>$(WarnOn);1182;3390</WarnOn>
     <InvariantGlobalization>true</InvariantGlobalization>
     <DebugType>portable</DebugType>
   </PropertyGroup>

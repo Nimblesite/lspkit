@@ -1,10 +1,11 @@
 # agent-pmo:74cf183
 name: CI
 
+# Release-only regime: CI gates PRs to `main` and nothing else. A merge to
+# `main` triggers nothing (every commit on it arrived through a green PR), and
+# shipping happens only when release.yml fires on a `v*` tag. [REL-REGIME] [CI-WORKFLOWS]
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 
 concurrency:
@@ -19,6 +20,9 @@ permissions:
 jobs:
   ci:
     name: CI
+    # Dependabot PRs are swept into `dependabot-upgrades` and reach `main` only
+    # through one consolidation PR, where CI runs once. [GITHUB-DEPENDABOT]
+    if: github.actor != 'dependabot[bot]'
     # Public repositories can use standard runners without larger-runner charges.
     runs-on: ubuntu-22.04
     timeout-minutes: 15
@@ -78,7 +82,9 @@ jobs:
           npm run test:paths --prefix packages/lsp-profiler-ui
 
       - name: Lint
-        run: make lint
+        run: |
+          npm ci --prefix packages/lspkit-debug
+          make lint
 
       # make test = fail-fast + coverage + threshold enforcement.
       # Thresholds live in coverage-thresholds.json.

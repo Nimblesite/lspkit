@@ -16,50 +16,79 @@ export interface DapMessage {
   arguments?: Record<string, unknown>;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined;
+/** Request-argument fields rendered in order by {@link summarizeArgs}. */
+const ARG_KEYS = ["threadId", "frameId", "variablesReference", "expression"] as const;
+
+/** Body fields whose array length is rendered by {@link summarizeBody}. */
+const BODY_COUNT_KEYS = ["stackFrames", "scopes", "variables", "threads"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** Render a traced field without relying on Object's default stringification. */
+function traceValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function isPresent(part: string | undefined): part is string {
+  return part !== undefined;
+}
+
+/** `key=value` for one argument field, or undefined when it is absent. */
+function argPart(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return value === undefined ? undefined : `${key}=${traceValue(value)}`;
+}
+
+/** `key=<count>` for one array field, or undefined when it is absent. */
+function countPart(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return Array.isArray(value) ? `${key}=${value.length}` : undefined;
+}
+
+function reasonPart(record: Record<string, unknown>): string | undefined {
+  return typeof record.reason === "string" ? `reason=${record.reason}` : undefined;
+}
+
+function resultPart(record: Record<string, unknown>): string | undefined {
+  return typeof record.result === "string" ? `result=${record.result}` : undefined;
 }
 
 /** Compact one-line summary of a DAP request's arguments for tracing. */
 export function summarizeArgs(args: unknown): string {
-  const record = asRecord(args);
-  if (!record) {
+  if (!isRecord(args)) {
     return "";
   }
-  const parts: string[] = [];
-  for (const key of ["threadId", "frameId", "variablesReference", "expression"]) {
-    if (record[key] !== undefined) {
-      parts.push(`${key}=${String(record[key])}`);
-    }
-  }
-  if (Array.isArray(record.breakpoints)) {
-    parts.push(`breakpoints=${record.breakpoints.length}`);
-  }
-  return parts.join(" ");
+  return [
+    ...ARG_KEYS.map((key) => argPart(args, key)),
+    countPart(args, "breakpoints"),
+  ]
+    .filter((part) => isPresent(part))
+    .join(" ");
 }
 
 /** Compact one-line summary of a DAP response/event body for tracing. */
 export function summarizeBody(body: unknown): string {
-  const record = asRecord(body);
-  if (!record) {
+  if (!isRecord(body)) {
     return "";
   }
-  const parts: string[] = [];
-  if (typeof record.reason === "string") {
-    parts.push(`reason=${record.reason}`);
-  }
-  if (record.threadId !== undefined) {
-    parts.push(`threadId=${String(record.threadId)}`);
-  }
-  for (const key of ["stackFrames", "scopes", "variables", "threads"]) {
-    if (Array.isArray(record[key])) {
-      parts.push(`${key}=${(record[key] as unknown[]).length}`);
-    }
-  }
-  if (typeof record.result === "string") {
-    parts.push(`result=${record.result}`);
-  }
-  return parts.join(" ");
+  return [
+    reasonPart(body),
+    argPart(body, "threadId"),
+    ...BODY_COUNT_KEYS.map((key) => countPart(body, key)),
+    resultPart(body),
+  ]
+    .filter((part) => isPresent(part))
+    .join(" ");
 }

@@ -1,6 +1,7 @@
 // Implements [PROF-UI-CPU]. Existing SVG export preview.
 import { readFileSync } from "node:fs";
 import { Logger } from "./logger";
+
 const MAX_INLINE_SVG_BYTES = 4_194_304;
 
 /**
@@ -19,9 +20,9 @@ export function loadFlamegraphSvgDataUri(flamegraphPath: string | undefined): st
       return undefined;
     }
     return `data:image/svg+xml;base64,${svg.toString("base64")}`;
-  } catch (err: unknown) {
+  } catch (error: unknown) {
     Logger.warn(
-      `Flame graph SVG could not be inlined (${err instanceof Error ? err.message : String(err)})`,
+      `Flame graph SVG could not be inlined (${error instanceof Error ? error.message : String(error)})`,
     );
     return undefined;
   }

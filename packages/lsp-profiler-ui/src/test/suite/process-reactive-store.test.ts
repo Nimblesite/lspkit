@@ -9,18 +9,21 @@
 // subscriber, and that the poll feeding the store lives store-side
 // (process-poll.ts), gated on view visibility.
 
-import { delay } from "../../timeouts";
-import * as assert from "assert";
+import * as assert from "node:assert";
 import * as vscode from "vscode";
-import { type LanguageClient } from "vscode-languageclient/node";
-import { ProcessesProvider, type ProcessInfo } from "../../process-explorer";
+import type { ProcessInfo } from "../../process-explorer";
+import { ProcessesProvider } from "../../process-explorer";
 import { bindProcessPolling, fetchProcessesIntoStore } from "../../process-poll";
 import { subscribeRevision } from "../../reactive-refresh";
-import { createProfilerStore, type ProfilerStore as Store } from "../../store";
-import { seedSignal, fakeHost, toWireProcess, ungroup } from "./test-helpers";
+import type { ProfilerStore as Store } from "../../store";
+import { createProfilerStore } from "../../store";
+import { fakeHost, fakeLanguageClient, nextMicrotask, pollUntilResult, seedSignal, toWireProcess, ungroup } from "./test-helpers";
 import { numberField, rawField } from "../../unknown-shape";
 
 const MB = 1024 * 1024;
+/** How long a fire-and-forget fetch may take to land in the store. */
+const FETCH_SETTLE_WAIT_MS = 2000;
+const FETCH_SETTLE_POLL_MS = 10;
 
 /** A minimal, debuggable process row. */
 function proc(pid: number, overrides: Partial<ProcessInfo> = {}): ProcessInfo {
@@ -33,19 +36,29 @@ function proc(pid: number, overrides: Partial<ProcessInfo> = {}): ProcessInfo {
   };
 }
 
+/**
+ * A client stand-in whose `sendRequest` answers with `answer()`.
+ *
+ * No runtime check can produce the rest of `LanguageClient`, so the stand-in
+ * is built through `fakeLanguageClient`, whose type guard is the one licensing
+ * point — it is the test double itself, not a payload being read.
+ */
+function clientAnswering(answer: () => unknown): ReturnType<typeof fakeLanguageClient> {
+  return fakeLanguageClient({
+    isRunning: (): boolean => true,
+    onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
+    sendRequest: async (): Promise<unknown> => {
+      await nextMicrotask();
+      return answer();
+    },
+  });
+}
+
 /** A store whose fake LSP client serves the given process table. */
 function storeServing(processes: readonly ProcessInfo[]): Store {
   const store = createProfilerStore(fakeHost());
-  // A stand-in for the members the code under test calls. No runtime check
-  // can produce the rest of `LanguageClient`, so the test double itself is
-  // the one assertion here — it is not a payload being read.
-   
-  const client = {
-    isRunning: (): boolean => true,
-    onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
-    sendRequest: async (): Promise<unknown> => ({ processes: processes.map(toWireProcess) }),
-  } as unknown as LanguageClient;
-  seedSignal(store.client, client);
+  const rows = processes.map((row) => toWireProcess(row));
+  seedSignal(store.client, clientAnswering(() => ({ processes: rows })));
   return store;
 }
 
@@ -66,8 +79,15 @@ function pidsOf(rows: vscode.TreeItem[]): number[] {
     .filter((pid): pid is number => pid !== undefined);
 }
 
+/** `pids` in ascending order, leaving `pids` itself untouched. */
+function sortedAscending(pids: number[]): number[] {
+  const ordered = [...pids];
+  ordered.sort((left, right) => left - right);
+  return ordered;
+}
+
 suite("Processes — pure projection of store Signals (#148)", () => {
-  test("a store bump repaints the tree through the production subscription — no fetch, no timer", async () => {
+  test("a store bump repaints the tree through the production subscription — no fetch, no timer", () => {
     // Deliberately NO LSP client: if the panel needed to fetch anything itself,
     // this test could not render a single row.
     const store = createProfilerStore(fakeHost());
@@ -93,11 +113,13 @@ suite("Processes — pure projection of store Signals (#148)", () => {
   test("the provider owns no data: a second panel over the same store renders the fetched list without fetching", async () => {
     const store = storeServing([proc(1), proc(2)]);
     const fetcher = subscribedProvider(store);
-    const observer = subscribedProvider(store); // never fetches
+    // Never fetches.
+    const observer = subscribedProvider(store);
     try {
       await fetcher.refreshNow();
+      const observerRows = observer.getChildren();
       assert.deepStrictEqual(
-        pidsOf(observer.getChildren()).sort((a, b) => a - b),
+        sortedAscending(pidsOf(observerRows)),
         [1, 2],
         "a panel that never fetched renders the centralised list — the data lives in the store",
       );
@@ -108,14 +130,15 @@ suite("Processes — pure projection of store Signals (#148)", () => {
   });
 
   test("view state (sort, filter, debuggee) is centralised — one panel's change drives every subscriber", async () => {
-    const store = storeServing([proc(10, { cpuPercent: 1, memoryBytes: 99 * MB }), proc(20, { cpuPercent: 50, memoryBytes: 1 * MB })]);
+    const store = storeServing([proc(10, { cpuPercent: 1, memoryBytes: 99 * MB }), proc(20, { cpuPercent: 50, memoryBytes: MB })]);
     const panelA = subscribedProvider(store);
     const panelB = subscribedProvider(store);
     try {
       await panelA.refreshNow();
       assert.deepStrictEqual(pidsOf(panelB.getChildren()), [20, 10], "default sort: CPU descending");
 
-      panelA.cycleSortMode(); // cpu → memory
+      // CPU → memory.
+      panelA.cycleSortMode();
       assert.deepStrictEqual(
         pidsOf(panelB.getChildren()),
         [10, 20],
@@ -127,7 +150,7 @@ suite("Processes — pure projection of store Signals (#148)", () => {
       panelA.setFilter("");
 
       store.setActiveDebuggeePid(20);
-      const debuggeeRow = (panelB.getChildren()).find(
+      const debuggeeRow = panelB.getChildren().find(
         (row) => numberField(rawField(row, "process"), "pid") === 20,
       );
       assert.strictEqual(
@@ -147,12 +170,15 @@ suite("Processes — pure projection of store Signals (#148)", () => {
     const polling = bindProcessPolling(store, { visible: true, onDidChangeVisibility: visibility.event });
     try {
       // The immediate fetch is fire-and-forget; wait for the signal to settle.
-      const deadline = Date.now() + 2000;
-      while (store.processes.value.fetch !== "loaded" && Date.now() < deadline) {
-        await delay(10);
-      }
+      await pollUntilResult({
+        fn: () => store.processes.value.fetch,
+        until: (fetchState) => fetchState === "loaded",
+        timeoutMs: FETCH_SETTLE_WAIT_MS,
+        intervalMs: FETCH_SETTLE_POLL_MS,
+        description: "the store-side poll to fetch on bind",
+      });
       assert.strictEqual(store.processes.value.fetch, "loaded", "the store-side poll must fetch on bind");
-      assert.deepStrictEqual(store.processes.value.list.map((p) => p.pid), [42], "the fetch landed in the store signal");
+      assert.deepStrictEqual(store.processes.value.list.map((row) => row.pid), [42], "the fetch landed in the store signal");
     } finally {
       polling.dispose();
       visibility.dispose();
@@ -167,16 +193,7 @@ suite("Processes — pure projection of store Signals (#148)", () => {
 
     // Failing client → error, and any stale rows are dropped.
     const failing = createProfilerStore(fakeHost());
-    // A stand-in for the members the code under test calls. No runtime check
-  // can produce the rest of `LanguageClient`, so the test double itself is
-  // the one assertion here — it is not a payload being read.
-   
-  const client = {
-      isRunning: (): boolean => true,
-      onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
-      sendRequest: async (): Promise<unknown> => { throw new Error("disconnected"); },
-    } as unknown as LanguageClient;
-    seedSignal(failing.client, client);
+    seedSignal(failing.client, clientAnswering((): never => { throw new Error("disconnected"); }));
     failing.processesLoaded([proc(1)]);
     await fetchProcessesIntoStore(failing);
     assert.strictEqual(failing.processes.value.fetch, "error");

@@ -11,9 +11,11 @@ import type { ProfilerHost } from "./host";
 import { disposeMemoryProfiler, registerMemoryProfiler } from "./memory-profiler";
 import { registerMemoryAutopilot } from "./memory-autopilot";
 import { registerDebuggeePauseTracking } from "./debuggee-pause";
-import { registerProcessesView, type ProcessesProvider } from "./process-explorer";
+import type { ProcessesProvider } from "./process-explorer";
+import { registerProcessesView } from "./process-explorer";
 import { disposeProfiler, registerProfiler } from "./profiler";
-import { createProfilerStore, type ProfilerStore } from "./store";
+import type { ProfilerStore } from "./store";
+import { createProfilerStore } from "./store";
 
 export type { ProfilerHost, LaunchMetric } from "./host";
 export type { ProfilerStore } from "./store";
@@ -30,13 +32,13 @@ export interface ProfilerUi {
   readonly store: ProfilerStore;
   /** The processes tree's data provider: the rows the panel renders, for host suites to observe. */
   readonly processes: ProcessesProvider;
-  dispose(): void;
+  dispose: () => void;
 }
 
 /** A debugger variable's type retainers, from the memory session tracking that same debug session. */
 function typeRetainers(store: ProfilerStore): (type: string, sessionId: string) => Promise<void> {
   return async (type, sessionId) => {
-    if (store.profiler.value.memoryDebugSessionId !== sessionId) throw new Error("Track this debug session before inspecting type retainers.");
+    if (store.profiler.value.memoryDebugSessionId !== sessionId) { throw new Error("Track this debug session before inspecting type retainers."); }
     await walkReferences(store, type);
   };
 }

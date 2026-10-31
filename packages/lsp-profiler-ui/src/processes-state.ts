@@ -15,13 +15,8 @@
  */
 
 import type { Signal } from "@preact/signals-core";
-import {
-  GROUP_CYCLE,
-  SORT_CYCLE,
-  type GroupMode,
-  type ProcessInfo,
-  type SortMode,
-} from "./process-explorer-rows";
+import { GROUP_CYCLE, SORT_CYCLE } from "./process-explorer-rows";
+import type { GroupMode, ProcessInfo, SortMode } from "./process-explorer-rows";
 
 /**
  * The process-fetch lifecycle, mirrored to the `<prefix>.profiler.processesState` context
@@ -93,7 +88,7 @@ export interface ProcessPanelActions {
 }
 
 /** The mode after `current` in `cycle`, wrapping round. */
-function nextInCycle<T>(cycle: readonly T[], current: T): T {
+function nextInCycle<Item>(cycle: readonly Item[], current: Item): Item {
   return cycle[(cycle.indexOf(current) + 1) % cycle.length] ?? current;
 }
 

@@ -8,18 +8,15 @@
 // package.json — the same panel must speak one language at the row level and
 // the title level.
 
-import * as assert from "assert";
+import * as assert from "node:assert";
 import * as vscode from "vscode";
 import { shouldProfileOnLaunch } from "../../profiler";
 import { ProcessesProvider } from "../../process-explorer";
 import { createProfilerStore } from "../../store";
-import { seedSignal, fakeHost, launchConfigOf } from "./test-helpers";
+import { EXTENSION_ID, fakeHost, fakeLanguageClient, launchConfigOf, nextMicrotask, seedSignal } from "./test-helpers";
 import { asRecord } from "../../unknown-shape";
-
-import { EXTENSION_ID } from "./test-helpers";
+import type { CommandContribution, WelcomeContribution } from "./extension-manifest";
 import {
-  type CommandContribution,
-  type WelcomeContribution,
   manifestCommands,
   manifestMenu,
   manifestViewsWelcome
@@ -204,8 +201,7 @@ function providerWithClient(client: unknown): ProcessesProvider {
       onDidChangeState: (): vscode.Disposable => ({ dispose: (): undefined => undefined }),
       ...asRecord(client),
     };
-     
-    seedSignal(store.client, fake as never);
+    seedSignal(store.client, fakeLanguageClient(fake));
   }
   return new ProcessesProvider(store);
 }
@@ -221,7 +217,13 @@ suite("Processes — fetch-state drives the welcome (#147)", () => {
   });
 
   test("a successful fetch settles to 'loaded' — only then is empty genuine", async () => {
-    const provider = providerWithClient({ isRunning: () => true, sendRequest: async () => ({ processes: [] }) });
+    const provider = providerWithClient({
+      isRunning: () => true,
+      sendRequest: async () => {
+        await nextMicrotask();
+        return { processes: [] };
+      },
+    });
     await provider.refreshNow();
     assert.strictEqual(provider.processesState, "loaded");
     provider.dispose();
@@ -230,7 +232,10 @@ suite("Processes — fetch-state drives the welcome (#147)", () => {
   test("a failed fetch settles to 'error', not masquerading as 'no processes'", async () => {
     const provider = providerWithClient({
       isRunning: () => true,
-      sendRequest: async () => { throw new Error("disconnected"); },
+      sendRequest: async () => {
+        await nextMicrotask();
+        throw new Error("disconnected");
+      },
     });
     await provider.refreshNow();
     assert.strictEqual(provider.processesState, "error");
@@ -326,7 +331,7 @@ suite("Run & Profile launch configurations (#82)", () => {
     );
   });
 
-  // dap-1: the global setting is read directly by shouldProfileOnLaunch, so the
+  // DAP-1: the global setting is read directly by shouldProfileOnLaunch, so the
   // stamp carve-out in applyDebugConfigDefaults is not enough on its own — the
   // CPU auto-start must itself refuse a memory-tracking session.
   test("a memory-tracking launch is never CPU-auto-profiled, even with the global setting on (dap-1)", async () => {

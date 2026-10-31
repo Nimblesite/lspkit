@@ -37,7 +37,7 @@ function cutoffFor(counts: number[][], budget: number): Cutoff {
     const row = counts[bucket] ?? [];
     for (let depth = 0; depth < row.length; depth += 1) {
       kept += row[depth] ?? 0;
-      if (kept > budget) return { bucket, depth: depth - 1 };
+      if (kept > budget) { return { bucket, depth: depth - 1 }; }
     }
   }
   return KEEP_ALL;
@@ -50,22 +50,26 @@ const keeps = (cutoff: Cutoff, bucket: number, depth: number): boolean =>
 function bounded(walk: (emit: (rect: RenderRect) => void) => void, total: number, budget: number): BoundedRects {
   const counts: number[][] = [];
   walk((rect) => {
-    const row = (counts[bucketOf(rect.totalWeight, total)] ??= []);
+    const bucket = bucketOf(rect.totalWeight, total);
+    const row = counts[bucket] ?? [];
+    counts[bucket] = row;
     row[rect.depth] = (row[rect.depth] ?? 0) + 1;
   });
   const cutoff = cutoffFor(counts, budget);
   const rects: RenderRect[] = [];
   let hidden = 0;
   walk((rect) => {
-    if (keeps(cutoff, bucketOf(rect.totalWeight, total), rect.depth)) rects.push(rect);
-    else hidden += 1;
+    if (keeps(cutoff, bucketOf(rect.totalWeight, total), rect.depth)) { rects.push(rect); }
+    else { hidden += 1; }
   });
   return { rects, hidden };
 }
 
 /** `rects`, an already built layout over `total` weight, within the budget. */
 export function boundedRects(rects: readonly RenderRect[], total: number, budget = FLAME_RECT_BUDGET): BoundedRects {
-  return bounded((emit) => { rects.forEach(emit); }, total, budget);
+  return bounded((emit) => {
+    for (const rect of rects) { emit(rect); }
+  }, total, budget);
 }
 
 // --- time-order layout ----------------------------------------------------------
@@ -84,13 +88,27 @@ function commonPrefixLength(open: OpenFrame[], stack: number[]): number {
   return lcp;
 }
 
-function closeFramesAbove(open: OpenFrame[], keep: number, cursor: number, emit: (rect: RenderRect) => void): void {
-  while (open.length > keep) {
+/** The index the caller wants the open-stack trimmed to, and where the cursor now is. */
+interface CloseTarget {
+  readonly keep: number;
+  readonly cursor: number;
+}
+
+function closeFramesAbove(open: OpenFrame[], target: CloseTarget, emit: (rect: RenderRect) => void): void {
+  while (open.length > target.keep) {
     const frame = open.pop();
     if (frame !== undefined) {
-      emit({ x0: frame.x0, x1: cursor, depth: open.length, frameIdx: frame.frameIdx,
-        selfWeight: frame.self, totalWeight: cursor - frame.x0 });
+      emit({ x0: frame.x0, x1: target.cursor, depth: open.length, frameIdx: frame.frameIdx,
+        selfWeight: frame.self, totalWeight: target.cursor - frame.x0 });
     }
+  }
+}
+
+/** Add a sample's weight to the top open frame's self time, when a frame is open. */
+function accrueSelf(open: OpenFrame[], weight: number): void {
+  const top = open.at(-1);
+  if (top !== undefined) {
+    top.self += weight;
   }
 }
 
@@ -98,23 +116,21 @@ function closeFramesAbove(open: OpenFrame[], keep: number, cursor: number, emit:
 function walkTimeOrder(profile: SpeedscopeProfile, emit: (rect: RenderRect) => void): void {
   const open: OpenFrame[] = [];
   let cursor = 0;
-  profile.samples.forEach((stack, i) => {
-    closeFramesAbove(open, commonPrefixLength(open, stack), cursor, emit);
-    for (let d = open.length; d < stack.length; d += 1) {
-      open.push({ frameIdx: stack[d], x0: cursor, self: 0 });
+  for (const [i, stack] of profile.samples.entries()) {
+    closeFramesAbove(open, { keep: commonPrefixLength(open, stack), cursor }, emit);
+    for (let depth = open.length; depth < stack.length; depth += 1) {
+      open.push({ frameIdx: stack[depth], x0: cursor, self: 0 });
     }
-    if (open.length > 0) {
-      open[open.length - 1].self += profile.weights[i];
-    }
+    accrueSelf(open, profile.weights[i]);
     cursor += profile.weights[i];
-  });
-  closeFramesAbove(open, 0, cursor, emit);
+  }
+  closeFramesAbove(open, { keep: 0, cursor }, emit);
 }
 
 function normalizeRects(rects: RenderRect[], total: number): RenderRect[] {
   return rects
-    .map((r) => ({ ...r, x0: r.x0 / total, x1: r.x1 / total }))
-    .sort((a, b) => a.depth - b.depth || a.x0 - b.x0);
+    .map((rect) => ({ ...rect, x0: rect.x0 / total, x1: rect.x1 / total }))
+    .toSorted((left, right) => left.depth - right.depth || left.x0 - right.x0);
 }
 
 /** Flame-chart layout: x = time; adjacent identical stacks merge into slabs. */
@@ -124,8 +140,8 @@ export function timeOrderRects(profile: SpeedscopeProfile): RenderRect[] {
 
 /** The time-order layout within the slab budget, as the panel embeds it. */
 export function boundedTimeOrder(profile: SpeedscopeProfile, budget = FLAME_RECT_BUDGET): BoundedRects {
-  const total = profile.weights.reduce((sum, w) => sum + w, 0);
-  if (total <= 0) return { rects: [], hidden: 0 };
+  const total = profile.weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) { return { rects: [], hidden: 0 }; }
   const kept = bounded((emit) => { walkTimeOrder(profile, emit); }, total, budget);
   return { rects: normalizeRects(kept.rects, total), hidden: kept.hidden };
 }

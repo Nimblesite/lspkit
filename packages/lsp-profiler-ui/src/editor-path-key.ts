@@ -18,8 +18,8 @@
  * decorations had the identical latent bug.
  */
 
-import * as path from "path";
-import * as fs from "fs";
+import path from "node:path";
+import * as fs from "node:fs";
 
 /**
  * Key a path for cross-producer comparison.

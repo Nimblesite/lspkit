@@ -3,29 +3,19 @@
 // supplies the client and the debuggee map; the library owns the rest.
 
 import * as vscode from "vscode";
-import { configurePalette, resolvePalette, DEFAULT_PALETTE } from "./palette";
-import { computed, signal, type ReadonlySignal, type Signal } from "@preact/signals-core";
+import { DEFAULT_PALETTE, configurePalette, resolvePalette } from "./palette";
+import { computed, signal } from "@preact/signals-core";
+import type { ReadonlySignal, Signal } from "@preact/signals-core";
 import type { LanguageClient } from "vscode-languageclient/node";
 import { isRecord } from "./unknown-shape";
 import type { ProfilerCapabilities, RuntimeInfo } from "./wire-generated";
 import type { ProfilerHost } from "./host";
 import { installIds } from "./ids";
 import { bindLogger } from "./logger";
-import {
-  createProcessPanelActions,
-  IDLE_PROCESS_PANEL,
-  type ProcessPanelActions,
-  type ProcessPanelState,
-} from "./processes-state";
-import {
-  createProfilerActions,
-  IDLE_PROFILER_SESSION,
-  isCpuBusy,
-  isMemoryBusy,
-  isProfilerBusy,
-  type ProfilerActions,
-  type ProfilerSession,
-} from "./profiler-state";
+import { IDLE_PROCESS_PANEL, createProcessPanelActions } from "./processes-state";
+import type { ProcessPanelActions, ProcessPanelState } from "./processes-state";
+import { IDLE_PROFILER_SESSION, createProfilerActions, isCpuBusy, isMemoryBusy, isProfilerBusy } from "./profiler-state";
+import type { ProfilerActions, ProfilerSession } from "./profiler-state";
 
 export interface ProfilerStore extends ProfilerActions, ProcessPanelActions {
   readonly host: ProfilerHost;

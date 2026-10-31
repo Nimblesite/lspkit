@@ -12,31 +12,32 @@
  * host ([PROF-UI-WEBVIEW], profiler-webview.ts).
  */
 
-import { sampledView, sampledParts } from "./sampled-view";
-import { loadFlamegraphSvgDataUri, flamegraphHeroHtml } from "./flamegraph-artifact";
-export { loadFlamegraphSvgDataUri } from "./flamegraph-artifact";
-import { cmd, brand } from "./ids";
+import { sampledParts, sampledView } from "./sampled-view";
+import { flamegraphHeroHtml, loadFlamegraphSvgDataUri } from "./flamegraph-artifact";
+import { brand, cmd } from "./ids";
 import * as vscode from "vscode";
 import { Logger } from "./logger";
 import { errorText } from "./failure";
 import { openNativeTraceViewer, openSpeedscopeImport, revealTraceFile, traceFileFor } from "./trace-actions";
 import type { ProfileResult } from "./profiler-decorations";
 import {
-  PROFILER_CSS_VARS,
-  PROFILER_CSS_RESET,
   PROFILER_CSS_CARDS,
-  PROFILER_CSS_TABLE,
   PROFILER_CSS_HEADING,
+  PROFILER_CSS_RESET,
+  PROFILER_CSS_TABLE,
+  PROFILER_CSS_VARS,
   PROFILER_JS_UTILS,
   brandHeading,
 } from "./profiler-styles";
 import {
+  SingletonWebviewPanel,
   buildWebviewDocument,
   embedJson,
   handleSourceNavigation,
-  SingletonWebviewPanel,
-  type WebviewMessage,
 } from "./profiler-webview";
+import type { WebviewMessage } from "./profiler-webview";
+
+export { loadFlamegraphSvgDataUri } from "./flamegraph-artifact";
 
 // Implements [PROF-CPU-START]. See docs/specs/LSP-PROFILER-SPEC.md
 // ── Result presentation (#145) ─────────────────────────────────────────────
@@ -91,9 +92,7 @@ export function presentProfileResult(result: ProfileResult): void {
   // Fire-and-forget: a notification carrying action buttons is sticky (VS Code
   // does not auto-dismiss it), so awaiting it would block the stop handler until
   // the user clicks. Its actions open their views when chosen; a rejection is logged.
-  void offerProfileResultActions(result).catch((err: unknown) => {
-    Logger.warn(`Profile completion action failed: ${errorText(err)}`);
-  });
+  void offerProfileResultActionsSafely(result);
 }
 
 /**
@@ -131,6 +130,15 @@ async function offerProfileResultActions(result: ProfileResult): Promise<void> {
     await openNativeTraceViewer(result.cpuProfilePath ?? "", traceFileFor(result));
   } else if (choice === REVEAL_TRACE) {
     await revealTraceFile(traceFileFor(result));
+  }
+}
+
+/** Offer the completion actions, turning a failed action into a logged warning. */
+async function offerProfileResultActionsSafely(result: ProfileResult): Promise<void> {
+  try {
+    await offerProfileResultActions(result);
+  } catch (error: unknown) {
+    Logger.warn(`Profile completion action failed: ${errorText(error)}`);
   }
 }
 

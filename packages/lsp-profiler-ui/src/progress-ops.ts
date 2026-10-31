@@ -80,7 +80,10 @@ export async function withUserProgress<Value>(
   try {
     return await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title },
-      (progress) => task(stageReporter(title, progress)),
+      async (progress) => {
+        const result = await task(stageReporter(title, progress));
+        return result;
+      },
     );
   } finally {
     record(`end:${title}`);

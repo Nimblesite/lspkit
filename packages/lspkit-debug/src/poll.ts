@@ -1,36 +1,21 @@
 // Async polling helper shared by every LspKit debugger integration test.
 //
-// Two call shapes are accepted so the same primitive drops into either house
-// style without a shim:
-//   - object form  : pollUntilResult({ fn, predicate, timeoutMs, intervalMs })
-//   - positional   : pollUntilResult(fn, predicate, timeoutMs, intervalMs)
+// Call shape: pollUntilResult({ fn, predicate, timeoutMs, intervalMs }).
 //
 // It resolves with the LAST observed value (it never throws on timeout) so the
 // caller can assert on what was actually seen and produce a useful message.
 
 import { setTimeout as delay } from "node:timers/promises";
 
-/** Options object form of {@link pollUntilResult}. */
+/** Options for {@link pollUntilResult} and {@link waitForCondition}. */
 export interface PollOptions<TResult> {
   /** The probe to run each interval. */
   fn: () => PromiseLike<TResult>;
-  /** Returns true once the probed value is acceptable. */
-  predicate: (result: TResult) => boolean;
+  /** Returns true once the probed value is acceptable (default: accept the first). */
+  predicate?: (result: TResult) => boolean;
   /** Total budget in milliseconds (default 15000). */
   timeoutMs?: number;
   /** Delay between probes in milliseconds (default 100). */
-  intervalMs?: number;
-}
-
-/** The positional call shape, carried as one value to keep helpers small. */
-interface PollArgs<TResult> {
-  /** The options object, or the probe itself for the positional shape. */
-  optionsOrFn: PollOptions<TResult> | (() => PromiseLike<TResult>);
-  /** Predicate from the positional shape. */
-  predicate?: (result: TResult) => boolean;
-  /** Timeout from the positional shape. */
-  timeoutMs?: number;
-  /** Interval from the positional shape. */
   intervalMs?: number;
 }
 
@@ -47,22 +32,14 @@ export async function sleep(milliseconds: number): Promise<void> {
   await delay(milliseconds);
 }
 
-function normalizePollArgs<TResult>(
-  args: PollArgs<TResult>,
+function withDefaults<TResult>(
+  options: PollOptions<TResult>,
 ): Required<PollOptions<TResult>> {
-  if (typeof args.optionsOrFn === "function") {
-    return {
-      fn: args.optionsOrFn,
-      predicate: args.predicate ?? alwaysAccept,
-      timeoutMs: args.timeoutMs ?? DEFAULT_POLL_TIMEOUT_MS,
-      intervalMs: args.intervalMs ?? DEFAULT_POLL_INTERVAL_MS,
-    };
-  }
   return {
-    fn: args.optionsOrFn.fn,
-    predicate: args.optionsOrFn.predicate,
-    timeoutMs: args.optionsOrFn.timeoutMs ?? DEFAULT_POLL_TIMEOUT_MS,
-    intervalMs: args.optionsOrFn.intervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+    fn: options.fn,
+    predicate: options.predicate ?? alwaysAccept,
+    timeoutMs: options.timeoutMs ?? DEFAULT_POLL_TIMEOUT_MS,
+    intervalMs: options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS,
   };
 }
 
@@ -85,12 +62,9 @@ async function pollAgain<TResult>(
  * returning the last observed value either way.
  */
 export async function pollUntilResult<TResult>(
-  optionsOrFn: PollOptions<TResult> | (() => PromiseLike<TResult>),
-  predicate?: (result: TResult) => boolean,
-  timeoutMs?: number,
-  intervalMs?: number,
+  options: PollOptions<TResult>,
 ): Promise<TResult> {
-  const opts = normalizePollArgs({ optionsOrFn, predicate, timeoutMs, intervalMs });
+  const opts = withDefaults(options);
   const first = await opts.fn();
   return pollAgain(opts, Date.now() + opts.timeoutMs, first);
 }
@@ -101,12 +75,9 @@ export async function pollUntilResult<TResult>(
  */
 export async function waitForCondition<TResult>(
   label: string,
-  optionsOrFn: PollOptions<TResult> | (() => PromiseLike<TResult>),
-  predicate?: (result: TResult) => boolean,
-  timeoutMs?: number,
-  intervalMs?: number,
+  options: PollOptions<TResult>,
 ): Promise<TResult> {
-  const opts = normalizePollArgs({ optionsOrFn, predicate, timeoutMs, intervalMs });
+  const opts = withDefaults(options);
   const last = await pollUntilResult(opts);
   if (!opts.predicate(last)) {
     throw new Error(

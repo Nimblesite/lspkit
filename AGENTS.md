@@ -14,6 +14,7 @@ Reusable Rust components for building language servers, plus the shared CPU and 
 - **Use Too Many Cooks** for file locks and agent messaging when available.
 - **Never weaken, bypass or narrow a CI gate**, threshold or timeout. A red check means the code is wrong.
 - **Don't close GitHub issues** unless the user asks. Keep GitHub Actions spend minimal.
+- **Release-only regime** ([REL-REGIME](docs/specs/lspkit-spec.md#release--publishing)). CI runs on PRs to `main` only; a push to `main` triggers nothing. Shipping happens only when a `v*` tag (or `gh release create vX.Y.Z`) runs `release.yml`, which publishes every crate and npm package via OIDC. Source versions stay `0.0.0-dev`.
 - **Auto-memory is off.** Durable rules are reviewed changes to this file.
 - **Clean up after yourself**: temporary files, build output, disk space.
 

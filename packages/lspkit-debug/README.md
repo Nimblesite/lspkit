@@ -27,7 +27,7 @@ against fakes and runs unchanged inside a real VS Code Extension Host.
 | `saveDirtyOrReject` / `runPreLaunchBuild` | the pre-launch lifecycle, injectable. |
 | `isProfilingLaunch` / `launchMetric` / `buildMetricLaunchConfig` / `suppressBreakpointsForProfiling` | room for CPU/memory profiling on the same launch. |
 | `DapMessage` / `summarizeArgs` / `summarizeBody` | DAP wire shape + compact tracing. |
-| `pollUntilResult` / `waitForCondition` / `sleep` | async polling (object **and** positional call forms). |
+| `pollUntilResult` / `waitForCondition` / `sleep` | async polling with one options object. |
 | `installUiStubs` | queue-backed `window.show*Message` stubs for tests. |
 
 ## Test harness (`@nimblesite/lspkit-debug/testing`)
@@ -59,8 +59,8 @@ const waiters = makeSessionWaiters(vscode.debug);
 bps.setSourceBreakpoints(program, [{ line: 7, condition: "n == 3" }]);
 const session = await waiters.waitForDebugSessionStart();
 const stop = await waitForStop(session);
-await assertLocalVariable(session, stop.stack.stackFrames[0].id, "n", /3/);
-await assertWatch(session, stop.stack.stackFrames[0].id, "n * 2", /6/);
+await assertLocalVariable(session, stop.stack.stackFrames[0].id, { name: "n", matcher: /3/ });
+await assertWatch(session, stop.stack.stackFrames[0].id, { expression: "n * 2", matcher: /6/ });
 await stepIn(session, stop.threadId);
 await continueExecution(session, stop.threadId);
 ```

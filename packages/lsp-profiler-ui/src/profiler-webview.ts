@@ -32,7 +32,7 @@ const CSP_NONCE_BYTES = 16;
  * close the script element early; escaping `<` keeps it an opaque JS string.
  */
 export function embedJson(value: unknown): string {
-  return JSON.stringify(value).split("<").join("\\u003c");
+  return JSON.stringify(value).split("<").join(String.raw`\u003c`);
 }
 
 // ── Document shell ────────────────────────────────────────────────────────
@@ -81,9 +81,9 @@ export interface WebviewMessage {
 
 /** A posted value as a profiler message: an object with a string `type`, a string `file` and a numeric `line` when present. */
 export function webviewMessage(raw: unknown): WebviewMessage | undefined {
-  if (!isRecord(raw) || typeof raw.type !== "string") return undefined;
+  if (!isRecord(raw) || typeof raw.type !== "string") { return undefined; }
   const { type, file, line } = raw;
-  if ((file !== undefined && typeof file !== "string") || (line !== undefined && typeof line !== "number")) return undefined;
+  if ((file !== undefined && typeof file !== "string") || (line !== undefined && typeof line !== "number")) { return undefined; }
   return { type, ...(file === undefined ? {} : { file }), ...(line === undefined ? {} : { line }) };
 }
 
@@ -103,22 +103,38 @@ export interface SingletonWebviewPanelOptions {
  */
 export function handleSourceNavigation(msg: WebviewMessage): boolean {
   if (msg.type === "profileWatch" || msg.type === "profileRetainers") {
-    void vscode.commands.executeCommand(cmd(msg.type === "profileWatch" ? "watchVariable" : "inspectVariableType"))
-      .then(undefined, (error: unknown) => { void vscode.window.showErrorMessage(String(error)); });
+    void runProfileWatchCommand(msg);
     return true;
   }
   if (msg.type !== "navigateToSource" || msg.file === undefined || msg.line === undefined) {
     return false;
   }
-  void revealProfileSource({ file: msg.file, line: msg.line }).catch(() => {
-    void vscode.window.showWarningMessage("Cannot open the selected profile source.");
-  });
+  void revealProfileSourceSafely(msg.file, msg.line);
   return true;
+}
+
+/** Run the watch/inspect command behind a profile navigation click. */
+async function runProfileWatchCommand(msg: WebviewMessage): Promise<void> {
+  const command = cmd(msg.type === "profileWatch" ? "watchVariable" : "inspectVariableType");
+  try {
+    await vscode.commands.executeCommand(command);
+  } catch (error: unknown) {
+    void vscode.window.showErrorMessage(String(error));
+  }
+}
+
+/** Reveal a source line, turning a failed reveal into a warning. */
+async function revealProfileSourceSafely(file: string, line: number): Promise<void> {
+  try {
+    await revealProfileSource({ file, line });
+  } catch {
+    void vscode.window.showWarningMessage("Cannot open the selected profile source.");
+  }
 }
 
 /** Open a measured source line, clamped to the current document (source may have changed). */
 export async function revealProfileSource(location: { file: string; line: number; type?: string }): Promise<void> {
-  if (!Number.isFinite(location.line)) throw new Error("Invalid profile source line");
+  if (!Number.isFinite(location.line)) { throw new TypeError("Invalid profile source line"); }
   const document = await vscode.workspace.openTextDocument(location.file);
   const editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
   const line = Math.min(Math.max(Math.trunc(location.line) - 1, 0), document.lineCount - 1);
@@ -135,13 +151,20 @@ export async function revealProfileSource(location: { file: string; line: number
 export class SingletonWebviewPanel {
   private panel: vscode.WebviewPanel | undefined;
   private visible = false;
+  private readonly viewType: () => string;
+  private readonly onMessage: (msg: WebviewMessage) => void;
+  private readonly options: SingletonWebviewPanelOptions;
 
   /** `viewType` is read when the panel is created, so it follows the host prefix installed later. */
-  constructor(
-    private readonly viewType: () => string,
-    private readonly onMessage: (msg: WebviewMessage) => void,
-    private readonly options: SingletonWebviewPanelOptions = {},
-  ) {}
+  public constructor(
+    viewType: () => string,
+    onMessage: (msg: WebviewMessage) => void,
+    options: SingletonWebviewPanelOptions = {},
+  ) {
+    this.viewType = viewType;
+    this.onMessage = onMessage;
+    this.options = options;
+  }
 
   /** Open the panel (or reveal the existing one) and swap in the new document. */
   public show(title: string, html: string): void {
@@ -175,12 +198,12 @@ export class SingletonWebviewPanel {
     // Bound once per panel instance — the whole reason this class exists.
     panel.webview.onDidReceiveMessage((raw: unknown) => {
       const msg = webviewMessage(raw);
-      if (msg !== undefined) this.onMessage(msg);
+      if (msg !== undefined) { this.onMessage(msg); }
     });
     panel.onDidChangeViewState((event) => {
       const becameVisible = event.webviewPanel.visible && !this.visible;
       this.visible = event.webviewPanel.visible;
-      if (becameVisible) this.options.onDidReveal?.();
+      if (becameVisible) { this.options.onDidReveal?.(); }
     });
   }
 

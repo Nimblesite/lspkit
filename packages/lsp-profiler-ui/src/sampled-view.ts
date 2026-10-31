@@ -1,7 +1,8 @@
 // Implements [PROF-UI-SAMPLED]. Shared interactive view for every sampled runtime.
 import { readFileSync } from "node:fs";
-import { buildFlameModel, parseSpeedscope, type FlameModel } from "./flame-model";
-import { flameBody, FLAME_CSS } from "./flame-html";
+import type { FlameModel } from "./flame-model";
+import { buildFlameModel, parseSpeedscope } from "./flame-model";
+import { FLAME_CSS, flameBody } from "./flame-html";
 import { FLAME_SCRIPT } from "./flame-script";
 import { paletteFrames, profilerPalette } from "./palette";
 import type { ProfileSummary } from "./sample-summary";
@@ -12,8 +13,13 @@ export interface SampledView { readonly model: FlameModel; readonly summary: Pro
 
 /** Load the existing speedscope artifact; metadata from the native host stays intact. */
 export function sampledView(result: ProfileResult): SampledView | undefined {
-  if (result.sampled !== undefined) return result.sampled;
-  if (result.outputFile === "") return undefined;
+  if (result.sampled !== undefined) { return result.sampled; }
+  if (result.outputFile === "") { return undefined; }
+  return sampledViewFromFile(result);
+}
+
+/** Build the sampled view from the existing speedscope artifact on disk. */
+function sampledViewFromFile(result: ProfileResult): SampledView | undefined {
   try {
     const parsed = parseSpeedscope(readFileSync(result.outputFile, "utf8"));
     if (!parsed.ok) { Logger.warn(parsed.error); return undefined; }
@@ -37,7 +43,7 @@ function summaryFromResult(result: ProfileResult, model: FlameModel): ProfileSum
 
 /** One renderer and interaction script, shared with native host imports. */
 export function sampledParts(view: SampledView | undefined): { css: string; body: string; script: string } {
-  if (view === undefined) return { css: "", body: "", script: "" };
+  if (view === undefined) { return { css: "", body: "", script: "" }; }
   const palette = profilerPalette();
   const model = { ...view.model, frames: paletteFrames(view.model.frames, palette) };
   return { css: FLAME_CSS, body: flameBody(model, view.summary), script: FLAME_SCRIPT };

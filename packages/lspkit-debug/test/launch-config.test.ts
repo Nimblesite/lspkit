@@ -1,12 +1,14 @@
-import * as assert from "assert";
-import * as path from "path";
+import * as assert from "node:assert";
+import path from "node:path";
 import {
-  ActiveEditorLike,
   applyLaunchConfigDefaults,
   defaultDebugOutputPath,
   defaultLaunchConfigForEditor,
-  DebugDocumentLike,
   isBlankConfig,
+} from "../src/launch-config";
+import type {
+  ActiveEditorLike,
+  DebugDocumentLike,
   LaunchConfigPolicy,
 } from "../src/launch-config";
 

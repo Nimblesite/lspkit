@@ -38,7 +38,7 @@ export interface SpeedscopeFile {
   profiles: SpeedscopeProfile[];
 }
 
-export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+export type Result<Value> = { ok: true; value: Value } | { ok: false; error: string };
 
 /** One renderable slab. x0/x1 are in [0,1] config space; weights in seconds. */
 export interface RenderRect {
@@ -94,28 +94,33 @@ const isWeight = (weight: unknown): boolean =>
   typeof weight === "number" && Number.isFinite(weight) && weight >= 0;
 
 const isStack = (stack: unknown, frameCount: number): boolean =>
-  Array.isArray(stack) && stack.every((f) => Number.isInteger(f) && f >= 0 && f < frameCount);
+  Array.isArray(stack) && stack.every((frame) => Number.isInteger(frame) && frame >= 0 && frame < frameCount);
 
 /** What is wrong with one profile, if anything. */
 function profileError(raw: unknown, frameCount: number): string | undefined {
-  if (!isRecord(raw)) return "speedscope file has a profile that is not an object";
-  const { type, samples, weights } = raw;
+  if (!isRecord(raw)) { return "speedscope file has a profile that is not an object"; }
   const name = String(raw.name);
-  if (type !== "sampled") return `profile "${name}" has unsupported type "${String(type)}"`;
-  if (!Array.isArray(samples) || !Array.isArray(weights)) return `profile "${name}" is missing samples/weights`;
-  if (samples.length !== weights.length) return `profile "${name}" has ${String(samples.length)} samples but ${String(weights.length)} weights`;
-  if (!weights.every(isWeight)) return `profile "${name}" has a weight that is not a non-negative number`;
-  return samples.every((s) => isStack(s, frameCount)) ? undefined : `profile "${name}" references a frame outside shared.frames`;
+  return profileShapeError(raw, name, frameCount);
+}
+
+/** What is wrong with the shape of one parsed profile. */
+function profileShapeError(raw: Record<string, unknown>, name: string, frameCount: number): string | undefined {
+  const { type, samples, weights } = raw;
+  if (type !== "sampled") { return `profile "${name}" has unsupported type "${String(type)}"`; }
+  if (!Array.isArray(samples) || !Array.isArray(weights)) { return `profile "${name}" is missing samples/weights`; }
+  if (samples.length !== weights.length) { return `profile "${name}" has ${String(samples.length)} samples but ${String(weights.length)} weights`; }
+  if (!weights.every((weight) => isWeight(weight))) { return `profile "${name}" has a weight that is not a non-negative number`; }
+  return samples.every((stack) => isStack(stack, frameCount)) ? undefined : `profile "${name}" references a frame outside shared.frames`;
 }
 
 /** What is wrong with a parsed speedscope document, if anything. */
 function speedscopeError(doc: unknown): string | undefined {
   const shared = isRecord(doc) ? doc.shared : undefined;
   const frames = isRecord(shared) ? shared.frames : undefined;
-  if (!Array.isArray(frames) || !frames.every(isFrame)) return "speedscope file is missing shared.frames";
+  if (!Array.isArray(frames) || !frames.every((frame) => isFrame(frame))) { return "speedscope file is missing shared.frames"; }
   const profiles = isRecord(doc) ? doc.profiles : undefined;
-  if (!Array.isArray(profiles) || profiles.length === 0) return "speedscope file has no profiles";
-  return profiles.map((p) => profileError(p, frames.length)).find((error) => error !== undefined);
+  if (!Array.isArray(profiles) || profiles.length === 0) { return "speedscope file has no profiles"; }
+  return profiles.map((profile) => profileError(profile, frames.length)).find((error) => error !== undefined);
 }
 
 /** The document's outline; `speedscopeError` has checked everything inside it. */
@@ -169,11 +174,11 @@ function insertStack(
   weight: number,
 ): void {
   let children = root;
-  let node: AggNode | undefined;
+  let node: AggNode | undefined = undefined;
   for (const frameIdx of stack) {
     node = childOf(children, frameIdx);
     node.total += weight;
-    children = node.children;
+    ({ children } = node);
   }
   if (node !== undefined) {
     node.self += weight;
@@ -181,80 +186,106 @@ function insertStack(
 }
 
 function sortedByWeight(children: Map<number, AggNode>): AggNode[] {
-  return [...children.values()].sort(
-    (a, b) => b.total - a.total || a.frameIdx - b.frameIdx,
+  return [...children.values()].toSorted(
+    (left, right) => right.total - left.total || left.frameIdx - right.frameIdx,
   );
 }
 
-function emitAggNodes(
-  nodes: AggNode[],
-  x0: number,
-  depth: number,
-  scale: number,
-  out: RenderRect[],
-): void {
-  let x = x0;
+interface AggEmitState {
+  x: number;
+  depth: number;
+  scale: number;
+  out: RenderRect[];
+}
+
+function emitAggNodes(nodes: AggNode[], state: AggEmitState): void {
   for (const node of nodes) {
-    out.push({ x0: x * scale, x1: (x + node.total) * scale, depth, frameIdx: node.frameIdx,
-      selfWeight: node.self, totalWeight: node.total });
-    emitAggNodes(sortedByWeight(node.children), x, depth + 1, scale, out);
-    x += node.total;
+    state.out.push({
+      x0: state.x * state.scale,
+      x1: (state.x + node.total) * state.scale,
+      depth: state.depth,
+      frameIdx: node.frameIdx,
+      selfWeight: node.self,
+      totalWeight: node.total,
+    });
+    emitAggNodes(sortedByWeight(node.children), {
+      x: state.x,
+      depth: state.depth + 1,
+      scale: state.scale,
+      out: state.out,
+    });
+    state.x += node.total;
   }
 }
 
 /** Merge samples into the aggregated left-heavy layout (heaviest first). */
 export function leftHeavyRects(profile: SpeedscopeProfile): RenderRect[] {
-  const total = profile.weights.reduce((sum, w) => sum + w, 0);
+  const total = profile.weights.reduce((sum, weight) => sum + weight, 0);
   if (total <= 0) {
     return [];
   }
   const root = new Map<number, AggNode>();
-  profile.samples.forEach((stack, i) => { insertStack(root, stack, profile.weights[i]); },
-  );
+  for (const [index, stack] of profile.samples.entries()) {
+    insertStack(root, stack, profile.weights[index]);
+  }
   const out: RenderRect[] = [];
-  emitAggNodes(sortedByWeight(root), 0, 0, 1 / total, out);
+  emitAggNodes(sortedByWeight(root), { x: 0, depth: 0, scale: 1 / total, out });
   return out;
 }
 
 // --- per-frame aggregates ---------------------------------------------------------
 
 /** Self/total weight and sample count per frameIdx (recursion deduplicated). */
+function zeros(count: number): number[] {
+  return Array.from({ length: count }, () => 0);
+}
+
 export function frameStats(
   profile: SpeedscopeProfile,
   frameCount: number,
 ): FrameStats {
-  const zeros = (): number[] => new Array<number>(frameCount).fill(0);
-  const stats: FrameStats = { self: zeros(), total: zeros(), count: zeros() };
-  profile.samples.forEach((stack, i) => {
-    const weight = profile.weights[i];
+  const stats: FrameStats = { self: zeros(frameCount), total: zeros(frameCount), count: zeros(frameCount) };
+  for (const [index, stack] of profile.samples.entries()) {
+    const weight = profile.weights[index];
     for (const frameIdx of new Set(stack)) {
       stats.total[frameIdx] += weight;
       stats.count[frameIdx] += 1;
     }
-    if (stack.length > 0) {
-      stats.self[stack[stack.length - 1]] += weight;
+    const leaf = stack.at(-1);
+    if (leaf !== undefined) {
+      stats.self[leaf] += weight;
     }
-  });
+  }
   return stats;
 }
 
 // --- colors -----------------------------------------------------------------------
 
-/** Triangle wave in [0,1] with period 2 — speedscope's color mixer. */
-export const triangle = (v: number): number =>
-  2 * Math.abs(v / 2 - Math.floor(v / 2 + 0.5));
-
+const COLOR_CHANNEL_MAX = 255;
+const TRIANGLE_HALF = 0.5;
 const RUNTIME_HUE = 215;
+const RUNTIME_HUE_MIX_STEPS = 30;
+const RUNTIME_LIGHTNESS_BASE = 58;
+const RUNTIME_LIGHTNESS_RANGE = 12;
+const SOURCE_HUE_RANGE = 324;
+const SOURCE_SATURATION_BASE = 25;
+const SOURCE_SATURATION_RANGE = 20;
+const SOURCE_LIGHTNESS_BASE = 65;
+const SOURCE_LIGHTNESS_RANGE = 15;
 
-/** Deterministic speedscope-style color for the frame ranked `rank` of `n`. */
-export function colorForRank(file: string, rank: number, n: number, isSource = hasSourceFile): string {
-  const bucket = Math.floor((255 * rank) / Math.max(n, 1));
-  const t = bucket / 255;
-  const x = triangle(30 * t);
+/** Triangle wave in [0,1] with period 2 — speedscope's color mixer. */
+export const triangle = (value: number): number =>
+  2 * Math.abs(value / 2 - Math.floor(value / 2 + TRIANGLE_HALF));
+
+/** Deterministic speedscope-style color for the frame ranked `rank` of `frameCount`. */
+export function colorForRank(file: string, rank: number, frameCount: number, isSource = hasSourceFile): string {
+  const bucket = Math.floor((COLOR_CHANNEL_MAX * rank) / Math.max(frameCount, 1));
+  const hue = bucket / COLOR_CHANNEL_MAX;
+  const mix = triangle(RUNTIME_HUE_MIX_STEPS * hue);
   if (!isSource(file)) {
-    return `hsl(${String(RUNTIME_HUE)}, 12%, ${(58 - 12 * x).toFixed(1)}%)`;
+    return `hsl(${String(RUNTIME_HUE)}, 12%, ${(RUNTIME_LIGHTNESS_BASE - RUNTIME_LIGHTNESS_RANGE * mix).toFixed(1)}%)`;
   }
-  return `hsl(${(324 * t).toFixed(1)}, ${(25 + 20 * x).toFixed(1)}%, ${(65 - 15 * x).toFixed(1)}%)`;
+  return `hsl(${(SOURCE_HUE_RANGE * hue).toFixed(1)}, ${(SOURCE_SATURATION_BASE + SOURCE_SATURATION_RANGE * mix).toFixed(1)}%, ${(SOURCE_LIGHTNESS_BASE - SOURCE_LIGHTNESS_RANGE * mix).toFixed(1)}%)`;
 }
 
 /** Stable per-frame colors: frames ranked by (file+name), ramped over hue. */
@@ -265,11 +296,16 @@ export function frameColors(frames: SpeedscopeFrame[], isSource = hasSourceFile)
 
 // --- assembly ------------------------------------------------------------------------
 
-const maxDepth = (rects: RenderRect[]): number =>
-  rects.reduce((deepest, r) => Math.max(deepest, r.depth + 1), 0);
+function maxDepth(rects: RenderRect[]): number {
+  let deepest = 0;
+  for (const rect of rects) {
+    deepest = Math.max(deepest, rect.depth + 1);
+  }
+  return deepest;
+}
 
 function buildFiber(profile: SpeedscopeProfile, frameCount: number): FiberFlame {
-  const totalWeight = profile.weights.reduce((sum, w) => sum + w, 0);
+  const totalWeight = profile.weights.reduce((sum, weight) => sum + weight, 0);
   const leftHeavy = boundedRects(leftHeavyRects(profile), totalWeight);
   const timeOrder = boundedTimeOrder(profile);
   return {
@@ -297,6 +333,6 @@ export function buildFlameModel(doc: SpeedscopeFile, isSource = hasSourceFile): 
       color: colors[i],
       source: isSource(frame.file ?? ""),
     })),
-    fibers: doc.profiles.map((p) => buildFiber(p, doc.shared.frames.length)),
+    fibers: doc.profiles.map((profile) => buildFiber(profile, doc.shared.frames.length)),
   };
 }

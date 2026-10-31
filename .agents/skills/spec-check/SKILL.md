@@ -5,266 +5,32 @@ argument-hint: "[optional spec ID or filename filter]"
 ---
 <!-- agent-pmo:74cf183 -->
 
-# spec-check
+# Spec Check
 
-> **Portable skill.** This skill adapts to the current repository. The agent MUST inspect the repo structure and use judgment to apply these instructions appropriately.
+Every spec section needs implementing code, tests, and logic that matches. Be pedantic and stop at the first failure.
 
-Audit spec/plan documents against the codebase. Ensures every spec section has implementing code, tests, and that the code logic matches the spec.
+`$ARGUMENTS` is optional: an exact ID (`PROF-WIRE-GEN`) checks that one section, and a path fragment (`lspkit`) checks those files. Empty means everything. No matches → error listing the spec files found.
 
-## Arguments
+## Find specs
 
-- `$ARGUMENTS` — optional spec name or ID to check (e.g., `PARSE-CSHARP-NORMALIZE` or `lspkit`). If empty, check ALL specs. Spec IDs are descriptive slugs, NEVER numbered (see Step 1).
+- Search `docs/**/*.md`, `SPEC.md`, `PLAN.md` and `specs/**/*.md` for IDs matching `\[([A-Z][A-Z0-9]*(-[A-Z0-9]+)+)\]`.
+- For each ID, capture the heading text and the section body (up to the next heading of the same or higher level).
 
-## Instructions
+## Validate IDs first
 
-Follow these steps exactly. Be strict and pedantic. Stop on the first failure.
+- **Invalid:** numbered (`[SPEC-001]`, `[CI-004]`), trailing numbers (`[FEAT-AUTH-01]`), or no group (`[TIMEOUT]`).
+- **Valid:** hierarchical slugs, `[GROUP-TOPIC]` or `[GROUP-TOPIC-DETAIL]`, unique across the repo.
+- **Clustered:** sections sharing a first word (the group) must be adjacent.
+- **Complete:** headings that define behavior need an ID.
+- Any violation → list them all with file:line and a suggested rename, then **stop**.
 
----
+## Check each section, stopping at the first failure
 
-### Step 1: Validate spec ID structure
+- **Code refs:** grep the literal ID outside `docs/`, `target/`, `.git/` and `*.md`. Any comment style counts. None → violation.
+- **Test refs:** grep the literal ID in test code (`tests/`, `*_test.rs`, `mod tests`, `packages/*/test/`, `src/test/`, `dotnet/*.Tests/`). None → violation.
+- **Logic match:** read the section, then the code it cites. Flag wrong order, missing conditions, wrong comparisons, missing steps, wrong defaults, and extra behavior that contradicts the spec.
 
-Before checking code/test references, verify that the specs themselves are well-formed.
+## Report
 
-1. Find all spec documents (see locations in Step 2).
-2. Extract every section ID using the regex `\[([A-Z][A-Z0-9]*(-[A-Z0-9]+)+)\]`.
-3. **Flag invalid IDs:**
-   - Numbered IDs (`[SPEC-001]`, `[REQ-003]`, `[CI-004]`) — must be renamed to descriptive hierarchical slugs.
-   - Single-word IDs (`[TIMEOUT]`) — must have a group prefix.
-   - IDs with trailing numbers (`[FEAT-AUTH-01]`) — the number is meaningless, remove it.
-4. **Check group clustering:** The first word of each ID is its group. All sections in the same group MUST appear together (adjacent) in the document. If they're scattered, flag it.
-5. **Check for missing IDs:** Any heading that defines a requirement or behavior should have an ID. Flag headings in spec files that look like they define behavior but lack an ID.
-
-If any ID violations are found, report them all and **STOP**:
-```
-SPEC ID VIOLATIONS:
-
-- docs/specs/lspkit-spec.md line 12: [SPEC-001] → rename to descriptive ID (e.g., [PARSE-CSHARP-NORMALIZE])
-- docs/specs/lspkit-spec.md line 30: [PARSE-CSHARP-NORMALIZE] and [PARSE-CSHARP-LEX] are not adjacent (scattered group)
-- docs/specs/lspkit-spec.md line 5: "## Coverage thresholds" has no spec ID
-
-Fix spec IDs first, then re-run spec-check.
-```
-
-If all IDs are valid, proceed to Step 2.
-
----
-
-### Step 2: Find all spec/plan documents
-
-Search for markdown files that contain spec sections with IDs. Look in these locations:
-
-- `docs/*.md`
-- `docs/**/*.md`
-- `SPEC.md`
-- `PLAN.md`
-- `specs/*.md`
-
-Use Glob to find candidate files, then use Grep to confirm they contain spec IDs.
-
-**Spec ID patterns** — IDs appear in square brackets, typically at the start of a heading or section line. Match this regex pattern:
-
-```
-\[([A-Z][A-Z0-9]*(-[A-Z0-9]+)+)\]
-```
-
-Spec IDs are **hierarchical descriptive slugs, NEVER numbered.** The format is `[GROUP-TOPIC]` or `[GROUP-TOPIC-DETAIL]`. The first word is the **group** — all sections sharing the same group MUST appear together in the spec's table of contents. IDs are uppercase, hyphen-separated, unique across the repo, and MUST NOT contain sequential numbers.
-
-The hierarchy depth varies by repo: two words for simple repos (`[PARSE-LEX]`), three for most (`[PARSE-CSHARP-NORMALIZE]`), four for complex domains (`[PARSE-CSHARP-NORMALIZE-WHITESPACE]`). The hierarchy mirrors the spec document's heading structure.
-
-Examples of valid spec IDs (note how groups cluster):
-- `[PARSE-CSHARP-NORMALIZE]`, `[PARSE-CSHARP-LEX]`, `[PARSE-CSHARP-COMMENTS]` — all in the PARSE-CSHARP group
-- `[RANK-SCORE]`, `[RANK-WEIGHT]`, `[RANK-THRESHOLD]` — all in the RANK group
-- `[VFS-EDIT]`, `[VFS-OPEN]` — all in the VFS group
-- `[ENGINE-API]`, `[ENGINE-SNAPSHOT]` — all in the ENGINE group
-
-Examples of INVALID spec IDs:
-- `[SPEC-001]` — numbered, meaningless
-- `[FEAT-PARSE-01]` — trailing number
-- `[REQ-003]` — sequential index, no group hierarchy
-- `[CI-004]` — numbered, tells the reader nothing
-- `[TIMEOUT]` — no group prefix, ungrouped
-
-For each file, extract every spec ID and its associated section title (the heading text after the ID) and the full section content (everything until the next heading of equal or higher level).
-
----
-
-### Step 3: Filter specs
-
-- If `$ARGUMENTS` is non-empty, filter the discovered specs:
-  - If it matches a spec ID exactly (e.g., `PARSE-CSHARP-NORMALIZE`), check only that spec.
-  - If it matches a partial name (e.g., `lspkit`), check all specs in files whose path contains that string.
-- If `$ARGUMENTS` is empty, process ALL discovered specs.
-
-If filtering produces zero specs, report an error:
-```
-ERROR: No specs found matching "$ARGUMENTS". Discovered spec files: [list them]
-```
-
----
-
-### Step 4: Check each spec section
-
-For EACH spec section that has an ID, perform checks A, B, and C below. **Stop on the first failure.**
-
-#### Check A: Code references the spec ID
-
-Search the entire codebase for the spec ID string, **excluding** these directories:
-- `docs/`
-- `target/`
-- `.git/`
-- `*.md` files (markdown is docs, not code)
-
-Use Grep with the literal spec ID (e.g., `[PARSE-CSHARP-NORMALIZE]`) to find references in code files.
-
-Rust code files should contain comments referencing the spec ID. The search must catch all Rust comment styles:
-
-**C-style `//` comments (Rust source):**
-- `// Implements [PARSE-CSHARP-NORMALIZE]`
-- `// [PARSE-CSHARP-NORMALIZE]`
-- `// Tests [PARSE-CSHARP-NORMALIZE]` (also counts as a code reference)
-- `/// Implements [PARSE-CSHARP-NORMALIZE]` (doc comments)
-- `//! Implements [PARSE-CSHARP-NORMALIZE]` (inner doc comments)
-
-**Block comments:**
-- `/* Implements [PARSE-CSHARP-NORMALIZE] */`
-
-**Hash `#` comments** (TOML, YAML, shell — for `Cargo.toml`, `*.yml`, `*.sh`):
-- `# Implements [PARSE-CSHARP-NORMALIZE]`
-- `# [PARSE-CSHARP-NORMALIZE]`
-
-**The key rule:** any comment containing the exact spec ID string (e.g., `[PARSE-CSHARP-NORMALIZE]`) counts as a valid code reference. The Grep search uses the literal spec ID string, so it naturally matches all comment styles. Do NOT restrict the search to specific comment prefixes — just search for the spec ID string itself.
-
-**If NO code files reference the spec ID:**
-
-```
-SPEC VIOLATION: [PARSE-CSHARP-NORMALIZE] "Section Title" has no implementing code.
-
-Every spec section must have at least one code file that references it via a comment
-containing the spec ID (e.g., `// Implements [PARSE-CSHARP-NORMALIZE]`).
-
-ACTION REQUIRED: Add a comment referencing [PARSE-CSHARP-NORMALIZE] in the file(s) that implement
-this spec section, then re-run spec-check.
-```
-
-**STOP HERE. Do not continue to other checks.**
-
-#### Check B: Tests reference the spec ID
-
-Search test files for the spec ID. Rust test files live in:
-- `tests/` (integration tests)
-- `**/tests/`
-- `**/*_test.rs`
-- Any `mod tests { ... }` block inside a regular `.rs` source file
-
-Use Grep to search these locations for the literal spec ID string.
-
-Tests should contain the spec ID in comments, test names, or annotations:
-
-**Rust:**
-- `// Tests [PARSE-CSHARP-NORMALIZE]`
-- `#[test] // Tests [PARSE-CSHARP-NORMALIZE]`
-- `fn test_parse_csharp_normalize_trims_whitespace() { /* [PARSE-CSHARP-NORMALIZE] */ }`
-- `#[test] fn parse_csharp_normalize_strips_comments() { ... }` (name itself contains the slug form)
-
-**The key rule:** same as Check A — search for the literal spec ID string in test files. Any occurrence of the exact spec ID in a test file counts.
-
-**If NO test files reference the spec ID:**
-
-```
-SPEC VIOLATION: [PARSE-CSHARP-NORMALIZE] "Section Title" has no tests.
-
-Every spec section must have corresponding tests that reference the spec ID.
-
-ACTION REQUIRED: Add tests for [PARSE-CSHARP-NORMALIZE] with a comment or test name containing
-the spec ID, then re-run spec-check.
-```
-
-**STOP HERE. Do not continue to other checks.**
-
-#### Check C: Code logic matches the spec
-
-This is the most critical check. You must:
-
-1. **Read the spec section content carefully.** Understand exactly what behavior, logic, ordering, conditions, and constraints the spec describes.
-
-2. **Read the implementing code.** Use the references found in Check A to locate the implementing files. Read the relevant functions/sections.
-
-3. **Compare spec vs. code.** Be SENSITIVE and PEDANTIC. Check for:
-   - **Ordering violations** — If the spec says A happens before B, the code must do A before B.
-   - **Missing conditions** — If the spec says "only when X", the code must have that condition.
-   - **Extra behavior** — If the code does something the spec doesn't mention, flag it only if it contradicts the spec.
-   - **Wrong logic** — If the spec says "greater than" but code uses "greater than or equal", that's a violation.
-   - **Missing steps** — If the spec describes 5 steps but code only implements 3, that's a violation.
-   - **Wrong defaults** — If the spec says "default to X" but code defaults to Y, that's a violation.
-
-4. **If the code deviates from the spec**, report a detailed error:
-
-```
-SPEC VIOLATION: [PARSE-CSHARP-NORMALIZE] Code does not match spec.
-
-SPEC SAYS:
-> "Normalization must strip leading/trailing whitespace BEFORE removing comment lines"
-> (from docs/specs/lspkit-spec.md, line 42)
-
-CODE DOES:
-> `let s = strip_comments(input); let s = s.trim();` (crates/lspkit-treesitter/src/normalize.rs:42)
-
-DEVIATION: The code strips comments BEFORE trimming whitespace.
-The spec explicitly requires trimming FIRST.
-
-ACTION REQUIRED: Reorder the logic in crates/lspkit-treesitter/src/normalize.rs to trim
-whitespace before stripping comments, as specified in [PARSE-CSHARP-NORMALIZE].
-```
-
-**STOP HERE. Do not continue to other specs.**
-
-5. **If the code matches the spec**, this check passes. Move to the next spec.
-
----
-
-### Step 5: Report results
-
-#### On failure (any check fails):
-
-Output ONLY the first violation found. Use the exact error format shown above. Do not summarize other specs. Do not offer to fix the code. Just report the violation.
-
-End with:
-```
-spec-check FAILED. Fix the violation above and re-run.
-```
-
-#### On success (all specs pass):
-
-Output a summary table:
-
-```
-spec-check PASSED. All specs verified.
-
-| Spec ID                     | Title                    | Code References               | Test References                  | Logic Match |
-|-----------------------------|--------------------------|-------------------------------|----------------------------------|-------------|
-| [PARSE-CSHARP-NORMALIZE]    | C# input normalization   | crates/lspkit-treesitter/src/normalize.rs | crates/lspkit-treesitter/tests/normalize.rs | PASS |
-| [ENGINE-API]                | EngineApi trait surface  | crates/lspkit/src/engine.rs    | crates/lspkit/tests/engine.rs    | PASS        |
-| ...                         | ...                      | ...                           | ...                              | ...         |
-
-Checked N spec sections across M files. All have implementing code, tests, and matching logic.
-```
-
----
-
-## Search strategy summary
-
-1. **Validate spec IDs:** Check all IDs are hierarchical, descriptive, grouped, and non-numbered
-2. **Find spec files:** Glob for `docs/**/*.md`, `SPEC.md`, `PLAN.md`, `specs/**/*.md`
-3. **Extract spec IDs:** Grep for `\[[A-Z][A-Z0-9]*(-[A-Z0-9]+)+\]` in those files
-4. **Find code refs:** Grep for the literal spec ID in all files, excluding `docs/`, `target/`, `.git/`, `*.md`
-5. **Find test refs:** Grep for the literal spec ID in test directories and test file patterns
-6. **Read and compare:** Read the spec section content and the implementing code, compare logic
-
-## Key principles
-
-- **Fail fast.** Stop on the first violation. One fix at a time.
-- **Be pedantic.** If the spec says it, the code must do it. No "close enough".
-- **Quote everything.** Always quote the spec text and the code in error messages so the developer sees exactly what's wrong.
-- **Be actionable.** Every error must tell the developer what file to change and what to do.
-- **Exclude docs from code search.** Markdown files are documentation, not implementation. Only search actual code files for spec references.
-- **No numbered IDs.** Spec IDs are hierarchical descriptive slugs (`[PARSE-CSHARP-NORMALIZE]`), NEVER sequential numbers (`[SPEC-001]`). The first word is the group — sections sharing a group must be adjacent in the TOC. If you encounter numbered or ungrouped IDs, flag them as a violation.
+- **On failure:** only the first violation, quoting the spec text with file:line, quoting the code with file:line, stating the deviation and the exact fix. End with `spec-check FAILED. Fix the violation above and re-run.` Don't fix anything.
+- **On success:** `spec-check PASSED.` plus a table of ID | Title | Code refs | Test refs | Logic, and a count of sections and files.

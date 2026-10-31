@@ -1,13 +1,20 @@
-import * as assert from "assert";
-import { installUiStubs, WindowLike } from "../src/ui-stubs";
+import * as assert from "node:assert";
+import { installUiStubs } from "../src/ui-stubs";
+import type { WindowLike } from "../src/ui-stubs";
 
 function fakeWindow(): WindowLike & { calls: string[] } {
   const calls: string[] = [];
   return {
     calls,
-    showInformationMessage: (...a: unknown[]) => { calls.push(`orig-info:${String(a[0])}`); return undefined; },
-    showWarningMessage: (...a: unknown[]) => { calls.push(`orig-warn:${String(a[0])}`); return undefined; },
-    showErrorMessage: (...a: unknown[]) => { calls.push(`orig-error:${String(a[0])}`); return undefined; },
+    showInformationMessage: (...args: unknown[]) => {
+      calls.push(`orig-info:${String(args[0])}`);
+    },
+    showWarningMessage: (...args: unknown[]) => {
+      calls.push(`orig-warn:${String(args[0])}`);
+    },
+    showErrorMessage: (...args: unknown[]) => {
+      calls.push(`orig-error:${String(args[0])}`);
+    },
   };
 }
 
@@ -40,7 +47,7 @@ suite("installUiStubs", () => {
   test("coerces a non-string first argument for the log", async () => {
     const window = fakeWindow();
     const stubs = installUiStubs(window);
-    await window.showInformationMessage(undefined as unknown as string);
+    await window.showInformationMessage(undefined);
     assert.deepStrictEqual(stubs.log.infoMessages, [""]);
   });
 

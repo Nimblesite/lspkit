@@ -28,7 +28,7 @@ const PROFILER_PROGRESS_NOTIFICATION = METHODS.CPU_PROGRESS;
 /** Status bar priority — slightly lower than the host's main item. */
 const PROFILER_STATUS_BAR_PRIORITY = 99;
 
-let statusBarItem: vscode.StatusBarItem | undefined = undefined;
+let statusBarItem: vscode.StatusBarItem | null = null;
 /** Last-rendered CPU activity, so the e2e seam knows when the item is hidden. */
 let renderedActivity: ProfilerActivity = "idle";
 
@@ -50,7 +50,7 @@ export function bindProfilerStatusBar(store: Store): vscode.Disposable {
     dispose() {
       disposeEffect();
       item.dispose();
-      statusBarItem = undefined;
+      statusBarItem = null;
       renderedActivity = "idle";
     },
   };

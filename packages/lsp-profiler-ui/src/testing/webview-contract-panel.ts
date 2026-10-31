@@ -6,8 +6,9 @@
  * test every earlier post has been delivered or dropped: nothing waits on time.
  */
 
-import * as assert from 'assert';
-import { buildWebviewDocument, SingletonWebviewPanel, type WebviewMessage } from '../profiler-webview';
+import * as assert from 'node:assert';
+import { SingletonWebviewPanel, buildWebviewDocument } from '../profiler-webview';
+import type { WebviewMessage } from '../profiler-webview';
 import { closeAllEditors, pollUntilResult } from './webview-contract-helpers';
 
 /** A document whose script posts `ready` messages for `files`, in order. */
@@ -18,29 +19,37 @@ function postingDoc(files: readonly string[]): string {
 }
 
 /** The files of the messages received, in arrival order. */
-const filesOf = (received: readonly WebviewMessage[]): string[] => received.map((m) => m.file ?? '?');
+const filesOf = (received: readonly WebviewMessage[]): string[] => received.map((message) => message.file ?? '?');
+
+/** How long one live-webview handler test may take before it fails. */
+const HANDLER_TEST_TIMEOUT_MS = 30_000;
 
 async function reRenderingNeverStacksAHandler(this: Mocha.Context): Promise<void> {
-    this.timeout(30_000);
+    this.timeout(HANDLER_TEST_TIMEOUT_MS);
     const received: WebviewMessage[] = [];
     const panel = new SingletonWebviewPanel(() => 'lspui.test.handlerOnce', (msg) => { received.push(msg); });
     try {
-        panel.show('probe', postingDoc(['first']));
-        await pollUntilResult(() => received.length, (count) => count >= 1);
-        // With a handler re-registered per open, every post of the second
-        // render is delivered twice, and `second` arrives again before `end`.
-        panel.show('probe', postingDoc(['second', 'end']));
-        await pollUntilResult(() => filesOf(received).includes('end'), (ended) => ended);
-        assert.deepStrictEqual(filesOf(received), ['first', 'second', 'end'], 'each render must deliver its messages exactly once; a repeat means stacked handlers');
-        assert.ok(panel.isOpen(), 'the singleton panel must stay open across re-renders');
+        await renderTwiceAndAssert(panel, received);
     } finally {
         panel.dispose();
     }
     assert.ok(!panel.isOpen(), 'dispose must settle the panel closed');
 }
 
+/** Re-render one panel and assert each render delivers its posts exactly once. */
+async function renderTwiceAndAssert(panel: SingletonWebviewPanel, received: WebviewMessage[]): Promise<void> {
+    panel.show('probe', postingDoc(['first']));
+    await pollUntilResult(() => received.length, (count) => count >= 1);
+    // With a handler re-registered per open, every post of the second
+    // render is delivered twice, and `second` arrives again before `end`.
+    panel.show('probe', postingDoc(['second', 'end']));
+    await pollUntilResult(() => filesOf(received).includes('end'), (ended) => ended);
+    assert.deepStrictEqual(filesOf(received), ['first', 'second', 'end'], 'each render must deliver its messages exactly once; a repeat means stacked handlers');
+    assert.ok(panel.isOpen(), 'the singleton panel must stay open across re-renders');
+}
+
 async function malformedMessagesNeverReachTheHandler(this: Mocha.Context): Promise<void> {
-    this.timeout(30_000);
+    this.timeout(HANDLER_TEST_TIMEOUT_MS);
     const received: unknown[] = [];
     const panel = new SingletonWebviewPanel(() => 'lspui.test.malformed', (msg) => { received.push(msg); });
     const malformed = `[null, 7, 'ready', [], {}, { type: 5 }, { type: 'ready', file: 5 }, { type: 'ready', line: '3' }]`;

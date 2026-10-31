@@ -116,10 +116,11 @@ export const PROFILER_CSS_HEADING = `
 /** Escape text for an HTML text node or a double-quoted attribute. */
 export function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 /** The webview heading: the host's brand (escaped) as the accent, then `what`. */

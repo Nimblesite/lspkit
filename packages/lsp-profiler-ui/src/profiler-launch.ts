@@ -6,13 +6,13 @@
  */
 
 import * as vscode from "vscode";
-import { debugType, configSection } from "./ids";
+import { configSection, debugType } from "./ids";
 import type { ProfilerStore as Store } from "./store";
-import { delay, POLL_INTERVAL_MS, STARTUP_TIMEOUT_MS } from "./timeouts";
+import { POLL_INTERVAL_MS, STARTUP_TIMEOUT_MS, delay } from "./timeouts";
 import { numberField } from "./unknown-shape";
 
 /** [PROF-ERRORS] `UNSUPPORTED_RUNTIME`: no runtime recognises the PID (yet). */
-const UNSUPPORTED_RUNTIME = -32002;
+const UNSUPPORTED_RUNTIME = -32_002;
 /** Gap between start attempts while a launched program's runtime comes up. */
 const RETRY_GAP_MS = 100;
 
@@ -45,23 +45,19 @@ export function shouldProfileOnLaunch(
  * doesn't fire before debugpy reports the process.
  */
 export async function waitForDebuggeePid(store: Store, sessionId: string): Promise<boolean> {
+  return waitForDebuggeePidUntil(store, sessionId, Date.now() + STARTUP_TIMEOUT_MS);
+}
+
+/** Poll the store for a debuggee PID until it lands or the deadline passes. */
+async function waitForDebuggeePidUntil(store: Store, sessionId: string, deadline: number): Promise<boolean> {
   if (store.getDebuggeeProcessId(sessionId) !== undefined) {
     return true;
   }
-  return await new Promise((resolve) => {
-    const interval = setInterval(() => {
-      if (store.getDebuggeeProcessId(sessionId) !== undefined) {
-        clearInterval(interval);
-        clearTimeout(timeout);
-        resolve(true);
-      }
-    }, POLL_INTERVAL_MS);
-    // Clear BOTH timers on whichever path resolves first so neither dangles.
-    const timeout = setTimeout(() => {
-      clearInterval(interval);
-      resolve(store.getDebuggeeProcessId(sessionId) !== undefined);
-    }, STARTUP_TIMEOUT_MS);
-  });
+  if (Date.now() >= deadline) {
+    return false;
+  }
+  await delay(POLL_INTERVAL_MS);
+  return waitForDebuggeePidUntil(store, sessionId, deadline);
 }
 
 /**
@@ -71,15 +67,19 @@ export async function waitForDebuggeePid(store: Store, sessionId: string): Promi
  * `UNSUPPORTED_RUNTIME` refusal means "not yet" and the start is sent again
  * ([PROF-UI-PROCESSES]). Any other error, or the same one later, is final.
  */
-export async function startWhenRuntimeReady<T>(send: () => Promise<T>, pending: () => boolean): Promise<T> {
+export async function startWhenRuntimeReady<Value>(send: () => Promise<Value>, pending: () => boolean): Promise<Value> {
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-  for (;;) {
-    try {
-      return await send();
-    } catch (error: unknown) {
-      const notYet = numberField(error, "code") === UNSUPPORTED_RUNTIME && pending() && Date.now() < deadline;
-      if (!notYet) { throw error; }
-      await delay(RETRY_GAP_MS);
-    }
+  return startWhenRuntimeReadyBy(deadline, send, pending);
+}
+
+/** One retry step: try the start; on "not yet", wait and try again. */
+async function startWhenRuntimeReadyBy<Value>(deadline: number, send: () => Promise<Value>, pending: () => boolean): Promise<Value> {
+  try {
+    return await send();
+  } catch (error: unknown) {
+    const notYet = numberField(error, "code") === UNSUPPORTED_RUNTIME && pending() && Date.now() < deadline;
+    if (!notYet) { throw error; }
+    await delay(RETRY_GAP_MS);
+    return startWhenRuntimeReadyBy(deadline, send, pending);
   }
 }

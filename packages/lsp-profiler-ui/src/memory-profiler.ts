@@ -58,7 +58,7 @@ export { memoryStatusText } from "./memory-status";
 // ([PROF-UI-PROCESSES]); `boundStore` is the handle this module reads
 // it through (and the e2e seam reads it through `activeMemorySession`).
 
-let boundStore: Store | undefined = undefined;
+let boundStore: Store | null = null;
 
 // ── Registration ──────────────────────────────────────────────────────────
 

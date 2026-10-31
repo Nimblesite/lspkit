@@ -13,17 +13,13 @@
  */
 
 import * as vscode from "vscode";
-import type { LanguageClient } from "vscode-languageclient/node";
-import { cmd, viewId, brand } from "./ids";
+import { brand, cmd, viewId } from "./ids";
 import { Logger } from "./logger";
 import type { ProfilerStore as Store } from "./store";
 import { reportFailure } from "./failure";
 import { withUserProgress } from "./progress-ops";
-import {
-  applyProfileDecorations,
-  disposeProfileDecorations,
-  type ProfileResult,
-} from "./profiler-decorations";
+import type { ProfileResult } from "./profiler-decorations";
+import { applyProfileDecorations, disposeProfileDecorations } from "./profiler-decorations";
 import {
   disposeFlamegraphPanel,
   openFlamegraphWebview,
@@ -47,16 +43,16 @@ export { shouldProfileOnLaunch } from "./profiler-launch";
 // Processes panel react to it. Only the last result is cached here — a
 // UI artifact (re-applied as decorations on editor focus), not session state.
 
-let lastResult: ProfileResult | undefined;
+const lastProfile: { result: ProfileResult | undefined } = { result: undefined };
 
 /** The most recent CPU result the UI presented (e2e seam). */
 export function lastProfileResult(): ProfileResult | undefined {
-  return lastResult;
+  return lastProfile.result;
 }
 
 /** Keep `result` as the last one and paint its heat on the editors. */
 function keepResult(result: ProfileResult): void {
-  lastResult = result;
+  lastProfile.result = result;
   applyProfileDecorations(result);
 }
 
@@ -75,7 +71,7 @@ export function registerProfiler(store: Store): vscode.Disposable[] {
     registerProgressListener(store),
     // Decorations follow the last result onto every newly visible editor.
     vscode.window.onDidChangeVisibleTextEditors(() => {
-      if (lastResult !== undefined) { applyProfileDecorations(lastResult); }
+      if (lastProfile.result !== undefined) { applyProfileDecorations(lastProfile.result); }
     }),
     vscode.debug.onDidStartDebugSession((session) => { profileOnLaunch(store, session); }),
     vscode.debug.onDidTerminateDebugSession(() => { stopWithDebugSession(store); }),
@@ -119,7 +115,7 @@ async function handleProfileStart(): Promise<void> {
 
 /** The running client and the active CPU session, or a warning that there is none. */
 interface ActiveSession {
-  readonly client: LanguageClient;
+  readonly client: NonNullable<Store["client"]["value"]>;
   readonly sessionId: string;
 }
 
@@ -133,14 +129,20 @@ function activeSession(store: Store): ActiveSession | undefined {
   return { client, sessionId };
 }
 
+/** The title and first progress step of a report request. */
+interface ReportProgress {
+  readonly title: string;
+  readonly step: string;
+}
+
 /**
  * Ask the server for the active session's report under a progress
  * notification: collecting samples and writing artifacts takes a beat
  * ([PROF-UI-STATE]).
  */
-async function collectReport(active: ActiveSession, command: string, title: string, step: string): Promise<ProfileResult | undefined> {
-  return await withUserProgress(title, async (report) => {
-    report(step);
+async function collectReport(active: ActiveSession, command: string, progress: ReportProgress): Promise<ProfileResult | undefined> {
+  return withUserProgress(progress.title, async (report) => {
+    report(progress.step);
     const raw = await executeServerCommand<ProfileReport>(active.client, command, { session_id: active.sessionId });
     return raw === undefined ? undefined : toProfileResult(raw);
   });
@@ -150,28 +152,33 @@ async function handleProfileStop(store: Store): Promise<void> {
   const active = activeSession(store);
   if (active === undefined) { return; }
   try {
-    const result = await collectReport(active, CPU_CMD.stop, `${brand()}: Stopping profiler`, "Collecting results…");
+    const result = await collectReport(active, CPU_CMD.stop, { title: `${brand()}: Stopping profiler`, step: "Collecting results…" });
     store.profilerStopped();
-    if (result === undefined) { return; }
-    keepResult(result);
-    // Land the user on the self-contained results panel, beside the
-    // heat-mapped source; the raw `.cpuprofile` stays one click away
-    // ([PROF-CPU-START], #145).
-    presentProfileResult(result);
-  } catch (err: unknown) {
+    presentStopResult(result);
+  } catch (error: unknown) {
     store.profilerStopped();
-    reportFailure("Profile stop", err);
+    reportFailure("Profile stop", error);
   }
+}
+
+/** Keep and present a stop result, when the server returned one. */
+function presentStopResult(result: ProfileResult | undefined): void {
+  if (result === undefined) { return; }
+  keepResult(result);
+  // Land the user on the self-contained results panel, beside the
+  // heat-mapped source; the raw `.cpuprofile` stays one click away
+  // ([PROF-CPU-START], #145).
+  presentProfileResult(result);
 }
 
 async function handleProfileSnapshot(store: Store): Promise<void> {
   const active = activeSession(store);
   if (active === undefined) { return; }
   try {
-    const result = await collectReport(active, CPU_CMD.snapshot, `${brand()}: Taking profile snapshot`, "Collecting samples so far…");
+    const result = await collectReport(active, CPU_CMD.snapshot, { title: `${brand()}: Taking profile snapshot`, step: "Collecting samples so far…" });
     if (result !== undefined) { announceSnapshot(result); }
-  } catch (err: unknown) {
-    reportFailure("Profile snapshot", err);
+  } catch (error: unknown) {
+    reportFailure("Profile snapshot", error);
   }
 }
 
@@ -182,11 +189,16 @@ async function handleProfileSnapshot(store: Store): Promise<void> {
 function announceSnapshot(result: ProfileResult): void {
   keepResult(result);
   Logger.info(`Profile snapshot: ${String(result.totalSamples)} samples so far`);
-  void vscode.window
-    .showInformationMessage(`${brand()}: Snapshot — ${String(result.totalSamples)} samples (profiling continues)`, "View Results")
-    .then((choice) => {
-      if (choice === "View Results") { openFlamegraphWebview(result); }
-    });
+  void offerSnapshotView(result);
+}
+
+/** Offer the snapshot's results panel and open it when the user accepts. */
+async function offerSnapshotView(result: ProfileResult): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(
+    `${brand()}: Snapshot — ${String(result.totalSamples)} samples (profiling continues)`,
+    "View Results",
+  );
+  if (choice === "View Results") { openFlamegraphWebview(result); }
 }
 
 /**
@@ -196,13 +208,13 @@ function announceSnapshot(result: ProfileResult): void {
  * ([PROF-CPU-START]).
  */
 function handleProfileShowResults(): void {
-  if (lastResult === undefined) {
+  if (lastProfile.result === undefined) {
     vscode.window.showInformationMessage(
       `${brand()}: No profile results yet — run a profiling session first.`,
     );
     return;
   }
-  openFlamegraphWebview(lastResult);
+  openFlamegraphWebview(lastProfile.result);
 }
 
 // ── Disposal ──────────────────────────────────────────────────────────────
@@ -216,5 +228,5 @@ export function disposeProfiler(): void {
   disposeProfileDecorations();
   disposeFlamegraphPanel();
   disposeProfileServer();
-  lastResult = undefined;
+  lastProfile.result = undefined;
 }

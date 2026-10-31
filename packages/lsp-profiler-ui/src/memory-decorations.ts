@@ -11,7 +11,8 @@
 import { profilerPalette } from "./palette";
 import * as vscode from "vscode";
 import { Logger } from "./logger";
-import { recordApplied, type AppliedDecoration } from "./profiler-decorations";
+import { recordApplied } from "./profiler-decorations";
+import type { AppliedDecoration } from "./profiler-decorations";
 import { pathKeyer } from "./editor-path-key";
 import { formatBytes } from "./profiler-styles";
 
@@ -206,18 +207,39 @@ function leakColor(confidence: LeakConfidence): string {
   const palette = profilerPalette();
   switch (confidence) {
     case "DEFINITE":
-    case "HIGH": return palette.leak;
-    case "MEDIUM": return palette.warm;
-    case "LOW": return palette.memoryHot; // warming up: not yet a leak
+    case "HIGH": {
+      return palette.leak;
+    }
+    case "MEDIUM": {
+      return palette.warm;
+    }
+    // Warming up: not yet a leak.
+    case "LOW": {
+      return palette.memoryHot;
+    }
+    default: {
+      return palette.memoryHot;
+    }
   }
 }
 
 function confidenceBadge(confidence: LeakConfidence): string {
   switch (confidence) {
-    case "DEFINITE": return "\u26d4 DEFINITE";
-    case "HIGH":     return "\u26a0 HIGH";
-    case "MEDIUM":   return "\u25cf MEDIUM";
-    case "LOW":      return "\u25cb LOW";
+    case "DEFINITE": {
+      return "\u26D4 DEFINITE";
+    }
+    case "HIGH": {
+      return "\u26A0 HIGH";
+    }
+    case "MEDIUM": {
+      return "\u25CF MEDIUM";
+    }
+    case "LOW": {
+      return "\u25CB LOW";
+    }
+    default: {
+      return "\u25CB LOW";
+    }
   }
 }
 

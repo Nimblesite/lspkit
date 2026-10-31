@@ -7,33 +7,33 @@ disable-model-invocation: false
 
 # Submit PR
 
-Create a pull request for the current branch with a well-structured description.
+- **Gate:** `make ci` must pass. Skip if it already passed this session.
+- **Diff:** `git diff main...HEAD` into the scratchpad. It's the only source of truth. Read big diffs in chunks.
+- **Write from the diff only.** Ignore commit messages and branch names.
+- **Body:** fill `.github/pull_request_template.md`:
+  - TLDR (one sentence)
+  - Added
+  - Changed/Deleted
+  - How tests prove it (name the tests)
+  - Spec/doc changes
+  - Breaking changes
+- **Create:** `gh pr create`, linking the issue if one exists. Return the URL.
 
-## Steps
+## Loop until green
 
-*NOTE: if you already ran make ci in this session and it passed, you can skip step 1.*
+The job isn't done when the PR opens. It's done when every check is green.
 
-1. Run `make ci` — must pass completely before creating PR
-2. **Generate the diff against main.** Run `git diff main...HEAD > /tmp/pr-diff.txt` to capture the full diff between the current branch and the head of main. This is the ONLY source of truth for what the PR contains. **Warning:** the diff can be very large. If the diff file exceeds context limits, process it in chunks (e.g., read sections with `head`/`tail` or split by file) rather than trying to load it all at once.
-3. **Derive the PR title and description SOLELY from the diff.** Read the diff output and summarize what changed. Ignore commit messages, branch names, and any other metadata — only the actual code/content diff matters.
-4. Write PR body using the template in `.github/pull_request_template.md`
-5. Fill in (based on the diff analysis from step 3):
-   - TLDR: one sentence
-   - What Was Added: new files, features, deps
-   - What Was Changed/Deleted: modified behaviour
-   - How Tests Prove It Works: specific test names or output
-   - Spec/Doc Changes: if any
-   - Breaking Changes: yes/no + description
-6. Use `gh pr create` with the filled template
+- **Watch:** `gh pr checks <n> --watch` until every check finishes.
+- **Green:** report the URL and stop.
+- **Red:**
+  - Read every failed line: `gh run view <run-id> --log-failed`.
+  - Fix the code, following [ci-prep](../ci-prep/SKILL.md).
+  - Re-run the failing step locally until it passes.
+  - Commit and push, then go back to **Watch**.
+- **Stuck:** after 5 rounds on the same failure, report the error and what you tried.
 
 ## Rules
 
-- Never create a PR if `make ci` fails
-- PR description must be specific and tight — no vague placeholders
-- Link to the relevant GitHub issue if one exists
-
-## Success criteria
-
-- `make ci` passed
-- PR created with `gh pr create`
-- PR URL returned to user
+- No PR if `make ci` fails.
+- Specific and tight. No vague placeholders.
+- Never weaken a gate, skip a test or suppress a lint to turn a check green.

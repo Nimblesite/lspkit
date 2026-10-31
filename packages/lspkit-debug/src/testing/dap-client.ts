@@ -8,7 +8,7 @@ import { pollUntilResult } from "../poll";
 
 /** The single capability the DAP client needs from a debug session. */
 export interface DapSessionLike {
-  customRequest(command: string, args?: unknown): Promise<unknown>;
+  customRequest: (command: string, args?: unknown) => Promise<unknown>;
 }
 
 /** A DAP stack frame (the fields tests assert on). */
@@ -48,16 +48,98 @@ export interface DapStop {
   stack: { stackFrames: DapStackFrame[] };
 }
 
+/** A thread as reported by the adapter. */
+interface DapThread {
+  id: number;
+  name: string;
+}
+
+/** A stack frame's source location. */
+type DapFrameSource = NonNullable<DapStackFrame["source"]>;
+
 const DEFAULT_STACK_LEVELS = 20;
+const DEFAULT_STOP_TIMEOUT_MS = 30_000;
+const STOP_POLL_INTERVAL_MS = 100;
+
+/** True when `value` is a non-null object whose fields can be inspected. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** The elements of `value` when it is an array, and no elements otherwise. */
+function arrayItems(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/** True when an optional field is absent or a string. */
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isThread(value: unknown): value is DapThread {
+  return isRecord(value) && typeof value.id === "number" && typeof value.name === "string";
+}
+
+function isFrameSource(value: unknown): value is DapFrameSource {
+  return isRecord(value) && isOptionalString(value.path) && isOptionalString(value.name);
+}
+
+function isStackFrame(value: unknown): value is DapStackFrame {
+  return (
+    isRecord(value) &&
+    typeof value.id === "number" &&
+    typeof value.name === "string" &&
+    typeof value.line === "number" &&
+    typeof value.column === "number" &&
+    (value.source === undefined || isFrameSource(value.source))
+  );
+}
+
+function isScope(value: unknown): value is DapScope {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.variablesReference === "number" &&
+    (value.expensive === undefined || typeof value.expensive === "boolean")
+  );
+}
+
+function isVariable(value: unknown): value is DapVariable {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    typeof value.value === "string" &&
+    typeof value.variablesReference === "number" &&
+    isOptionalString(value.type)
+  );
+}
+
+function isEvaluateResult(value: unknown): value is DapEvaluateResult {
+  return (
+    isRecord(value) &&
+    typeof value.result === "string" &&
+    typeof value.variablesReference === "number" &&
+    isOptionalString(value.type)
+  );
+}
+
+/** The `key` array of a response body, keeping only well-formed entries. */
+function arrayField<TItem>(
+  body: unknown,
+  key: string,
+  isItem: (item: unknown) => item is TItem,
+): TItem[] {
+  return isRecord(body)
+    ? arrayItems(body[key]).filter((item): item is TItem => isItem(item))
+    : [];
+}
 
 /** All threads currently known to the adapter. */
 export async function threads(
   session: DapSessionLike,
 ): Promise<{ id: number; name: string }[]> {
-  const response = (await session.customRequest("threads")) as {
-    threads?: { id: number; name: string }[];
-  };
-  return response.threads ?? [];
+  const response = await session.customRequest("threads");
+  return arrayField(response, "threads", isThread);
 }
 
 /** The stack trace for a thread. */
@@ -66,11 +148,12 @@ export async function stackTrace(
   threadId: number,
   levels = DEFAULT_STACK_LEVELS,
 ): Promise<{ stackFrames: DapStackFrame[] }> {
-  return session.customRequest("stackTrace", {
+  const response = await session.customRequest("stackTrace", {
     threadId,
     startFrame: 0,
     levels,
-  }) as Promise<{ stackFrames: DapStackFrame[] }>;
+  });
+  return { stackFrames: arrayField(response, "stackFrames", isStackFrame) };
 }
 
 /** The scopes of a stack frame. */
@@ -78,9 +161,8 @@ export async function scopes(
   session: DapSessionLike,
   frameId: number,
 ): Promise<{ scopes: DapScope[] }> {
-  return session.customRequest("scopes", { frameId }) as Promise<{
-    scopes: DapScope[];
-  }>;
+  const response = await session.customRequest("scopes", { frameId });
+  return { scopes: arrayField(response, "scopes", isScope) };
 }
 
 /** The variables under a variablesReference. */
@@ -88,46 +170,83 @@ export async function variables(
   session: DapSessionLike,
   variablesReference: number,
 ): Promise<{ variables: DapVariable[] }> {
-  return session.customRequest("variables", {
-    variablesReference,
-  }) as Promise<{ variables: DapVariable[] }>;
+  const response = await session.customRequest("variables", { variablesReference });
+  return { variables: arrayField(response, "variables", isVariable) };
+}
+
+/** The result used when the adapter answers `evaluate` malformed. */
+function emptyEvaluateResult(): DapEvaluateResult {
+  return { result: "", variablesReference: 0 };
+}
+
+/** The DAP contexts an `evaluate` request may run in. */
+export type EvaluateContext = "watch" | "repl" | "hover";
+
+/** The fields of a DAP `evaluate` request. */
+export interface EvaluateRequest {
+  expression: string;
+  frameId: number;
+  context?: EvaluateContext;
 }
 
 /** Evaluate an expression in a frame (watch/repl/hover context). */
 export async function evaluate(
   session: DapSessionLike,
-  expression: string,
-  frameId: number,
-  context: "watch" | "repl" | "hover" = "watch",
+  request: EvaluateRequest,
 ): Promise<DapEvaluateResult> {
-  return session.customRequest("evaluate", {
+  const { expression, frameId, context = "watch" } = request;
+  const response = await session.customRequest("evaluate", {
     expression,
     frameId,
     context,
-  }) as Promise<DapEvaluateResult>;
+  });
+  return isEvaluateResult(response) ? response : emptyEvaluateResult();
+}
+
+/** Issue a thread-scoped DAP request (step/resume), awaiting its response. */
+async function threadRequest(
+  session: DapSessionLike,
+  command: string,
+  threadId: number,
+): Promise<unknown> {
+  const response = await session.customRequest(command, { threadId });
+  return response;
 }
 
 /** Step over (DAP `next`). */
-export function stepOver(session: DapSessionLike, threadId: number): Promise<unknown> {
-  return session.customRequest("next", { threadId });
-}
-
-/** Step into (DAP `stepIn`). */
-export function stepIn(session: DapSessionLike, threadId: number): Promise<unknown> {
-  return session.customRequest("stepIn", { threadId });
-}
-
-/** Step out (DAP `stepOut`). */
-export function stepOut(session: DapSessionLike, threadId: number): Promise<unknown> {
-  return session.customRequest("stepOut", { threadId });
-}
-
-/** Resume (DAP `continue`). */
-export function continueExecution(
+export async function stepOver(
   session: DapSessionLike,
   threadId: number,
 ): Promise<unknown> {
-  return session.customRequest("continue", { threadId });
+  const response = await threadRequest(session, "next", threadId);
+  return response;
+}
+
+/** Step into (DAP `stepIn`). */
+export async function stepIn(
+  session: DapSessionLike,
+  threadId: number,
+): Promise<unknown> {
+  const response = await threadRequest(session, "stepIn", threadId);
+  return response;
+}
+
+/** Step out (DAP `stepOut`). */
+export async function stepOut(
+  session: DapSessionLike,
+  threadId: number,
+): Promise<unknown> {
+  const response = await threadRequest(session, "stepOut", threadId);
+  return response;
+}
+
+/** Resume (DAP `continue`). */
+export async function continueExecution(
+  session: DapSessionLike,
+  threadId: number,
+): Promise<unknown> {
+  const response = await threadRequest(session, "continue", threadId);
+  return response;
 }
 
 /** Flatten every concrete (referenceable) scope's variables for a frame. */
@@ -139,9 +258,12 @@ export async function readFrameVariables(
   const groups = await Promise.all(
     frameScopes.scopes
       .filter((scope) => scope.variablesReference > 0)
-      .map((scope) => variables(session, scope.variablesReference)),
+      .map(async (scope) => {
+        const group = await variables(session, scope.variablesReference);
+        return group.variables;
+      }),
   );
-  return groups.flatMap((group) => group.variables);
+  return groups.flat();
 }
 
 /** Find a named local/argument in a frame, or undefined. */
@@ -154,6 +276,27 @@ export async function findVariable(
   return all.find((variable) => variable.name === name);
 }
 
+/** The first thread, in order, whose stack has at least one frame. */
+async function firstStopped(
+  session: DapSessionLike,
+  candidates: readonly DapThread[],
+): Promise<DapStop | undefined> {
+  const [thread, ...rest] = candidates;
+  if (thread === undefined) {
+    return undefined;
+  }
+  const stack = await stackTraceQuietly(session, thread.id);
+  if (stack !== undefined && stack.stackFrames.length > 0) {
+    return { threadId: thread.id, stack };
+  }
+  return firstStopped(session, rest);
+}
+
+/** One poll: look for a stopped thread among every thread the adapter knows. */
+async function probeForStop(session: DapSessionLike): Promise<DapStop | undefined> {
+  return firstStopped(session, await threadsQuietly(session));
+}
+
 /**
  * Poll until the debuggee is stopped with at least one stack frame, returning
  * the stopped thread and its stack. Resolves the first thread that reports a
@@ -161,32 +304,22 @@ export async function findVariable(
  */
 export async function waitForStop(
   session: DapSessionLike,
-  timeoutMs = 30_000,
+  timeoutMs = DEFAULT_STOP_TIMEOUT_MS,
 ): Promise<DapStop> {
-  const probe = async (): Promise<DapStop | undefined> => {
-    for (const thread of await threadsQuietly(session)) {
-      const stack = await stackTraceQuietly(session, thread.id);
-      if (stack && stack.stackFrames.length > 0) {
-        return { threadId: thread.id, stack };
-      }
-    }
-    return undefined;
-  };
-  const stop = await pollUntilResult(
-    probe,
-    (value): value is DapStop => value !== undefined,
+  const probe = (): PromiseLike<DapStop | undefined> => probeForStop(session);
+  const stop = await pollUntilResult({
+    fn: probe,
+    predicate: (value) => value !== undefined,
     timeoutMs,
-    100,
-  );
-  if (!stop) {
+    intervalMs: STOP_POLL_INTERVAL_MS,
+  });
+  if (stop === undefined) {
     throw new Error(`Timed out after ${timeoutMs}ms waiting for the debuggee to stop`);
   }
   return stop;
 }
 
-async function threadsQuietly(
-  session: DapSessionLike,
-): Promise<{ id: number; name: string }[]> {
+async function threadsQuietly(session: DapSessionLike): Promise<DapThread[]> {
   try {
     return await threads(session);
   } catch {

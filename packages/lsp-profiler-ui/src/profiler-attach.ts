@@ -7,7 +7,7 @@
 
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
-import { lspTable, configSection, brand } from "./ids";
+import { brand, configSection, lspTable } from "./ids";
 import { Logger } from "./logger";
 import type { ProfilerStore as Store } from "./store";
 import { evaluateInDebugSession, waitForStoppedFrame } from "./dap-evaluate";
@@ -15,7 +15,8 @@ import { reportFailure } from "./failure";
 import { withUserProgress } from "./progress-ops";
 import { shouldProfileOnLaunch, startWhenRuntimeReady, waitForDebuggeePid } from "./profiler-launch";
 import { executeServerCommand } from "./server-command";
-import { toStartedSession, type StartedSession } from "./wire-adapters";
+import { toStartedSession } from "./wire-adapters";
+import type { StartedSession } from "./wire-adapters";
 import type { CooperativeScript, StartProfileResult } from "./wire-generated";
 
 /** LSP command names ([PROF-WIRE-METHODS]). */
@@ -83,7 +84,7 @@ function clientForStart(store: Store, busy: () => string): LanguageClient | unde
 /** A "stop the current CPU session first" warning naming the active CPU profile. */
 function busyMessage(store: Store): string {
   const session = store.profiler.value;
-  const pid = session.cpuPid !== undefined ? ` PID ${String(session.cpuPid)}` : "";
+  const pid = session.cpuPid === undefined ? "" : ` PID ${String(session.cpuPid)}`;
   return `${brand()}: Already profiling${pid}. Stop the current CPU session first.`;
 }
 
@@ -107,8 +108,8 @@ export async function startProfilingForPid(store: Store, pid: number, preset: st
       const raw = await executeServerCommand<StartProfileResult>(client, CPU_CMD.start, { pid, preset, ...samplerSettings() });
       adoptSession(store, raw, (result) => `${brand()}: Profiling PID ${String(result.pid)} (${result.runtime} ${result.runtimeVersion})`);
     });
-  } catch (err: unknown) {
-    reportFailure("Profile start", err);
+  } catch (error: unknown) {
+    reportFailure("Profile start", error);
   } finally {
     settleStart(store);
   }
@@ -126,6 +127,11 @@ export async function handleProfileAttachToDebug(store: Store): Promise<void> {
   }
   const client = clientForStart(store, () => `${brand()}: Already profiling (session ${store.profiler.value.cpuSessionId ?? "?"}).`);
   if (client === undefined) { return; }
+  await attachToActiveDebuggee(store, client, session);
+}
+
+/** Resolve the active session's debuggee PID and start profiling it. */
+async function attachToActiveDebuggee(store: Store, client: LanguageClient, session: vscode.DebugSession): Promise<void> {
   const pid = store.getDebuggeeProcessId(session.id);
   if (pid === undefined) {
     vscode.window.showWarningMessage(
@@ -133,23 +139,31 @@ export async function handleProfileAttachToDebug(store: Store): Promise<void> {
     );
     return;
   }
-  await attachToDebuggee(store, client, pid);
+  await attachToDebuggee(store, client, { pid });
+}
+
+/** The debuggee a CPU start targets, plus an optional "still launching" retry gate. */
+interface AttachTarget {
+  readonly pid: number;
+  readonly launching?: () => boolean;
 }
 
 /**
  * Start a CPU session on the debuggee `pid` and adopt it; a just-launched one
  * is retried while `launching()` holds. The caller owns the CPU leg.
  */
-async function attachToDebuggee(store: Store, client: LanguageClient, pid: number,
-  launching: () => boolean = () => false): Promise<void> {
+async function attachToDebuggee(store: Store, client: LanguageClient, target: AttachTarget): Promise<void> {
+  const { pid, launching = (): boolean => false } = target;
   const args = { pid, ...samplerSettings() };
-  const send = async (): Promise<StartProfileResult | undefined> =>
-    await executeServerCommand<StartProfileResult>(client, CPU_CMD.start, args);
+  const send = async (): Promise<StartProfileResult | undefined> => {
+    const result = await executeServerCommand<StartProfileResult>(client, CPU_CMD.start, args);
+    return result;
+  };
   try {
     const raw = await startWhenRuntimeReady(send, launching);
     adoptSession(store, raw, (result) => `${brand()}: Profiling debug session (PID ${String(result.pid)})`);
-  } catch (err: unknown) {
-    reportFailure("Profile attach-to-debug", err);
+  } catch (error: unknown) {
+    reportFailure("Profile attach-to-debug", error);
   }
 }
 
@@ -188,7 +202,7 @@ async function startProfilerOnLaunch(store: Store, debugSessionId: string): Prom
   store.profilerStarting();
   try {
     await withUserProgress(cpuStartTitle(), async (report) => {
-      // macOS gates task ports behind entitled debuggers, so a runtime that can
+      // On macOS, task ports are gated behind entitled debuggers, so a runtime that can
       // only be sampled from outside is sampled by its cooperative in-process
       // sampler, injected at the entry pause ([PROF-CPU-COOPERATIVE]). A runtime
       // that samples itself, such as .NET over EventPipe, attaches as anywhere.
@@ -212,7 +226,7 @@ async function attachOnLaunch(store: Store, debugSessionId: string, report: (mes
   const starting = (): boolean => store.profiler.value.cpu === "starting";
   if (ready && pid !== undefined && client?.isRunning() === true && starting()) {
     report("Attaching the sampler…");
-    await attachToDebuggee(store, client, pid, starting);
+    await attachToDebuggee(store, client, { pid, launching: starting });
   }
 }
 
@@ -232,34 +246,67 @@ async function startCooperativeProfileOnLaunch(store: Store, report: (message: s
   report("Waiting for the program to pause at entry…");
   const frameId = await waitForStoppedFrame();
   if (frameId === null) {
-    vscode.window.showWarningMessage(
-      `${brand()}: The debuggee did not pause at entry, so the profiler could not be injected.`,
-    );
+    warnCooperativeEntryMissing();
     return;
   }
+  await injectCooperativeSamplerSafely(store, { client, frameId, report });
+}
+
+/** The pieces one cooperative injection needs, kept as one parameter. */
+interface CooperativeInject {
+  readonly client: LanguageClient;
+  readonly frameId: number;
+  readonly report: (message: string) => void;
+}
+
+/** A fetched cooperative script plus the sample rate it was generated for. */
+interface CooperativeScriptRequest {
+  readonly script: CooperativeScript;
+  readonly sampleRate: number;
+}
+
+/** Tell the user why the sampler could not be injected. */
+function warnCooperativeEntryMissing(): void {
+  vscode.window.showWarningMessage(
+    `${brand()}: The debuggee did not pause at entry, so the profiler could not be injected.`,
+  );
+}
+
+/** Run the injection and turn a failure into the shared failure report. */
+async function injectCooperativeSamplerSafely(store: Store, context: CooperativeInject): Promise<void> {
   try {
-    await injectCooperativeSampler(store, client, frameId, report);
-  } catch (err: unknown) {
-    reportFailure("Cooperative profile start", err);
+    await injectCooperativeSampler(store, context);
+  } catch (error: unknown) {
+    reportFailure("Cooperative profile start", error);
   }
 }
 
 /** Evaluate the sampler script at the entry pause, resume, then adopt its sample stream. */
-async function injectCooperativeSampler(store: Store, client: LanguageClient, frameId: number,
-  report: (message: string) => void): Promise<void> {
-  const sampleRate = samplerSettings().sample_rate;
-  const leg1 = await executeServerCommand<CooperativeScript>(client, CPU_CMD.cooperativeScript, { sample_rate: sampleRate });
-  if (leg1?.script === undefined) { return; }
-  report("Injecting the in-process sampler…");
-  const ack = await evaluateInDebugSession(leg1.script, frameId);
+async function injectCooperativeSampler(store: Store, context: CooperativeInject): Promise<void> {
+  const requested = await requestCooperativeScript(context);
+  if (requested === undefined) { return; }
+  context.report("Injecting the in-process sampler…");
+  const ack = await evaluateInDebugSession(requested.script.script, context.frameId);
   await vscode.commands.executeCommand("workbench.action.debug.continue");
   if (ack?.includes(COOPERATIVE_ACK) !== true) {
     vscode.window.showWarningMessage(`${brand()}: Could not inject the in-process CPU sampler.`);
     return;
   }
-  report("Starting the sample stream…");
-  const raw = await executeServerCommand<StartProfileResult>(client, CPU_CMD.cooperativeAttach,
-    { sample_file: leg1.sample_file, sample_rate: sampleRate });
+  await startCooperativeStream(store, context, requested);
+}
+
+/** Ask the server for the injection script, or undefined when it answered without one. */
+async function requestCooperativeScript(context: CooperativeInject): Promise<CooperativeScriptRequest | undefined> {
+  const sampleRate = samplerSettings().sample_rate;
+  const script = await executeServerCommand<CooperativeScript>(context.client, CPU_CMD.cooperativeScript, { sample_rate: sampleRate });
+  return script?.script === undefined ? undefined : { script, sampleRate };
+}
+
+/** Attach the in-process sample stream and adopt the session it starts. */
+async function startCooperativeStream(store: Store, context: CooperativeInject, requested: CooperativeScriptRequest): Promise<void> {
+  context.report("Starting the sample stream…");
+  const raw = await executeServerCommand<StartProfileResult>(context.client, CPU_CMD.cooperativeAttach,
+    { sample_file: requested.script.sample_file, sample_rate: requested.sampleRate });
   if (store.profiler.value.cpu === "active") { return; }
   adoptSession(store, raw, (result) => `${brand()}: Profiling current file (PID ${String(result.pid)}, in-process sampler)`);
 }

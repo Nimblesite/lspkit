@@ -22,7 +22,7 @@ export interface ProfilingFlags {
 }
 
 /** Options for {@link buildMetricLaunchConfig}. */
-interface MetricLaunchOptions {
+export interface MetricLaunchOptions {
   platform: NodeJS.Platform;
   darwinCpuStopOnEntry?: boolean;
 }

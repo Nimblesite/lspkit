@@ -66,13 +66,13 @@ export const SORT_LABEL: Readonly<Record<SortMode, string>> = {
 };
 
 /** Per-mode row comparators; `sortProcesses` wraps these to sink non-debuggable rows. */
-export const SORT_COMPARATORS: Readonly<Record<SortMode, (a: ProcessInfo, b: ProcessInfo) => number>> = {
-  cpu: (a, b) => b.cpuPercent - a.cpuPercent,
-  memory: (a, b) => b.memoryBytes - a.memoryBytes,
-  pid: (a, b) => a.pid - b.pid,
-  name: (a, b) => a.name.localeCompare(b.name),
-  runtime: (a, b) => b.runtimeSecs - a.runtimeSecs,
-  version: (a, b) => (a.runtimeVersion ?? "").localeCompare(b.runtimeVersion ?? ""),
+export const SORT_COMPARATORS: Readonly<Record<SortMode, (left: ProcessInfo, right: ProcessInfo) => number>> = {
+  cpu: (left, right) => right.cpuPercent - left.cpuPercent,
+  memory: (left, right) => right.memoryBytes - left.memoryBytes,
+  pid: (left, right) => left.pid - right.pid,
+  name: (left, right) => left.name.localeCompare(right.name),
+  runtime: (left, right) => right.runtimeSecs - left.runtimeSecs,
+  version: (left, right) => (left.runtimeVersion ?? "").localeCompare(right.runtimeVersion ?? ""),
 };
 
 export type GroupMode = "none" | "version" | "interpreter" | "user" | "parent";
@@ -132,7 +132,7 @@ export type TreeItem = LaunchActionItem | ProcessGroupItem | ProcessTreeItem | M
  * fact running, just filtered (procexp-2).
  */
 export class MessageTreeItem extends vscode.TreeItem {
-  constructor(label: string) {
+  public constructor(label: string) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.contextValue = "processesMessage";
     this.iconPath = new vscode.ThemeIcon("filter");
@@ -148,7 +148,7 @@ export class MessageTreeItem extends vscode.TreeItem {
  * buttons, so a second same-metric run is never offered ([PROF-UI-PROCESSES]).
  */
 export class LaunchActionItem extends vscode.TreeItem {
-  constructor(label: string, command: string, icon: string) {
+  public constructor(label: string, command: string, icon: string) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.id = `launchAction:${command}`;
     this.contextValue = "launchAction";
@@ -159,11 +159,12 @@ export class LaunchActionItem extends vscode.TreeItem {
 
 /** A collapsible group header (when grouping is active). */
 export class ProcessGroupItem extends vscode.TreeItem {
-  constructor(
-    public readonly label: string,
-    public readonly members: readonly ProcessInfo[],
-  ) {
+  public readonly label: string;
+  public readonly members: readonly ProcessInfo[];
+  public constructor(label: string, members: readonly ProcessInfo[]) {
     super(label, vscode.TreeItemCollapsibleState.Expanded);
+    this.label = label;
+    this.members = members;
     // Stable identity so VS Code preserves expansion state across refreshes.
     this.id = `processGroup:${label}`;
     this.description = String(members.length);
@@ -181,19 +182,26 @@ const BLOCKED_MARK = "🚫 ";
  * `inWorkspace`; a launcher chip; and the flame for the actively-profiled row.
  */
 export class ProcessTreeItem extends vscode.TreeItem {
-  constructor(
-    public readonly process: ProcessInfo,
+  public readonly process: ProcessInfo;
+  public constructor(
+    process: ProcessInfo,
     activeProfilingPid?: number,
     activeDebuggeePid?: number,
-    runtime: RowRuntime = { directMemory: false, name: process.runtime, sourceEntries: false },
+    runtime?: RowRuntime,
   ) {
     super(rowLabel(process), vscode.TreeItemCollapsibleState.None);
+    this.process = process;
+    const rowRuntime = runtime ?? { directMemory: false, name: process.runtime, sourceEntries: false };
     // Stable identity across the 2s auto-refresh, or VS Code can fail to map an
     // inline-button click to a recreated element and pass no argument (#79).
     this.id = `process:${String(process.pid)}`;
-    const { profilingThis, tracksMemory, memoryTrackable } = rowState(process, runtime, activeProfilingPid, activeDebuggeePid);
+    this.applyCues(process, rowRuntime, { activeProfilingPid, activeDebuggeePid });
+  }
+
+  private applyCues(process: ProcessInfo, runtime: RowRuntime, pids: RowPids): void {
+    const { profilingThis, tracksMemory, memoryTrackable } = rowState(process, runtime, pids);
     this.description = rowDescription(process, profilingThis);
-    this.tooltip = rowTooltip(process, runtime.name, profilingThis, tracksMemory && !memoryTrackable);
+    this.tooltip = rowTooltip(process, runtime.name, { profilingThis, memoryNeedsLaunch: tracksMemory && !memoryTrackable });
     this.iconPath = processIcon(process, profilingThis);
     this.contextValue = rowContextValue(process, profilingThis, memoryTrackable);
     // The decoration provider colours the label from this URI ([PROF-UI-PROCESSES]).
@@ -204,7 +212,7 @@ export class ProcessTreeItem extends vscode.TreeItem {
 
 /** The row's label: name and entry script, 🚫-prefixed when it cannot be profiled. */
 function rowLabel(process: ProcessInfo): string {
-  const base = process.script !== null ? `${process.name} — ${basename(process.script)}` : process.name;
+  const base = process.script === null ? process.name : `${process.name} — ${basename(process.script)}`;
   return process.debuggable ? base : `${BLOCKED_MARK}${base}`;
 }
 
@@ -222,11 +230,17 @@ interface RowState {
  * attachable heap ([PROF-UI-CAPABILITIES]). Only a trackable row reveals the
  * inline Track Memory action, so the action is never offered where it would refuse.
  */
-function rowState(process: ProcessInfo, runtime: RowRuntime, activeProfilingPid?: number, activeDebuggeePid?: number): RowState {
+/** The two live PIDs a row's state compares against. */
+interface RowPids {
+  readonly activeProfilingPid: number | undefined;
+  readonly activeDebuggeePid: number | undefined;
+}
+
+function rowState(process: ProcessInfo, runtime: RowRuntime, pids: RowPids): RowState {
   const tracksMemory = runtime.memory !== false;
-  const debuggee = activeDebuggeePid !== undefined && activeDebuggeePid === process.pid;
+  const debuggee = pids.activeDebuggeePid !== undefined && pids.activeDebuggeePid === process.pid;
   return {
-    profilingThis: activeProfilingPid !== undefined && activeProfilingPid === process.pid,
+    profilingThis: pids.activeProfilingPid !== undefined && pids.activeProfilingPid === process.pid,
     tracksMemory,
     memoryTrackable: tracksMemory && (debuggee || (runtime.directMemory && process.debuggable)),
   };
@@ -250,7 +264,7 @@ function processResourceUri(process: ProcessInfo): vscode.Uri {
 
 /** The launcher chip (`[uvicorn] `) for a row's description, or empty. */
 function launcherChip(process: ProcessInfo): string {
-  return process.launcher !== null ? `[${process.launcher}] ` : "";
+  return process.launcher === null ? "" : `[${process.launcher}] `;
 }
 
 /** The description line: launcher chip, then the key live metrics. */
@@ -276,9 +290,15 @@ function rowContextValue(process: ProcessInfo, profilingThis: boolean, memoryTra
   return process.requiresElevation ? "processElevated" : "process";
 }
 
+/** The two booleans that shape a row's tooltip notices. */
+interface RowNotices {
+  readonly profilingThis: boolean;
+  readonly memoryNeedsLaunch: boolean;
+}
+
 /** Multi-line hover tooltip surfacing every resolved detail for a process row. */
-function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: boolean, memoryNeedsLaunch: boolean): string {
-  return [...rowFacts(process, runtimeName), ...rowNotices(process, profilingThis, memoryNeedsLaunch)]
+function rowTooltip(process: ProcessInfo, runtimeName: string, notices: RowNotices): string {
+  return [...rowFacts(process, runtimeName), ...rowNotices(process, notices.profilingThis, notices.memoryNeedsLaunch)]
     .filter(Boolean).join("\n");
 }
 
@@ -286,13 +306,13 @@ function rowTooltip(process: ProcessInfo, runtimeName: string, profilingThis: bo
 function rowFacts(process: ProcessInfo, runtimeName: string): string[] {
   return [
     `${process.name} (PID ${String(process.pid)})`,
-    process.interpreterPath !== null ? `Executable: ${process.interpreterPath}` : "",
-    process.script !== null ? `Entry: ${process.script}` : "",
+    process.interpreterPath === null ? "" : `Executable: ${process.interpreterPath}`,
+    process.script === null ? "" : `Entry: ${process.script}`,
     `${runtimeName}: ${process.runtimeVersion ?? "unknown"}`,
     `CPU: ${process.cpuPercent.toFixed(1)}%  ·  Memory: ${formatBytes(process.memoryBytes)}`,
     `Runtime: ${formatRuntime(process.runtimeSecs)}`,
-    process.user !== null ? `User: ${process.user}` : "",
-    process.launcher !== null ? `Launcher: ${process.launcher}` : "",
+    process.user === null ? "" : `User: ${process.user}`,
+    process.launcher === null ? "" : `Launcher: ${process.launcher}`,
   ];
 }
 
@@ -331,7 +351,7 @@ function processIcon(process: ProcessInfo, profilingThis: boolean): vscode.Theme
   if (process.requiresElevation) {
     return new vscode.ThemeIcon("lock", new vscode.ThemeColor("list.warningForeground"));
   }
-  const glyph = process.launcher !== null ? "rocket" : "vm-running";
+  const glyph = process.launcher === null ? "vm-running" : "rocket";
   return process.inWorkspace
     ? new vscode.ThemeIcon(glyph, new vscode.ThemeColor("charts.green"))
     : new vscode.ThemeIcon(glyph);

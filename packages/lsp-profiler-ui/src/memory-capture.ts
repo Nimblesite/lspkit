@@ -18,9 +18,9 @@
  */
 
 import { delay } from "./timeouts";
-import { lspTable, brand } from "./ids";
+import { brand, lspTable } from "./ids";
 import * as vscode from "vscode";
-import * as fs from "fs";
+import * as fs from "node:fs";
 import { Logger } from "./logger";
 import { errorText } from "./failure";
 import { executeServerCommand } from "./server-command";
@@ -30,24 +30,12 @@ import { isDebuggeePaused } from "./debuggee-pause";
 import { withUserProgress } from "./progress-ops";
 import { toMemoryIngestResult } from "./wire-adapters";
 import type { MemoryResult, MemoryStep } from "./wire-generated";
-import {
-  toDashboardDiff,
-  toDashboardSnapshot,
-  toDiffResult,
-  toSnapshotResult,
-  asNumber,
-  type MemoryIngestResult,
-} from "./memory-dashboard-mapping";
-import {
-  openMemoryDashboard,
-  type MemoryDashboardSnapshot,
-  type MemoryTimelinePoint,
-} from "./memory-dashboard";
-import {
-  applyLeakDecorations,
-  applyMemoryDecorations,
-  type MemoryDiffResult,
-} from "./memory-decorations";
+import { asNumber, toDashboardDiff, toDashboardSnapshot, toDiffResult, toSnapshotResult } from "./memory-dashboard-mapping";
+import type { MemoryIngestResult } from "./memory-dashboard-mapping";
+import { openMemoryDashboard } from "./memory-dashboard";
+import type { MemoryDashboardSnapshot, MemoryTimelinePoint } from "./memory-dashboard";
+import { applyLeakDecorations, applyMemoryDecorations } from "./memory-decorations";
+import type { MemoryDiffResult } from "./memory-decorations";
 // ── LSP command ids ─────────────────────────────────────────────────────────
 
 /** The `<prefix>.lspProfiler.memory.*` LSP command names (one round-trip leg each). */
@@ -62,7 +50,7 @@ export const LSP_MEM_CMD = lspTable({
   stop: "memory.stop",
 });
 
-/** tracemalloc traceback depth injected at start. */
+/** The tracemalloc traceback depth injected at start. */
 export const TRACEBACK_DEPTH = 25;
 
 /** The progress title of a memory start; a function so it follows the installed brand. */
@@ -76,11 +64,21 @@ const MS_PER_SECOND = 1000;
 /** [PROF-UI-STATE] Progress-notification titles, one per memory operation. */
 function memOpTitle(command: string): string {
   switch (command) {
-    case LSP_MEM_CMD.snapshot: return `${brand()}: Taking memory snapshot`;
-    case LSP_MEM_CMD.diff: return `${brand()}: Comparing memory snapshots`;
-    case LSP_MEM_CMD.gcCollect: return `${brand()}: Forcing garbage collection`;
-    case LSP_MEM_CMD.references: return `${brand()}: Building the reference graph`;
-    default: return `${brand()}: Inspecting memory`;
+    case LSP_MEM_CMD.snapshot: {
+      return `${brand()}: Taking memory snapshot`;
+    }
+    case LSP_MEM_CMD.diff: {
+      return `${brand()}: Comparing memory snapshots`;
+    }
+    case LSP_MEM_CMD.gcCollect: {
+      return `${brand()}: Forcing garbage collection`;
+    }
+    case LSP_MEM_CMD.references: {
+      return `${brand()}: Building the reference graph`;
+    }
+    default: {
+      return `${brand()}: Inspecting memory`;
+    }
   }
 }
 
@@ -116,11 +114,11 @@ function endMemoryOp(): void {
 // ── Presentation state ──────────────────────────────────────────────────────
 
 /** Most recent snapshot, so a later "Compare" can show it alongside the diff. */
-let lastDashboardSnapshot: MemoryDashboardSnapshot | undefined;
+let lastDashboardSnapshot: MemoryDashboardSnapshot | null = null;
 
 /** The most recent memory snapshot the dashboard rendered, with its timeline (e2e seam). */
 export function lastMemorySnapshot(): MemoryDashboardSnapshot | undefined {
-  return lastDashboardSnapshot;
+  return lastDashboardSnapshot ?? undefined;
 }
 
 /**
@@ -135,12 +133,12 @@ let directSession = false;
 
 /** Whether a snapshot has been captured (so "stop" can report honestly). */
 export function hasCapturedSnapshot(): boolean {
-  return lastDashboardSnapshot !== undefined;
+  return lastDashboardSnapshot !== null;
 }
 
 /** Drop per-session presentation state (called when tracking stops). */
 export function resetCaptureState(): void {
-  lastDashboardSnapshot = undefined;
+  lastDashboardSnapshot = null;
   captureTimeline = [];
   directSession = false;
 }
@@ -168,12 +166,12 @@ type LspClient = NonNullable<Store["client"]["value"]>;
  */
 export async function endServerSession(store: Store): Promise<void> {
   const client = store.client.value;
-  const memorySessionId = store.profiler.value.memorySessionId;
+  const { memorySessionId } = store.profiler.value;
   if (client?.isRunning() !== true || memorySessionId === undefined) { return; }
   try {
     await executeServerCommand<unknown>(client, LSP_MEM_CMD.stop, { memory_session_id: memorySessionId });
-  } catch (err: unknown) {
-    Logger.warn(`[Memory] ${LSP_MEM_CMD.stop} failed: ${errorText(err)}`);
+  } catch (error: unknown) {
+    Logger.warn(`[Memory] ${LSP_MEM_CMD.stop} failed: ${errorText(error)}`);
   }
 }
 
@@ -204,18 +202,21 @@ function warnUnlessQuiet(op: MemoryOperation, message: string): void {
  */
 function resolveActiveSession(op: MemoryOperation): ActiveMemorySession | null {
   const client = op.store.client.value;
-  function notConnected(): null {
-    if (!op.quiet) { void vscode.window.showErrorMessage(`${brand()} LSP not connected`); }
-    return null;
+  if (client === undefined || !client.isRunning()) {
+    return notConnected(op);
   }
-  if (client === undefined) { return notConnected(); }
-  if (!client.isRunning()) { return notConnected(); }
-  const memorySessionId = op.store.profiler.value.memorySessionId;
+  const { memorySessionId } = op.store.profiler.value;
   if (op.store.profiler.value.memory !== "active" || memorySessionId === undefined) {
     warnUnlessQuiet(op, `${brand()}: Start memory tracking first.`);
     return null;
   }
   return { client, memorySessionId };
+}
+
+/** The "LSP not connected" refusal, with a warning unless the op is quiet. */
+function notConnected(op: MemoryOperation): null {
+  if (!op.quiet) { void vscode.window.showErrorMessage(`${brand()} LSP not connected`); }
+  return null;
 }
 
 /**
@@ -230,14 +231,19 @@ async function runMemoryOperation(op: MemoryOperation): Promise<MemoryIngestResu
   beginMemoryOp();
   try {
     return await requestStep(op, active);
-  } catch (err: unknown) {
-    const msg = errorText(err);
-    Logger.warn(`[Memory] ${op.command} round-trip failed: ${msg}`);
-    warnUnlessQuiet(op, `${brand()}: ${msg}`);
-    return null;
+  } catch (error: unknown) {
+    return handleMemoryOperationError(op, error);
   } finally {
     endMemoryOp();
   }
+}
+
+/** Log and surface one failed memory round-trip, always resolving to null. */
+function handleMemoryOperationError(op: MemoryOperation, error: unknown): null {
+  const msg = errorText(error);
+  Logger.warn(`[Memory] ${op.command} round-trip failed: ${msg}`);
+  warnUnlessQuiet(op, `${brand()}: ${msg}`);
+  return null;
 }
 
 /**
@@ -258,7 +264,7 @@ async function requestStep(op: MemoryOperation, active: ActiveMemorySession): Pr
     { memory_session_id: active.memorySessionId, ...op.extraArgs });
   if (step === undefined) { return null; }
   if (step.kind === "Completed") { return toMemoryIngestResult(step.result); }
-  return await courierStep(op, active, step.script);
+  return courierStep(op, active, step.script);
 }
 
 /**
@@ -294,7 +300,7 @@ async function evaluateAndIngest(op: MemoryOperation, ctx: OperationContext, scr
     return null;
   }
   op.report("Analyzing…");
-  return await ingestOutput(ctx.client, ctx.memorySessionId, output);
+  return ingestOutput(ctx.client, ctx.memorySessionId, output);
 }
 
 /** Post a script's raw output to `<prefix>.lspProfiler.memory.ingest` and read the structured result. */
@@ -314,9 +320,12 @@ export async function runMemoryScript(
   command: string,
   extraArgs: Record<string, unknown> = {},
 ): Promise<MemoryIngestResult | null> {
-  return await withUserProgress(
+  return withUserProgress(
     memOpTitle(command),
-    async (report) => await runMemoryOperation({ store, command, extraArgs, report, quiet: false }),
+    async (report) => {
+      const result = await runMemoryOperation({ store, command, extraArgs, report, quiet: false });
+      return result;
+    },
   );
 }
 
@@ -353,7 +362,7 @@ export function presentSnapshot(
 export function presentDiff(result: MemoryIngestResult): MemoryDiffResult {
   const diff = toDiffResult(result);
   applyLeakDecorations(diff);
-  if (lastDashboardSnapshot !== undefined) {
+  if (lastDashboardSnapshot !== null) {
     openMemoryDashboard(lastDashboardSnapshot, toDashboardDiff(result));
   }
   const leaks = diff.suspectedLeaks;
@@ -413,16 +422,19 @@ function recordTimelinePoint(snapshot: MemoryDashboardSnapshot): void {
  * destructive. Returns null when no usable payload arrived by the deadline.
  */
 export async function readFinalSnapshot(path: string): Promise<string | null> {
-  const deadline = Date.now() + FINAL_SNAPSHOT_WAIT_MS;
-  for (;;) {
-    const contents = await fs.promises.readFile(path, "utf8").catch(() => null);
-    if (contents?.includes("__LSPPROF_MEM__") === true) {
-      await fs.promises.unlink(path).catch(() => undefined);
-      return contents;
-    }
-    if (Date.now() >= deadline) { return null; }
-    await delay(FINAL_SNAPSHOT_POLL_MS);
+  return readFinalSnapshotUntil(path, Date.now() + FINAL_SNAPSHOT_WAIT_MS);
+}
+
+/** Poll for the at-exit snapshot until it lands or the deadline passes. */
+async function readFinalSnapshotUntil(path: string, deadline: number): Promise<string | null> {
+  const contents = await fs.promises.readFile(path, "utf8").catch(() => null);
+  if (contents?.includes("__LSPPROF_MEM__") === true) {
+    await fs.promises.unlink(path).catch(() => null);
+    return contents;
   }
+  if (Date.now() >= deadline) { return null; }
+  await delay(FINAL_SNAPSHOT_POLL_MS);
+  return readFinalSnapshotUntil(path, deadline);
 }
 
 /** Read a `currentMemory` figure off an ingest result (for logging/summaries). */

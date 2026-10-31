@@ -1,12 +1,28 @@
-import * as assert from "assert";
+import * as assert from "node:assert";
 import {
-  BreakpointSpec,
-  DebugSessionHandle,
   makeBreakpointTools,
   makeSessionWaiters,
+} from "../src/testing/vscode-harness";
+import type {
+  BreakpointSpec,
+  DebugSessionHandle,
   VscodeBreakpointApi,
   VscodeSessionApi,
 } from "../src/testing/vscode-harness";
+
+/** True when a breakpoint condition is actually set. */
+function hasCondition(condition: string | undefined): condition is string {
+  return condition !== undefined && condition !== "";
+}
+
+/** A disposable for an API whose owner has nothing to release. */
+function noopDisposable(): { dispose: () => void } {
+  return {
+    dispose: () => {
+      // Nothing to release: the fake API only tracks the registration.
+    },
+  };
+}
 
 function fakeBreakpointApi(): VscodeBreakpointApi & { added: unknown[] } {
   const state = { current: [] as unknown[], added: [] as unknown[] };
@@ -23,7 +39,7 @@ function fakeBreakpointApi(): VscodeBreakpointApi & { added: unknown[] } {
     },
     removeBreakpoints(bps: readonly unknown[]) {
       const drop = new Set(bps);
-      state.current = state.current.filter((b) => !drop.has(b));
+      state.current = state.current.filter((breakpoint) => !drop.has(breakpoint));
     },
   };
 }
@@ -33,7 +49,7 @@ suite("makeBreakpointTools", () => {
     const api = fakeBreakpointApi();
     const made: string[] = [];
     const tools = makeBreakpointTools(api, (file, line, condition) => {
-      const bp = `${file}:${line}${condition ? `?${condition}` : ""}`;
+      const bp = `${file}:${line}${hasCondition(condition) ? `?${condition}` : ""}`;
       made.push(bp);
       return bp;
     });
@@ -64,19 +80,20 @@ suite("makeBreakpointTools", () => {
 
 suite("makeSessionWaiters.waitForDebugSessionStart", () => {
   test("resolves with the next started session and disposes the listener", async () => {
-    let listener: ((s: DebugSessionHandle) => void) | undefined;
+    const captured: { listener?: (session: DebugSessionHandle) => void } = {};
     let disposed = false;
     const api: VscodeSessionApi = {
-      onDidStartDebugSession(l) {
-        listener = l;
-        return { dispose() { disposed = true; } };
+      onDidStartDebugSession(sessionListener) {
+        captured.listener = sessionListener;
+        return { dispose: () => { disposed = true; } };
       },
       activeDebugSession: undefined,
     };
     const waiters = makeSessionWaiters(api);
     const started = waiters.waitForDebugSessionStart(2000);
-    listener?.({ id: "session-1" });
-    assert.strictEqual((await started).id, "session-1");
+    captured.listener?.({ id: "session-1" });
+    const session = await started;
+    assert.strictEqual(session.id, "session-1");
     assert.ok(disposed, "the start listener is disposed");
   });
 
@@ -84,28 +101,20 @@ suite("makeSessionWaiters.waitForDebugSessionStart", () => {
     let disposed = false;
     const api: VscodeSessionApi = {
       onDidStartDebugSession() {
-        return { dispose() { disposed = true; } };
+        return { dispose: () => { disposed = true; } };
       },
       activeDebugSession: undefined,
     };
     const waiters = makeSessionWaiters(api);
-    await assert.rejects(() => waiters.waitForDebugSessionStart(30), /did not start within 30ms/);
+    await assert.rejects(
+      async () => waiters.waitForDebugSessionStart(30),
+      /did not start within 30ms/u,
+    );
     assert.ok(disposed, "the listener is disposed on timeout");
   });
 });
 
 suite("makeSessionWaiters.waitForDebugSessionEnd", () => {
-  function apiWithActive(getActive: () => DebugSessionHandle | undefined): VscodeSessionApi {
-    return {
-      onDidStartDebugSession() {
-        return { dispose() {} };
-      },
-      get activeDebugSession() {
-        return getActive();
-      },
-    };
-  }
-
   test("resolves once the active session clears", async () => {
     let active: DebugSessionHandle | undefined = { id: "s1" };
     const waiters = makeSessionWaiters(apiWithActive(() => active));
@@ -121,11 +130,31 @@ suite("makeSessionWaiters.waitForDebugSessionEnd", () => {
 
   test("throws when the matching session never ends", async () => {
     const waiters = makeSessionWaiters(apiWithActive(() => ({ id: "s1" })));
-    await assert.rejects(() => waiters.waitForDebugSessionEnd(40, "s1"), /did not end within 40ms/);
+    await assert.rejects(
+      async () => waiters.waitForDebugSessionEnd(40, "s1"),
+      /did not end within 40ms/u,
+    );
   });
 
   test("resolves when no session is active and no id filter is given", async () => {
-    const waiters = makeSessionWaiters(apiWithActive(() => undefined));
+    const waiters = makeSessionWaiters(apiWithActive(sessionNeverActive));
     await waiters.waitForDebugSessionEnd(2000);
   });
 });
+
+/** A session API that reports `getActive()` as the active session. */
+function apiWithActive(getActive: () => DebugSessionHandle | undefined): VscodeSessionApi {
+  return {
+    onDidStartDebugSession() {
+      return noopDisposable();
+    },
+    get activeDebugSession() {
+      return getActive();
+    },
+  };
+}
+
+/** A getter for the "no session is active" case. */
+function sessionNeverActive(): DebugSessionHandle | undefined {
+  return undefined;
+}

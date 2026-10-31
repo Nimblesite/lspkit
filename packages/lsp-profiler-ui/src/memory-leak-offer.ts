@@ -10,8 +10,9 @@
  * Implements [PROF-UI-AUTOPILOT].
  */
 
-import * as path from "path";
-import { confidenceRank, type SuspectedLeak } from "./memory-decorations";
+import path from "node:path";
+import type { SuspectedLeak } from "./memory-decorations";
+import { confidenceRank } from "./memory-decorations";
 
 /** Whether the runtime placed `leak` on a source line. */
 export function isLocated(leak: SuspectedLeak): boolean {
@@ -20,10 +21,13 @@ export function isLocated(leak: SuspectedLeak): boolean {
 
 /** The leak to offer: the most confident, and among equals one with a source line. */
 export function leakToOffer(leaks: readonly SuspectedLeak[]): SuspectedLeak | undefined {
-  return leaks.reduce<SuspectedLeak | undefined>(
-    (best, leak) => (best === undefined || offerRank(leak) > offerRank(best) ? leak : best),
-    undefined,
-  );
+  let best: SuspectedLeak | undefined = undefined;
+  for (const leak of leaks) {
+    if (best === undefined || offerRank(leak) > offerRank(best)) {
+      best = leak;
+    }
+  }
+  return best;
 }
 
 /** Confidence first; a source line only breaks a tie. */

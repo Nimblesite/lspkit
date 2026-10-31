@@ -5,10 +5,10 @@
  * selection from another session, or a hostile one, out of it.
  */
 
-import * as assert from 'assert';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as assert from 'node:assert';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import path from 'node:path';
 import { profileVariable, selectedProfileVariable } from '../debug-selection';
 import { buildFlamegraphHtml, loadFlamegraphSvgDataUri } from '../profiler-flamegraph-html';
 import type { ProfileResult } from '../profiler-decorations';
@@ -25,14 +25,14 @@ function hotProfileResult(overrides: Partial<ProfileResult> = {}): ProfileResult
 
 let tmpDir = '';
 
-function writeSvg(name: string, contents: string): string {
+async function writeSvg(name: string, contents: string): Promise<string> {
     const svgPath = path.join(tmpDir, name);
-    fs.writeFileSync(svgPath, contents);
+    await fs.promises.writeFile(svgPath, contents);
     return svgPath;
 }
 
-function theFlameGraphIsTheHero(): void {
-    const svgPath = writeSvg('profile.svg', '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
+async function theFlameGraphIsTheHero(): Promise<void> {
+    const svgPath = await writeSvg('profile.svg', '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
     const html = buildFlamegraphHtml(hotProfileResult({ flamegraphPath: svgPath }));
     assert.ok(html.includes('data:image/svg+xml;base64,'), 'the flame graph SVG must be inlined as a data URI (a profiler must show a flame graph)');
     assert.ok(html.includes('open-flame-svg'), 'the hero must offer opening the interactive SVG externally');
@@ -61,18 +61,22 @@ function noSvgDegradesToTheTables(): void {
     }
 }
 
-function unusableSvgsAreNotInlined(): void {
+/** The largest SVG the hero inlines, in MiB. */
+const SVG_LIMIT_MIB = 5;
+const MEBIBYTE = 1024;
+
+async function unusableSvgsAreNotInlined(): Promise<void> {
     assert.strictEqual(loadFlamegraphSvgDataUri(undefined), undefined);
     assert.strictEqual(loadFlamegraphSvgDataUri(''), undefined);
-    const empty = writeSvg('empty.svg', '');
+    const empty = await writeSvg('empty.svg', '');
     assert.strictEqual(loadFlamegraphSvgDataUri(empty), undefined, 'an empty artifact is not a flame graph');
-    const oversized = writeSvg('huge.svg', `<svg>${'x'.repeat(5 * 1024 * 1024)}</svg>`);
+    const oversized = await writeSvg('huge.svg', `<svg>${'x'.repeat(SVG_LIMIT_MIB * MEBIBYTE * MEBIBYTE)}</svg>`);
     assert.strictEqual(loadFlamegraphSvgDataUri(oversized), undefined, 'an oversized artifact must not be inlined (it still opens externally)');
 }
 
 // Implements [PROF-EXPORT-FLAMEGRAPH]. See docs/specs/LSP-PROFILER-SPEC.md
 suite('Profiler webviews — flame graph hero', () => {
-    suiteSetup(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lspui-flame-hero-')); });
+    suiteSetup(async () => { tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lspui-flame-hero-')); });
     suiteTeardown(() => { removeTestDir(tmpDir); });
     test('the results panel embeds the LSP-exported flame graph SVG as its hero', theFlameGraphIsTheHero);
     test('the results panel offers the raw trace via an "Open Trace in VS Code Viewer" button', theRawTraceIsOneClickAway);

@@ -1,11 +1,11 @@
-import * as assert from "assert";
+import * as assert from "node:assert";
 import {
   buildMetricLaunchConfig,
   isProfilingLaunch,
   launchMetric,
   suppressBreakpointsForProfiling,
 } from "../src/profiling";
-import { DapMessage } from "../src/dap-messages";
+import type { DapMessage } from "../src/dap-messages";
 
 suite("isProfilingLaunch / launchMetric", () => {
   test("plain debug launch is not profiling", () => {
@@ -26,6 +26,11 @@ suite("isProfilingLaunch / launchMetric", () => {
   });
 });
 
+/** The number of items in an array value, or undefined when it is not one. */
+function itemCount(value: unknown): number | undefined {
+  return Array.isArray(value) ? value.length : undefined;
+}
+
 suite("suppressBreakpointsForProfiling", () => {
   const setBp: DapMessage = {
     type: "request",
@@ -35,9 +40,9 @@ suite("suppressBreakpointsForProfiling", () => {
   test("clears setBreakpoints during a profiling launch", () => {
     const out = suppressBreakpointsForProfiling(setBp, true);
     assert.deepStrictEqual(out.arguments?.breakpoints, []);
-    assert.deepStrictEqual((out.arguments as { source: unknown }).source, { path: "/a" });
-    // input is not mutated
-    assert.strictEqual((setBp.arguments?.breakpoints as unknown[]).length, 1);
+    assert.deepStrictEqual(out.arguments?.source, { path: "/a" });
+    // The input is not mutated.
+    assert.strictEqual(itemCount(setBp.arguments?.breakpoints), 1);
   });
   test("clears function breakpoints during profiling", () => {
     const out = suppressBreakpointsForProfiling(

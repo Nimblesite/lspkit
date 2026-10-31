@@ -1,4 +1,4 @@
-import * as assert from "assert";
+import * as assert from "node:assert";
 import {
   pollUntilResult,
   sleep,
@@ -15,68 +15,75 @@ suite("sleep", () => {
 
 suite("pollUntilResult", () => {
   test("object form returns as soon as the predicate accepts", async () => {
-    let n = 0;
+    let calls = 0;
     const value = await pollUntilResult({
-      fn: () => Promise.resolve(++n),
-      predicate: (v) => v >= 3,
+      fn: async () => {
+        calls += 1;
+        return calls;
+      },
+      predicate: (result) => result >= 3,
       intervalMs: 1,
     });
     assert.strictEqual(value, 3);
   });
-  test("positional form works with predicate + timings", async () => {
-    let n = 0;
-    const value = await pollUntilResult(
-      () => Promise.resolve(++n),
-      (v) => v >= 2,
-      1000,
-      1,
-    );
+  test("honours explicit timeout and interval", async () => {
+    let calls = 0;
+    const value = await pollUntilResult({
+      fn: async () => {
+        calls += 1;
+        return calls;
+      },
+      predicate: (result) => result >= 2,
+      timeoutMs: 1000,
+      intervalMs: 1,
+    });
     assert.strictEqual(value, 2);
   });
-  test("positional form defaults the predicate to always-true (one shot)", async () => {
-    const value = await pollUntilResult(() => Promise.resolve(42));
+  test("defaults the predicate to always-true (one shot)", async () => {
+    const value = await pollUntilResult({ fn: async () => 42 });
     assert.strictEqual(value, 42);
   });
   test("returns the last value when the predicate never holds (no throw)", async () => {
-    const value = await pollUntilResult(
-      () => Promise.resolve(7),
-      (v) => v === 999,
-      30,
-      5,
-    );
+    const value = await pollUntilResult({
+      fn: async () => 7,
+      predicate: (result) => result === 999,
+      timeoutMs: 30,
+      intervalMs: 5,
+    });
     assert.strictEqual(value, 7);
   });
 });
 
 suite("waitForCondition", () => {
   test("returns the value when the predicate eventually holds", async () => {
-    let n = 0;
-    const value = await waitForCondition(
-      "n reaches 2",
-      () => Promise.resolve(++n),
-      (v) => v >= 2,
-      1000,
-      1,
-    );
+    let calls = 0;
+    const value = await waitForCondition("n reaches 2", {
+      fn: async () => {
+        calls += 1;
+        return calls;
+      },
+      predicate: (result) => result >= 2,
+      timeoutMs: 1000,
+      intervalMs: 1,
+    });
     assert.strictEqual(value, 2);
   });
   test("throws a labelled error on timeout", async () => {
     await assert.rejects(
-      () =>
-        waitForCondition(
-          "the impossible",
-          () => Promise.resolve(1),
-          (v) => v === 2,
-          20,
-          5,
-        ),
-      /Timed out after 20ms waiting for the impossible; last value: 1/,
+      async () =>
+        waitForCondition("the impossible", {
+          fn: async () => 1,
+          predicate: (result) => result === 2,
+          timeoutMs: 20,
+          intervalMs: 5,
+        }),
+      /Timed out after 20ms waiting for the impossible; last value: 1/u,
     );
   });
-  test("object form is accepted", async () => {
+  test("defaults timeout and interval", async () => {
     const value = await waitForCondition("immediate", {
-      fn: () => Promise.resolve("ok"),
-      predicate: (v) => v === "ok",
+      fn: async () => "ok",
+      predicate: (result) => result === "ok",
     });
     assert.strictEqual(value, "ok");
   });
@@ -84,8 +91,14 @@ suite("waitForCondition", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     await assert.rejects(
-      () => waitForCondition("x", () => Promise.resolve(circular), () => false, 20, 5),
-      /last value: \[object Object\]/,
+      async () =>
+        waitForCondition("x", {
+          fn: async () => circular,
+          predicate: () => false,
+          timeoutMs: 20,
+          intervalMs: 5,
+        }),
+      /last value: \[object Object\]/u,
     );
   });
 });

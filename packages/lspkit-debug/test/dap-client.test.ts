@@ -1,7 +1,6 @@
-import * as assert from "assert";
+import * as assert from "node:assert";
 import {
   continueExecution,
-  DapSessionLike,
   evaluate,
   findVariable,
   readFrameVariables,
@@ -14,13 +13,47 @@ import {
   variables,
   waitForStop,
 } from "../src/testing/dap-client";
+import type { DapSessionLike } from "../src/testing/dap-client";
+
+/** True when `value` is a non-null object whose fields can be inspected. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** A numeric request argument (thread id, variables reference), or undefined. */
+function numberArg(args: unknown, key: string): number | undefined {
+  if (!isRecord(args)) {
+    return undefined;
+  }
+  const value = args[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+/** A string request argument (expression, context), or undefined. */
+function stringArg(args: unknown, key: string): string | undefined {
+  if (!isRecord(args)) {
+    return undefined;
+  }
+  const value = args[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+/** A fake handler that ignores every request and answers with nothing. */
+function noResponse(): undefined {
+  return undefined;
+}
 
 class FakeSession implements DapSessionLike {
   public readonly calls: { command: string; args: unknown }[] = [];
-  constructor(private readonly handler: (command: string, args: unknown) => unknown) {}
-  customRequest(command: string, args?: unknown): Promise<unknown> {
+  private readonly handler: (command: string, args: unknown) => unknown;
+
+  public constructor(handler: (command: string, args: unknown) => unknown) {
+    this.handler = handler;
+  }
+
+  public async customRequest(command: string, args?: unknown): Promise<unknown> {
     this.calls.push({ command, args });
-    return Promise.resolve(this.handler(command, args));
+    return this.handler(command, args);
   }
 }
 
@@ -34,8 +67,10 @@ suite("dap-client request wrappers", () => {
   });
 
   test("stackTrace forwards threadId/levels and returns frames", async () => {
-    const session = new FakeSession((_c, args) => ({
-      stackFrames: [{ id: 10, name: "main", line: (args as { threadId: number }).threadId, column: 1 }],
+    const session = new FakeSession((_command, args) => ({
+      stackFrames: [
+        { id: 10, name: "main", line: numberArg(args, "threadId") ?? 0, column: 1 },
+      ],
     }));
     const stack = await stackTrace(session, 7, 5);
     assert.strictEqual(stack.stackFrames[0].line, 7);
@@ -51,27 +86,31 @@ suite("dap-client request wrappers", () => {
         ? { scopes: [{ name: "Locals", variablesReference: 100 }] }
         : { variables: [{ name: "x", value: "1", variablesReference: 0 }] },
     );
-    assert.strictEqual((await scopes(session, 10)).scopes[0].variablesReference, 100);
-    assert.strictEqual((await variables(session, 100)).variables[0].name, "x");
+    const frameScopes = await scopes(session, 10);
+    assert.strictEqual(frameScopes.scopes[0].variablesReference, 100);
+    const group = await variables(session, 100);
+    assert.strictEqual(group.variables[0].name, "x");
   });
 
   test("evaluate defaults to the watch context and honours overrides", async () => {
-    const session = new FakeSession((_c, args) => ({
-      result: `${(args as { context: string }).context}:${(args as { expression: string }).expression}`,
+    const session = new FakeSession((_command, args) => ({
+      result: `${stringArg(args, "context")}:${stringArg(args, "expression")}`,
       variablesReference: 0,
     }));
-    assert.strictEqual((await evaluate(session, "x", 10)).result, "watch:x");
-    assert.strictEqual((await evaluate(session, "y", 10, "repl")).result, "repl:y");
+    const watch = await evaluate(session, { expression: "x", frameId: 10 });
+    assert.strictEqual(watch.result, "watch:x");
+    const repl = await evaluate(session, { expression: "y", frameId: 10, context: "repl" });
+    assert.strictEqual(repl.result, "repl:y");
   });
 
   test("step/continue wrappers issue the right DAP command", async () => {
-    const session = new FakeSession(() => undefined);
+    const session = new FakeSession(noResponse);
     await stepOver(session, 1);
     await stepIn(session, 1);
     await stepOut(session, 1);
     await continueExecution(session, 1);
     assert.deepStrictEqual(
-      session.calls.map((c) => c.command),
+      session.calls.map((call) => call.command),
       ["next", "stepIn", "stepOut", "continue"],
     );
     assert.deepStrictEqual(session.calls[0].args, { threadId: 1 });
@@ -88,7 +127,7 @@ suite("dap-client variable helpers", () => {
         ],
       };
     }
-    if (command === "variables" && (args as { variablesReference: number }).variablesReference === 100) {
+    if (command === "variables" && numberArg(args, "variablesReference") === 100) {
       return {
         variables: [
           { name: "x", value: "1", variablesReference: 0 },
@@ -101,11 +140,12 @@ suite("dap-client variable helpers", () => {
 
   test("readFrameVariables flattens only referenceable scopes", async () => {
     const vars = await readFrameVariables(session, 10);
-    assert.deepStrictEqual(vars.map((v) => v.name), ["x", "s"]);
+    assert.deepStrictEqual(vars.map((variable) => variable.name), ["x", "s"]);
   });
 
   test("findVariable finds a named local and returns undefined otherwise", async () => {
-    assert.strictEqual((await findVariable(session, 10, "x"))?.value, "1");
+    const local = await findVariable(session, 10, "x");
+    assert.strictEqual(local?.value, "1");
     assert.strictEqual(await findVariable(session, 10, "missing"), undefined);
   });
 });
@@ -118,7 +158,9 @@ suite("waitForStop", () => {
         threadCalls += 1;
         return threadCalls === 1 ? { threads: [] } : { threads: [{ id: 1, name: "main" }] };
       }
-      return { stackFrames: [{ id: 10, name: "main", line: 2, column: 1, source: { path: "/a" } }] };
+      return {
+        stackFrames: [{ id: 10, name: "main", line: 2, column: 1, source: { path: "/a" } }],
+      };
     });
     const stop = await waitForStop(session, 5000);
     assert.strictEqual(stop.threadId, 1);
@@ -130,7 +172,7 @@ suite("waitForStop", () => {
       if (command === "threads") {
         return { threads: [{ id: 1, name: "a" }, { id: 2, name: "b" }] };
       }
-      if ((args as { threadId: number }).threadId === 1) {
+      if (numberArg(args, "threadId") === 1) {
         throw new Error("frame unavailable");
       }
       return { stackFrames: [{ id: 20, name: "b", line: 9, column: 1 }] };
@@ -159,6 +201,9 @@ suite("waitForStop", () => {
     const session = new FakeSession((command) =>
       command === "threads" ? { threads: [{ id: 1, name: "main" }] } : { stackFrames: [] },
     );
-    await assert.rejects(() => waitForStop(session, 60), /waiting for the debuggee to stop/);
+    await assert.rejects(
+      async () => waitForStop(session, 60),
+      /waiting for the debuggee to stop/u,
+    );
   });
 });

@@ -5,16 +5,19 @@
  * names a colour it does not draw, or dark text on a dark accent.
  */
 
-import * as assert from 'assert';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as assert from 'node:assert';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import path from 'node:path';
 import * as vscode from 'vscode';
 import { configSection } from '../ids';
-import { buildMemoryDashboardHtml, type MemoryDiffData } from '../memory-dashboard';
+import type { MemoryDiffData } from '../memory-dashboard';
+import { buildMemoryDashboardHtml } from '../memory-dashboard';
 import { buildRefGraphHtml } from '../memory-ref-graph';
-import { applyLeakDecorations, appliedMemoryDecorations, clearMemoryDecorations, type LeakConfidence } from '../memory-decorations';
-import { DEFAULT_PALETTE, inkFor, paletteCss, profilerPalette, type ProfilerPalette } from '../palette';
+import type { LeakConfidence } from '../memory-decorations';
+import { appliedMemoryDecorations, applyLeakDecorations, clearMemoryDecorations } from '../memory-decorations';
+import { DEFAULT_PALETTE, inkFor, paletteCss, profilerPalette } from '../palette';
+import type { ProfilerPalette } from '../palette';
 import { FLAME_SCRIPT } from '../flame-script';
 import { buildFlamegraphHtml } from '../profiler-flamegraph-html';
 import { closeAllEditors, dashboardSnapshot, profileResult, removeTestDir } from './webview-contract-helpers';
@@ -77,7 +80,8 @@ function activeToggleRules(css: string): string[] {
 }
 
 async function textOnAnAccentReadsItsInk(): Promise<void> {
-    const results = (await viewsUnder(DARK_PALETTE))['results panel'] ?? '';
+    const views = await viewsUnder(DARK_PALETTE);
+    const results = views['results panel'] ?? '';
     assert.ok(activeToggleRules(results).some((rule) => rule.includes('color: var(--prof-hot-ink)')), 'the active toggle writes in the hot accent\'s ink');
     assert.ok(FLAME_SCRIPT.includes('ctx.fillStyle = inkFor(model.frames[r.frameIdx].color)'), 'a slab label is inked against its own slab');
     assert.ok(FLAME_SCRIPT.includes(inkFor.toString()), 'the canvas runs the tested ink rule');
@@ -93,9 +97,9 @@ const CONFIDENCES: readonly LeakConfidence[] = ['DEFINITE', 'HIGH', 'MEDIUM', 'L
 
 /** Paint one leak of each confidence on an open file and return the colours the editor got. */
 async function leakColours(): Promise<string[]> {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lspui-leak-palette-'));
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lspui-leak-palette-'));
     const file = path.join(dir, 'leaks.txt');
-    fs.writeFileSync(file, 'definite\nhigh\nmedium\nlow\n');
+    await fs.promises.writeFile(file, 'definite\nhigh\nmedium\nlow\n');
     try {
         await vscode.window.showTextDocument(vscode.Uri.file(file));
         applyLeakDecorations({ totalGrowth: 0, totalFreed: 0, netGrowth: 0, suspectedLeaks: CONFIDENCES.map((confidence, i) => ({

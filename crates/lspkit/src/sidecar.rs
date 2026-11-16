@@ -15,6 +15,6 @@ pub mod inbound;
 pub mod lifecycle;
 pub mod transport;
 
-pub use crate::sidecar::correlator::{CorrelationError, Correlator, RequestId};
+pub use crate::sidecar::correlator::{CorrelationError, Correlator, PendingResponse, RequestId};
 pub use crate::sidecar::lifecycle::{LifecycleConfig, LifecycleError, Sidecar};
 pub use crate::sidecar::transport::{read_frame, write_frame, TransportError, DEFAULT_MAX_FRAME};

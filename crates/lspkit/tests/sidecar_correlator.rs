@@ -3,7 +3,7 @@
 //! Drives the public API only — `Correlator::new`, `register`, `resolve`,
 //! `pending_count`, and `RequestId::get`.
 
-use lspkit::sidecar::{CorrelationError, Correlator, RequestId};
+use lspkit::sidecar::{CorrelationError, Correlator, PendingResponse, RequestId};
 
 /// Allocated IDs are monotonic starting at 1.
 #[tokio::test]
@@ -191,4 +191,17 @@ impl RequestIdTestExt for RequestId {
         }
         current
     }
+}
+
+/// Callers storing in-flight responses name the future through the sidecar facade. [MEM-FIX-SCOPE]
+#[tokio::test]
+async fn pending_response_is_nameable_from_the_sidecar_facade() {
+    let correlator: Correlator<String> = Correlator::new();
+    let (id, mut pending): (RequestId, PendingResponse<String>) = correlator.register();
+    assert!(pending.try_recv().is_err());
+    correlator
+        .resolve(id, "answer".to_owned())
+        .expect("resolve the stored registration");
+    assert_eq!(pending.await.expect("response delivered"), "answer");
+    assert_eq!(correlator.pending_count(), 0);
 }

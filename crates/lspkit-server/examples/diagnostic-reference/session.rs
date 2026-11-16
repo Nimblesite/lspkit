@@ -21,6 +21,9 @@ use crate::analysis::{self, Document, Sources};
 use crate::wire::{pump, Outbox};
 use crate::{ingress, scan};
 
+#[cfg(test)]
+mod memory_retention;
+
 /// The workspace pull method, answered with streamed partial replies.
 pub(super) const WORKSPACE_DIAGNOSTIC: &str = "workspace/diagnostic";
 

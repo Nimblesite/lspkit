@@ -27,9 +27,9 @@ use handlers::{register_handlers, HandlerState};
 #[cfg(test)]
 mod memory_retention;
 #[cfg(test)]
-mod watch_memory_retention;
-#[cfg(test)]
 mod pull_memory_retention;
+#[cfg(test)]
+mod watch_memory_retention;
 
 /// The workspace pull method, answered with streamed partial replies.
 pub(super) const WORKSPACE_DIAGNOSTIC: &str = "workspace/diagnostic";

@@ -102,10 +102,7 @@ async fn retained_readers(
         .unzip();
     while idle.try_recv().is_ok() {}
     assert_eq!(idle.recv().await, Some(()));
-    let retained = allocations
-        .iter()
-        .filter(|weak| weak.strong_count() > 0)
-        .count();
+    let retained = allocations.iter().filter(|w| w.strong_count() > 0).count();
     drop(writers);
     Ok((allocations, retained))
 }

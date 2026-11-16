@@ -64,11 +64,8 @@ fn closed_documents_release_their_source_buffers() {
         );
         assert!(!handle_notification(&server, &close));
     }
-    let documents = server
-        .sources
-        .documents
-        .lock()
-        .expect("source allocation registry");
+    let sources = &server.sources.documents;
+    let documents = sources.lock().expect("source allocation registry");
     let retained_bytes: usize = documents.values().map(|document| document.text.len()).sum();
     assert_eq!(
         (documents.len(), retained_bytes),

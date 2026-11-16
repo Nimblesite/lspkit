@@ -281,3 +281,39 @@ Branches     : 96.48% ( 247/256 )
 Functions    : 99.12% ( 113/114 )
 Lines        : 99.44% ( 1424/1432 )
 ```
+
+## Closed pull inputs — additional red/green proof
+
+`cargo test -p lspkit-server --example diagnostic-reference --features pull --locked closing_documents_releases_their_salsa_diagnostic_allocations -- --nocapture` drives 32 real open → JSON analysis → close sequences while keeping the session alive. Before the repair:
+
+```text
+running 1 test
+
+thread 'session::pull_memory_retention::closing_documents_releases_their_salsa_diagnostic_allocations' (66406473) panicked at crates/lspkit-server/examples/diagnostic-reference/session/pull_memory_retention.rs:28:5:
+assertion `left == right` failed: closed documents retain real Salsa diagnostic allocations while the session remains alive
+  left: 32
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test session::pull_memory_retention::closing_documents_releases_their_salsa_diagnostic_allocations ... FAILED
+
+failures:
+
+failures:
+    session::pull_memory_retention::closing_documents_releases_their_salsa_diagnostic_allocations
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p lspkit-server --example diagnostic-reference`
+```
+
+After the repair, the same allocation assertion passes:
+
+```text
+running 1 test
+test session::pull_memory_retention::closing_documents_releases_their_salsa_diagnostic_allocations ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+```
+
+`PullStore::clear` replaces the database without locking compiler execution. This releases Salsa input slots, URI strings, and diagnostic memos; removing only map keys would leave Salsa-owned allocations alive. Active old queries finish as superseded and release their old storage. A barrier-driven test proves clearing returns with compiler work blocked, permits a new query, preserves memoization until the next clear, and releases allocations through any store clone. An isolated queued-query test proves old storage cannot publish under a replacement identity.

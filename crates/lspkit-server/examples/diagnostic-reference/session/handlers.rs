@@ -99,5 +99,7 @@ pub(super) fn close_document(server: &Server, params: Value) {
     if let Ok(mut documents) = server.sources.documents.lock() {
         let _ = documents.remove(params.text_document.uri.as_str());
     }
-    server.pull.invalidate();
+    if let Err(error) = server.pull.clear() {
+        tracing::warn!(%error, "closed document memo release failed");
+    }
 }

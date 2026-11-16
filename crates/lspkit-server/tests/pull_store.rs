@@ -125,3 +125,47 @@ fn debug_reports_the_current_revision_and_hides_analysis_state() {
         format!("PullStore {{ revision: {advanced}, .. }}")
     );
 }
+
+#[test]
+fn clearing_closed_inputs_does_not_wait_for_in_flight_compiler_work() {
+    // A close releases the old database after active work ends. [LSP-PULL-CONCURRENCY]
+    let probe = BlockedPull::new();
+    let (_before, revision, worker) = probe.start();
+    let _started = probe.started.wait();
+    probe.store.clear().expect("nonblocking close boundary");
+    assert_eq!(probe.store.revision(), revision + 1);
+    let current = probe
+        .store
+        .diagnostics("file:///other.cs", 7)
+        .expect("new database is available");
+    let allocation = Arc::downgrade(&current.items);
+    let repeated = probe
+        .store
+        .diagnostics("file:///other.cs", 7)
+        .expect("memoized diagnostic");
+    assert!(Arc::ptr_eq(&current.items, &repeated.items));
+    assert_eq!(probe.calls.load(Ordering::Acquire), 2);
+    let _released = probe.release.wait();
+    assert!(matches!(worker.join(), Ok(Err(PullError::Superseded))));
+    drop((current, repeated));
+    assert!(
+        allocation.strong_count() > 0,
+        "open document keeps its memo"
+    );
+    probe
+        .store
+        .clone()
+        .clear()
+        .expect("clones share the close boundary");
+    assert_eq!(
+        allocation.strong_count(),
+        0,
+        "clear releases the real memo allocation"
+    );
+    let reopened = probe
+        .store
+        .diagnostics("file:///other.cs", 7)
+        .expect("reopened input");
+    assert_ne!(reopened.result_id, probe.store.result_id(3));
+    assert_eq!(probe.calls.load(Ordering::Acquire), 3);
+}

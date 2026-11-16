@@ -1,0 +1,6 @@
+# The one Rust toolchain for local builds, CI, release and the devcontainer.
+# Bump it here and in the workflows' dtolnay/rust-toolchain `toolchain:` inputs together.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy", "llvm-tools-preview"]
+profile = "minimal"

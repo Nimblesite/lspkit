@@ -355,3 +355,9 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; fini
 ```
 
 The repair recovers the poisoned registry with a structured warning, removes the closed buffer, then clears Salsa. No assertion changed.
+
+## Final release-candidate validation
+
+`make ci` exited 0 on `51287e1` before merge: 502 Rust tests passed, zero skipped; .NET and TypeScript tests, static analysis, coverage gates and release build passed. Final server coverage is 97.15% against 97%; tree-sitter coverage is 95.45% against 95%; the other eight floors remain green. Final Deslop review found no new high-similarity production duplication. The three original proof hashes still match the recorded values.
+
+All required PR checks passed on the same candidate. PR #46 merged as `a451a9b`, tagged `v0.5.0`. Release run [43858247154](https://github.com/Nimblesite/lspkit/actions/runs/43858247154) passed all publication and Pages jobs. All four crates.io 0.5.0 versions were verified non-yanked. npm metadata, latest tag, downloadable tarball SRI and byte equality with the signed GitHub release asset were verified after npm processing completed. SHA256SUMS matched all six package/SBOM assets. Release announcements were sent directly to all 29 other registered TMC agents and broadcast with API migration details.

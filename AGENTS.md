@@ -28,7 +28,7 @@ Reusable Rust components for building language servers, plus the shared CPU and 
 - **Files < 500 lines, functions < 20 lines.** Named constants, not literals.
 - **Models are generated with [typeDiagram](https://typediagram.dev/docs/language-reference.html)**, never hand-written or committed.
 - **Global state lives in one `state.rs` per crate** (or the language's equivalent).
-- **Dependency versions stay in sync** across manifests, `.github/workflows/` and `.devcontainer/`.
+- **Dependency versions stay in sync** across manifests, `.github/workflows/` and `.devcontainer/`. The Rust toolchain is pinned to one exact version in `rust-toolchain.toml` and in each workflow's `toolchain:` input, never `stable`. Every consumer language server pins the same version.
 - **Structured logging only**: `tracing` (Rust), the package `logger` module (TypeScript), `Microsoft.Extensions.Logging` (.NET). Never log PII, secrets, file contents or user paths.
 - **Bug fixes follow [fix-bug](.agents/skills/fix-bug/SKILL.md)**: failing test first. Skills live in `.agents/skills/`; run `node scripts/link-skills.mjs` after adding one.
 

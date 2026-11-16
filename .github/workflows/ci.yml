@@ -35,7 +35,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: stable
+          toolchain: 1.100.0
           components: rustfmt, clippy, llvm-tools-preview
 
       # The profiler's .NET engine and the fixture its e2e tests profile build in

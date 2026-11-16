@@ -150,9 +150,16 @@ fn uri_authority_is_parsed_not_read_as_a_path_segment() {
             "{uri} re-encodes without its host"
         );
     }
+    for uri in ["file://", "file://localhost"] {
+        let decoded = uri_to_path(uri).expect("a URI with no path names the root");
+        assert_eq!(decoded, PathBuf::from("/"), "{uri}");
+    }
+    let err = uri_to_path("file://%ZZhost/a.rs").expect_err("a malformed host");
+    assert!(matches!(err, UriError::InvalidUtf8(None)), "{err:?}");
     for uri in [
         "file://server/share/a.rs",
         "file://wsl.localhost/Ubuntu/a.rs",
+        "file://server",
     ] {
         let err = uri_to_path(uri).expect_err("a remote host has no local path here");
         assert!(
@@ -161,6 +168,19 @@ fn uri_authority_is_parsed_not_read_as_a_path_segment() {
         );
         assert!(format!("{err}").contains(uri), "the error names {uri}");
     }
+}
+
+/// A file name that is not valid UTF-8 cannot be written into a URI.
+#[cfg(not(windows))]
+#[test]
+fn non_utf8_path_rejected() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let path = PathBuf::from("/tmp").join(OsStr::from_bytes(&[0x66, 0xFF, 0x6F]));
+    let err = path_to_uri(&path).expect_err("must reject");
+    assert!(
+        matches!(&err, UriError::InvalidPath(rejected) if *rejected == path),
+        "{err:?}"
+    );
 }
 
 #[cfg(not(windows))]

@@ -1,5 +1,5 @@
-//! [URI-AUTHORITY] Windows path rules, isolated so the Linux CI runs them too:
-//! the public functions only take the Windows branch on a Windows build.
+//! [URI-AUTHORITY] Path-style rules, isolated so the Linux CI runs the Windows
+//! rules too: the public functions only take the Windows branch on a Windows build.
 
 use super::{native_to_uri, uri_to_native, Style, UriError};
 
@@ -69,6 +69,38 @@ fn windows_uris_without_an_absolute_path_are_rejected() {
         assert!(
             matches!(&err, UriError::NoLocalPath(rejected) if rejected == uri),
             "{uri}: {err:?}"
+        );
+    }
+}
+
+/// URIs and the Unix path each names, so this binary's copy of the shared
+/// conversion is exercised on both styles, not only the Windows branch.
+const UNIX_ROUND_TRIPS: [(&str, &str); 3] = [
+    ("file://localhost/tmp/a.rs", "/tmp/a.rs"),
+    ("file:///tmp/my%20repo/a.rs", "/tmp/my repo/a.rs"),
+    ("file://", "/"),
+];
+
+#[test]
+fn both_styles_share_one_authority_parser() {
+    for (uri, path) in UNIX_ROUND_TRIPS {
+        assert_eq!(
+            uri_to_native(uri, Style::Unix).expect("local"),
+            path,
+            "{uri}"
+        );
+    }
+    assert_eq!(
+        native_to_uri("/tmp/a b.rs", Style::Unix),
+        "file:///tmp/a%20b.rs"
+    );
+    for style in [Style::Unix, Style::Windows] {
+        let remote = uri_to_native("file://server/", style).expect_err("no share path");
+        assert!(matches!(remote, UriError::NoLocalPath(_)), "{style:?}");
+        let scheme = uri_to_native("https://server/a.rs", style).expect_err("not file");
+        assert!(
+            matches!(scheme, UriError::UnsupportedScheme(_)),
+            "{style:?}"
         );
     }
 }

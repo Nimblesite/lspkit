@@ -184,5 +184,5 @@ fn percent_encode(input: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "uri_windows_tests.rs"]
-mod windows_tests;
+#[path = "uri_style_tests.rs"]
+mod style_tests;

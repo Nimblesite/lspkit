@@ -17,6 +17,9 @@ pub enum UriError {
     /// Path could not be converted to a URI.
     #[error("path cannot be expressed as a file URI: {0}")]
     InvalidPath(PathBuf),
+    /// URI names a host this platform cannot reach as a path, or no absolute path.
+    #[error("URI names no absolute local path: {0}")]
+    NoLocalPath(String),
 }
 
 /// Convert a `file://` URI to a `PathBuf`.

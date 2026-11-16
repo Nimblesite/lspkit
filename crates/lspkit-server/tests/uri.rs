@@ -128,6 +128,35 @@ fn error_debug_works() {
     assert!(rendered.contains("InvalidPath"));
 }
 
+/// [URI-AUTHORITY] A URI's host is its authority, never the first path segment.
+#[cfg(not(windows))]
+#[test]
+fn uri_authority_is_parsed_not_read_as_a_path_segment() {
+    let local_forms = [
+        "file://localhost/tmp/a.rs",
+        "file://LocalHost/tmp/a.rs",
+        "file:///tmp/a.rs",
+    ];
+    for uri in local_forms {
+        let decoded = uri_to_path(uri).expect("a local URI decodes");
+        assert_eq!(decoded, PathBuf::from("/tmp/a.rs"), "{uri}");
+        assert!(decoded.is_absolute(), "{uri} must decode to an absolute path");
+        assert_eq!(
+            path_to_uri(&decoded).expect("encoded"),
+            "file:///tmp/a.rs",
+            "{uri} re-encodes without its host"
+        );
+    }
+    for uri in ["file://server/share/a.rs", "file://wsl.localhost/Ubuntu/a.rs"] {
+        let err = uri_to_path(uri).expect_err("a remote host has no local path here");
+        assert!(
+            matches!(&err, UriError::NoLocalPath(rejected) if rejected == uri),
+            "{uri}: {err:?}"
+        );
+        assert!(format!("{err}").contains(uri), "the error names {uri}");
+    }
+}
+
 #[cfg(not(windows))]
 #[test]
 fn empty_path_after_scheme_decodes_to_root() {

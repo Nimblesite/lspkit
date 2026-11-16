@@ -17,12 +17,12 @@ Repair the five allocation-lifetime defects proved by the [audit](memory-leak-au
 - [x] Prove and repair closed-document Salsa input and diagnostic retention.
 - [x] Run `make test`, `make lint`, formatting, and Deslop without weakening gates.
 - [x] Record pi review results and exact validation evidence.
-- [ ] Clean owned temporary/build files and processes; check disk space.
-- [ ] Open and merge a green PR, publish v0.5.0, verify registries and notify consumer agents.
+- [x] Clean owned temporary/build files and processes; check disk space.
+- [x] Open and merge a green PR, publish v0.5.0, verify registries and notify consumer agents.
 
 ## [MEM-FIX-RESULTS] Validation
 
-The original eight leak tests pass after failing for actual retained allocations before the fixes. Full `make ci` passes: 496 Rust tests, all ten coverage floors, TypeScript tests and coverage, static analysis, and the release build. `make fmt CHECK=1` passes. All three original proof files remain byte-identical. Exact output: [memory-leak-fix-evidence.md](memory-leak-fix-evidence.md).
+The original eight leak tests pass after failing for actual retained allocations before the fixes. Full `make ci` passes: 502 Rust tests, all ten coverage floors, TypeScript tests and coverage, static analysis, and the release build. `make fmt CHECK=1` passes. All three original proof files remain byte-identical. Exact output: [memory-leak-fix-evidence.md](memory-leak-fix-evidence.md).
 
 | Ownership defect | Executed failure before repair | Repair |
 | --- | --- | --- |
@@ -45,3 +45,9 @@ Inbound and dispatcher signatures are unchanged. Three fixes are in the referenc
 The first full run exposed a separate existing harness failure: Cargo placed tests below `build/<crate>/<hash>/out`, so inferring the producer path from two parent directories failed before real sessions started. `scripts/rust-coverage.sh` now obtains the executable from Cargo's parsed artifact metadata, overriding stale caller settings with the just-built instrumented producer. No test assertion or coverage gate changed.
 
 Coverage gaps are covered by deterministic receiver-owner teardown, closed-channel and poisoned-registry tests, native watcher observation loss and consumer shutdown, absent native parse results, and real .NET capability/error-path negotiation. Native failure paths require isolation because safe public handles cannot deterministically force OS overflow or a missing tree. Existing coverage thresholds and reporting semantics remain unchanged. The pi coverage review incorrectly attributed the gaps to stale profiles; a clean rebuild reproduced them, so that recommendation was rejected and actual missing paths were tested.
+
+## [MEM-FIX-RELEASE] Published result
+
+[PR #46](https://github.com/Nimblesite/lspkit/pull/46) merged after every required check passed. [v0.5.0](https://github.com/Nimblesite/lspkit/releases/tag/v0.5.0) ships merged commit `a451a9b782c47bcc40debbd49b8bc92f39d78565`; release run `43858247154` completed successfully, including Pages. All four crates were checked on crates.io as non-yanked 0.5.0 releases. npm reports `@nimblesite/lsp-profiler-ui@0.5.0` and `latest=0.5.0`; its downloadable tarball matches its SRI integrity and the signed release asset byte for byte. All six package/SBOM assets match SHA256SUMS. Every registered TMC agent received a direct release announcement, plus shared migration notices.
+
+Generated build output and Deslop caches were moved to Trash; no owned compiler or pi task remains running. Disk space was checked (139 GiB available). Original leak proof hashes remain unchanged.

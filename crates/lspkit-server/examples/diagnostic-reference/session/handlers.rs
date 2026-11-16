@@ -96,9 +96,12 @@ pub(super) fn close_document(server: &Server, params: Value) {
         tracing::warn!("malformed document close notification ignored");
         return;
     };
-    if let Ok(mut documents) = server.sources.documents.lock() {
-        let _ = documents.remove(params.text_document.uri.as_str());
-    }
+    let mut documents = server.sources.documents.lock().unwrap_or_else(|poisoned| {
+        tracing::warn!("recovering poisoned source registry to release closed document");
+        poisoned.into_inner()
+    });
+    let _ = documents.remove(params.text_document.uri.as_str());
+    drop(documents);
     if let Err(error) = server.pull.clear() {
         tracing::warn!(%error, "closed document memo release failed");
     }

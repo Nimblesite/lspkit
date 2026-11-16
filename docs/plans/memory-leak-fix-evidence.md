@@ -317,3 +317,41 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; fini
 ```
 
 `PullStore::clear` replaces the database without locking compiler execution. This releases Salsa input slots, URI strings, and diagnostic memos; removing only map keys would leave Salsa-owned allocations alive. Active old queries finish as superseded and release their old storage. A barrier-driven test proves clearing returns with compiler work blocked, permits a new query, preserves memoization until the next clear, and releases allocations through any store clone. An isolated queued-query test proves old storage cannot publish under a replacement identity.
+
+## Poisoned source registry close — red/green proof
+
+A caught panic deterministically poisons the real source registry after inserting 64 KiB of text. The real close notification must still free it. Isolation is necessary to force this error path without crashing the process.
+
+red:
+
+```text
+running 1 test
+
+thread 'session::pull_memory_retention::closing_after_a_source_lock_panic_releases_retained_text' (66470111) panicked at crates/lspkit-server/examples/diagnostic-reference/session/pull_memory_retention.rs:25:5:
+assertion `left == right` failed: poisoned close retains a 64 KiB source allocation
+  left: 65536
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test session::pull_memory_retention::closing_after_a_source_lock_panic_releases_retained_text ... FAILED
+
+failures:
+
+failures:
+    session::pull_memory_retention::closing_after_a_source_lock_panic_releases_retained_text
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p lspkit-server --example diagnostic-reference`
+```
+
+green:
+
+```text
+running 1 test
+test session::pull_memory_retention::closing_after_a_source_lock_panic_releases_retained_text ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+```
+
+The repair recovers the poisoned registry with a structured warning, removes the closed buffer, then clears Salsa. No assertion changed.

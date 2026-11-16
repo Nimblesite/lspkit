@@ -6,6 +6,44 @@ use serde_json::json;
 use std::sync::Arc;
 
 #[test]
+fn closing_after_a_source_lock_panic_releases_retained_text() {
+    let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+    let server = Server::new(Outbox::new(sender));
+    let poisoned = std::panic::catch_unwind(|| {
+        let mut documents = server.sources.documents.lock().expect("source registry");
+        let _ = documents.insert(
+            "file:///poisoned.json".to_owned(),
+            crate::analysis::Document {
+                text: " ".repeat(64 * 1024),
+                version: 1,
+            },
+        );
+        std::panic::resume_unwind(Box::new(()));
+    });
+    assert!(poisoned.is_err());
+    let closed = Message::notification(
+        "textDocument/didClose",
+        json!({
+            "textDocument": {"uri": "file:///poisoned.json"}
+        }),
+    );
+    assert!(!handle_notification(&server, &closed));
+    let documents = server
+        .sources
+        .documents
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert_eq!(
+        documents
+            .values()
+            .map(|document| document.text.len())
+            .sum::<usize>(),
+        0,
+        "poisoned close retains a 64 KiB source allocation"
+    );
+}
+
+#[test]
 fn closing_documents_releases_their_salsa_diagnostic_allocations() {
     let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
     let server = Server::new(Outbox::new(sender));

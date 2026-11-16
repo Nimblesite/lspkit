@@ -346,6 +346,25 @@ impl PullStore {
     }
 }
 
+/// Poisoned query lock: an honest failure, never a panic across the boundary.
+fn poisoned(source: impl std::fmt::Display) -> AnalysisError {
+    AnalysisError(format!("diagnostic query lock poisoned: {source}"))
+}
+
+impl std::fmt::Debug for PullStore {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PullStore")
+            .field("revision", &self.revision())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Snapshot identity in the wire-stable `p:…|d:…|g:…` form.
+fn identity(revision: u64, version: i32, generation: u64) -> String {
+    format!("p:{revision}|d:{version}|g:{generation}")
+}
+
 #[cfg(test)]
 mod memory_tests {
     use super::{Arc, PullError, PullStore};
@@ -367,23 +386,4 @@ mod memory_tests {
             "queued ownership releases Salsa inputs and URI strings"
         );
     }
-}
-
-/// Poisoned query lock: an honest failure, never a panic across the boundary.
-fn poisoned(source: impl std::fmt::Display) -> AnalysisError {
-    AnalysisError(format!("diagnostic query lock poisoned: {source}"))
-}
-
-impl std::fmt::Debug for PullStore {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("PullStore")
-            .field("revision", &self.revision())
-            .finish_non_exhaustive()
-    }
-}
-
-/// Snapshot identity in the wire-stable `p:…|d:…|g:…` form.
-fn identity(revision: u64, version: i32, generation: u64) -> String {
-    format!("p:{revision}|d:{version}|g:{generation}")
 }

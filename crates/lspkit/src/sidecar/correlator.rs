@@ -152,3 +152,19 @@ impl<R> std::fmt::Debug for Correlator<R> {
             .finish()
     }
 }
+
+// Isolate a closed channel deterministically instead of racing receiver drop and send.
+#[cfg(test)]
+mod tests {
+    use super::{CorrelationError, Correlator};
+
+    #[test]
+    fn a_receiver_closed_during_resolution_returns_the_unsent_response() {
+        let correlator = Correlator::<u32>::new();
+        let (id, mut response) = correlator.register();
+        response.receiver.close();
+        assert!(matches!(correlator.resolve(id, 99),
+            Err(CorrelationError::AlreadyResolved(raw, 99)) if raw == id.get()));
+        assert_eq!(correlator.pending_count(), 0);
+    }
+}

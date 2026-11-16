@@ -94,6 +94,25 @@ async fn default_constructor_is_usable() {
     assert_eq!(rx.await.expect("receiver"), "ok");
 }
 
+/// Pending receivers must not keep a shut-down correlator's registry alive.
+#[tokio::test]
+async fn receivers_close_when_the_correlator_owner_is_dropped() {
+    let correlator = Correlator::<u32>::new();
+    let (_, mut checked) = correlator.register();
+    let (_, awaited) = correlator.register();
+    assert!(matches!(
+        checked.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    drop(correlator);
+    assert!(matches!(
+        checked.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Closed)
+    ));
+    assert!(awaited.await.is_err());
+    drop(checked);
+}
+
 /// Responses returning out of allocation order still match the correct
 /// receiver.
 #[tokio::test]

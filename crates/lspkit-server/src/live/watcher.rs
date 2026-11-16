@@ -211,3 +211,36 @@ fn map_event(event: Event, alias: &RootAlias) -> Option<ChangeEvent> {
         _ => None,
     }
 }
+
+// Native overflow/error and receiver loss need deterministic isolation from OS timing.
+#[cfg(test)]
+mod tests {
+    use super::{forward_events, observed_event, ChangeEvent, RootAlias};
+    use notify::{event::Flag, Event, EventKind};
+
+    #[test]
+    fn lost_observation_rescans_and_a_closed_consumer_releases_forwarding() {
+        let root = tempfile::tempdir().expect("watched root");
+        let alias = RootAlias::of(root.path()).expect("canonical root");
+        let overflow = Event::new(EventKind::Other).set_flag(Flag::Rescan);
+        for event in [
+            Ok(overflow),
+            Err(notify::Error::generic("observation lost")),
+        ] {
+            assert!(matches!(
+                observed_event(event, &alias),
+                Some(ChangeEvent::Rescan)
+            ));
+        }
+        assert!(observed_event(Ok(Event::new(EventKind::Other)), &alias).is_none());
+        let (source, events) = std::sync::mpsc::channel();
+        let (output, receiver) = tokio::sync::mpsc::unbounded_channel();
+        drop(receiver);
+        source
+            .send(Err(notify::Error::generic("consumer gone")))
+            .expect("native event");
+        forward_events(events, &output, &alias);
+        assert!(output.is_closed());
+        assert!(source.send(Ok(Event::new(EventKind::Other))).is_err());
+    }
+}

@@ -259,3 +259,25 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 - `crates/lspkit/tests/sidecar_memory_retention.rs`: `fd4a381a50be75e542fbd6131b9fa06ee0b1b259f3b2cc157fe9c427e84b0237`
 - `crates/lspkit-server/tests/dispatch_memory_retention.rs`: `79d9fbb9cfe4a36bbf7a32309662f077296c7acdc004c94d752c3810665f8bde`
 - `crates/lspkit-server/examples/diagnostic-reference/session/memory_retention.rs`: `b24215fcadfbc2c2ad64d78f79647cb8751a6cfa061d1e5fafc7758d89f41364`
+
+## Full validation
+
+`make ci` exited 0 on 2026-11-16, including analysis, tests, coverage, and release build. `make fmt CHECK=1` exited 0. Original proof hashes above were rechecked after the full run and match.
+
+```text
+Summary [  38.669s] 496 tests run: 496 passed, 0 skipped
+OK:   lsp-profiler         95.54% >= 94%
+OK:   lsp-profiler-dotnet  92.76% >= 92%
+OK:   lspkit               99.17% >= 99%
+OK:   lspkit-server        97.12% >= 97%
+OK:   lspkit-server::live  94.66% >= 94%
+OK:   lspkit-server::mcp   100.00% >= 100%
+OK:   lspkit::config       100.00% >= 100%
+OK:   lspkit::sidecar      99.25% >= 99%
+OK:   lspkit::treesitter   95.00% >= 95%
+OK:   lspkit::vfs          100.00% >= 100%
+Statements   : 99.44% ( 1424/1432 )
+Branches     : 96.48% ( 247/256 )
+Functions    : 99.12% ( 113/114 )
+Lines        : 99.44% ( 1424/1432 )
+```

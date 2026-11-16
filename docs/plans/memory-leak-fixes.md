@@ -14,14 +14,14 @@ Repair the five allocation-lifetime defects proved by the [audit](memory-leak-au
 - [x] Release closed reference-server document buffers; prove release.
 - [x] Break the reference-server handler cycle; prove release.
 - [x] Prove and repair initialized watcher retention after session teardown.
-- [ ] Run `make test`, `make lint`, formatting, and Deslop without weakening gates.
-- [ ] Record pi review results and exact validation evidence.
+- [x] Run `make test`, `make lint`, formatting, and Deslop without weakening gates.
+- [x] Record pi review results and exact validation evidence.
 - [ ] Clean owned temporary/build files and processes; check disk space.
 - [ ] Open and merge a green PR, publish v0.5.0, verify registries and notify consumer agents.
 
 ## [MEM-FIX-RESULTS] Validation
 
-All eight leak tests pass after failing for actual retained allocations before the fixes. Four original control tests and 21 neighboring API tests pass. Full validation is in progress. Exact output: [memory-leak-fix-evidence.md](memory-leak-fix-evidence.md).
+All eight leak tests pass after failing for actual retained allocations before the fixes. Full `make ci` passes: 496 Rust tests, all ten coverage floors, TypeScript tests and coverage, static analysis, and the release build. `make fmt CHECK=1` passes. All three original proof files remain byte-identical. Exact output: [memory-leak-fix-evidence.md](memory-leak-fix-evidence.md).
 
 | Ownership defect | Executed failure before repair | Repair |
 | --- | --- | --- |
@@ -41,3 +41,5 @@ The only public signature change is `Correlator::register` returning `PendingRes
 Inbound and dispatcher signatures are unchanged. Three fixes are in the reference server example, not consumers' own document stores or handler registrations. No PullStore eviction API or watcher payload feature is part of this patch. These tests do not establish the causes of previous consumer incidents. The consumer agents have received scope and API details through TMC. The user authorized a PR and release; v0.5.0 is the target because the correlator return type changes.
 
 The first full run exposed a separate existing harness failure: Cargo placed tests below `build/<crate>/<hash>/out`, so inferring the producer path from two parent directories failed before real sessions started. `scripts/rust-coverage.sh` now obtains the executable from Cargo's parsed artifact metadata, overriding stale caller settings with the just-built instrumented producer. No test assertion or coverage gate changed.
+
+Coverage gaps are covered by deterministic receiver-owner teardown, closed-channel and poisoned-registry tests, native watcher observation loss and consumer shutdown, absent native parse results, and real .NET capability/error-path negotiation. Native failure paths require isolation because safe public handles cannot deterministically force OS overflow or a missing tree. Existing coverage thresholds and reporting semantics remain unchanged. The pi coverage review incorrectly attributed the gaps to stale profiles; a clean rebuild reproduced them, so that recommendation was rejected and actual missing paths were tested.

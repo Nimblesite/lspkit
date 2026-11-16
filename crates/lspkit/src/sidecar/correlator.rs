@@ -167,4 +167,24 @@ mod tests {
             Err(CorrelationError::AlreadyResolved(raw, 99)) if raw == id.get()));
         assert_eq!(correlator.pending_count(), 0);
     }
+
+    #[test]
+    fn a_poisoned_registry_closes_receivers_without_retaining_channels() {
+        let correlator = Correlator::<u32>::new();
+        let fault = std::panic::catch_unwind(|| {
+            let _guard = correlator.pending.lock().expect("initial registry");
+            // Inject a failed critical section without a racing thread or OS failure.
+            std::panic::resume_unwind(Box::new(()));
+        });
+        assert!(fault.is_err());
+        let (id, mut response) = correlator.register();
+        assert_eq!(
+            response.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Closed)
+        );
+        assert!(
+            matches!(correlator.resolve(id, 99), Err(CorrelationError::UnknownId(raw)) if raw == id.get())
+        );
+        assert_eq!(correlator.pending_count(), 0);
+    }
 }

@@ -140,14 +140,20 @@ fn uri_authority_is_parsed_not_read_as_a_path_segment() {
     for uri in local_forms {
         let decoded = uri_to_path(uri).expect("a local URI decodes");
         assert_eq!(decoded, PathBuf::from("/tmp/a.rs"), "{uri}");
-        assert!(decoded.is_absolute(), "{uri} must decode to an absolute path");
+        assert!(
+            decoded.is_absolute(),
+            "{uri} must decode to an absolute path"
+        );
         assert_eq!(
             path_to_uri(&decoded).expect("encoded"),
             "file:///tmp/a.rs",
             "{uri} re-encodes without its host"
         );
     }
-    for uri in ["file://server/share/a.rs", "file://wsl.localhost/Ubuntu/a.rs"] {
+    for uri in [
+        "file://server/share/a.rs",
+        "file://wsl.localhost/Ubuntu/a.rs",
+    ] {
         let err = uri_to_path(uri).expect_err("a remote host has no local path here");
         assert!(
             matches!(&err, UriError::NoLocalPath(rejected) if rejected == uri),

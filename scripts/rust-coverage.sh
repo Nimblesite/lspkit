@@ -6,8 +6,17 @@ set -eu
 coverage_environment="$(cargo llvm-cov show-env --sh)"
 eval "$coverage_environment"
 cargo llvm-cov clean --workspace
-# CI must exercise this profile's producer, never a caller's stale override.
-unset LSPKIT_REFERENCE_BIN
-cargo build -p lspkit-server --example diagnostic-reference --features pull --locked
+# Cargo's artifact metadata identifies the exact instrumented producer even when
+# test executables live in a separate build directory. Never reuse a caller's override.
+producer_manifest="$(mktemp)"
+trap 'rm -f "$producer_manifest"' EXIT
+cargo build -p lspkit-server --example diagnostic-reference --features pull --locked \
+    --message-format=json-render-diagnostics > "$producer_manifest"
+LSPKIT_REFERENCE_BIN="$(jq -ser '
+    [.[] | select(.reason == "compiler-artifact" and .target.name == "diagnostic-reference")
+        | .executable | select(. != null)]
+    | if length == 1 then .[0] else error("expected one real reference producer") end
+' "$producer_manifest")"
+export LSPKIT_REFERENCE_BIN
 cargo nextest run --workspace --all-targets --all-features --locked
 cargo llvm-cov report --lcov --output-path lcov.info

@@ -44,6 +44,7 @@ tracing-setup = ["dep:tracing-subscriber"]
 treesitter = ["dep:tree-sitter"]
 
 [dev-dependencies]
+stats_alloc.workspace = true
 # The sidecar inbound-routing integration drives the real compiled
 # `diagnostic-reference --backend` child over OS stdio, so the test runtime
 # needs process spawning plus framed IO.

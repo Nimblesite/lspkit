@@ -16,7 +16,7 @@ pub struct Inbound<E> {
     pub responses: mpsc::UnboundedReceiver<Result<E, String>>,
     /// Unsolicited backend notifications, delivered even while idle.
     pub notifications: mpsc::UnboundedReceiver<E>,
-    /// Reader ownership, aborted when the owning transport is dropped.
+    /// Reader completion; dropping both receivers stops the reader even while idle.
     pub task: JoinHandle<()>,
 }
 
@@ -61,7 +61,11 @@ async fn read_loop<R, E, D, N>(
     N: Fn(&E) -> bool + Send + 'static,
 {
     loop {
-        let frame = next_frame(&mut reader, max_frame).await;
+        let frame = tokio::select! {
+            biased;
+            () = channels.closed() => return,
+            frame = next_frame(&mut reader, max_frame) => frame,
+        };
         let decoded = frame.and_then(|frame| frame.map(&decode).transpose());
         if !channels.forward(decoded, &notification) {
             return;
@@ -78,6 +82,12 @@ struct Channels<E> {
 }
 
 impl<E> Channels<E> {
+    /// Either stream may be consumed independently; stop when neither has an owner.
+    async fn closed(&self) {
+        self.responses.closed().await;
+        self.notifications.closed().await;
+    }
+
     /// Routes one decoded item and reports whether the reader should continue.
     fn forward(&self, item: Result<Option<E>, String>, notification: &impl Fn(&E) -> bool) -> bool {
         match item {

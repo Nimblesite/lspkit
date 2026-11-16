@@ -125,7 +125,7 @@ rmp-serde = "1"
 lsp-types = "0.97"
 
 # MCP SDK
-rmcp = "3.5"
+rmcp = "3.10"
 
 # Document / state
 dashmap = "6"
@@ -152,6 +152,9 @@ url = "2"
 
 # Tree-sitter (optional: the `treesitter` feature of lspkit)
 tree-sitter = "0.27"
+
+# Test-only direct allocation accounting for lifecycle leak regressions.
+stats_alloc = "0.1.10"
 
 # Internal workspace dependencies.
 # Versions are the `0.0.0-dev` placeholder; the release stamps the tag into

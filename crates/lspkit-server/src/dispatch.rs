@@ -125,8 +125,11 @@ impl Dispatcher {
             .handlers
             .read()
             .ok()
-            .and_then(|guard| guard.get(method).cloned())
-            .ok_or_else(|| DispatchError::UnknownMethod(method.to_owned()))?;
+            .and_then(|guard| guard.get(method).cloned());
+        let Some(handler) = handler else {
+            self.release_unprepared(id)?;
+            return Err(DispatchError::UnknownMethod(method.to_owned()));
+        };
         self.prepare_call(id, move |cancel| handler(params, cancel))
     }
 
@@ -174,6 +177,25 @@ impl Dispatcher {
             cancellations: Arc::clone(&self.cancellations),
         };
         Ok((control, guard))
+    }
+
+    /// Release ingress-only state for a rejected request. A control still held by
+    /// a prepared request with the same id stays registered and cancellable.
+    /// [LSP-PULL-CANCELLATION] [MEM-FIX-SCOPE]
+    ///
+    /// # Errors
+    /// Returns [`DispatchError::RegistrationPoisoned`] if the registry lock is poisoned.
+    fn release_unprepared(&self, id: RequestId) -> Result<(), DispatchError> {
+        let Ok(mut registry) = self.cancellations.write() else {
+            return Err(DispatchError::RegistrationPoisoned(id));
+        };
+        if registry
+            .get(&id)
+            .is_some_and(|control| Arc::strong_count(control) == 1)
+        {
+            let _released = registry.remove(&id);
+        }
+        Ok(())
     }
 
     /// Dispatch a request. Returns the handler's result.

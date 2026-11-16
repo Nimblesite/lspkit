@@ -199,3 +199,43 @@ async fn dispatcher_clone_shares_handlers() {
         json!("shared!")
     );
 }
+
+/// [LSP-PULL-CANCELLATION] [MEM-FIX-SCOPE]: rejecting an unknown method that reuses an
+/// in-flight id releases only orphaned ingress state, never the live request's control.
+#[tokio::test]
+async fn unknown_method_with_inflight_duplicate_id_keeps_inflight_cancellable() {
+    let dispatcher = Dispatcher::new();
+    dispatcher.register("probe", |_params: Value, cancel| async move {
+        if cancel.is_cancelled() {
+            HandlerResult::Err(JsonRpcError::new(-32800, "cancelled"))
+        } else {
+            HandlerResult::Ok(json!("ran"))
+        }
+    });
+    let id = RequestId::Number(7);
+    let inflight = dispatcher
+        .prepare(id.clone(), "probe", Value::Null)
+        .expect("in-flight request prepared");
+    assert!(format!("{dispatcher:?}").contains("in_flight: 1"));
+    let rejected = dispatcher.prepare(id.clone(), "missing", Value::Null);
+    assert!(matches!(rejected, Err(DispatchError::UnknownMethod(m)) if m == "missing"));
+    assert!(
+        format!("{dispatcher:?}").contains("in_flight: 1"),
+        "rejection removed the in-flight registration"
+    );
+    dispatcher.cancel(&id);
+    assert_eq!(
+        err_code(inflight.await).expect("cancelled in-flight answers Err"),
+        -32800
+    );
+    assert!(format!("{dispatcher:?}").contains("in_flight: 0"));
+    let ingress_only = RequestId::Number(8);
+    dispatcher
+        .cancellation_handle()
+        .register(ingress_only.clone(), None)
+        .expect("ingress registration");
+    assert!(format!("{dispatcher:?}").contains("in_flight: 1"));
+    let rejected = dispatcher.prepare(ingress_only, "missing", Value::Null);
+    assert!(matches!(rejected, Err(DispatchError::UnknownMethod(_))));
+    assert!(format!("{dispatcher:?}").contains("in_flight: 0"));
+}

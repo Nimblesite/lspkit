@@ -139,6 +139,21 @@ struct QueryState {
 }
 
 impl QueryState {
+    /// A fresh database releases both input slots and diagnostic memos on drop.
+    fn new(analyzer: CancellableAnalyzer) -> Self {
+        let database = Database {
+            storage: salsa::Storage::default(),
+            analyzer,
+            cancellation: CancellationToken::new(),
+        };
+        let workspace = WorkspaceInput::new(&database, 1);
+        Self {
+            database,
+            workspace,
+            documents: HashMap::new(),
+        }
+    }
+
     /// Get or create the document handle, then refresh its editor version.
     fn document(&mut self, uri: &str, version: i32) -> DocumentInput {
         let document = *self
@@ -198,8 +213,10 @@ impl QueryState {
 /// observes the same snapshot identity for the same connection state.
 #[derive(Clone)]
 pub struct PullStore {
-    /// Serializes memo access while leaving foreground invalidation lock-free.
-    query: Arc<Mutex<QueryState>>,
+    /// Replaces database ownership without waiting behind active compiler work.
+    query: Arc<Mutex<Arc<Mutex<QueryState>>>>,
+    /// Recreates Salsa storage at the explicit document-close boundary.
+    analyzer: CancellableAnalyzer,
     /// Editor/input supersession revision, advanced without waiting for compiler work.
     revision: Arc<AtomicU64>,
     /// Engine generation feeding Salsa without superseding in-flight snapshots.
@@ -216,21 +233,34 @@ impl PullStore {
     /// Create a session that propagates cancellation through actual compiler work.
     #[must_use]
     pub fn new_cancellable(analyzer: CancellableAnalyzer) -> Self {
-        let database = Database {
-            storage: salsa::Storage::default(),
-            analyzer,
-            cancellation: CancellationToken::new(),
-        };
-        let workspace = WorkspaceInput::new(&database, 1);
         Self {
-            query: Arc::new(Mutex::new(QueryState {
-                database,
-                workspace,
-                documents: HashMap::new(),
-            })),
+            query: Arc::new(Mutex::new(Arc::new(Mutex::new(QueryState::new(
+                Arc::clone(&analyzer),
+            ))))),
+            analyzer,
             revision: Arc::new(AtomicU64::new(1)),
             generation: Arc::new(AtomicU64::new(1)),
         }
+    }
+
+    /// Release all document inputs and diagnostic memos after a document closes.
+    ///
+    /// Salsa input slots cannot be deleted individually. Replacing the database
+    /// releases idle storage immediately; active queries own old storage only
+    /// until they complete and return superseded. No compiler lock is acquired.
+    /// Other documents recompute under the advanced workspace identity.
+    ///
+    /// # Errors
+    /// Returns an error if the database ownership lock was poisoned.
+    pub fn clear(&self) -> Result<(), PullError> {
+        let replacement = Arc::new(Mutex::new(QueryState::new(Arc::clone(&self.analyzer))));
+        let previous = {
+            let mut slot = self.query.lock().map_err(poisoned)?;
+            self.invalidate();
+            std::mem::replace(&mut *slot, replacement)
+        };
+        drop(previous);
+        Ok(())
     }
 
     /// Supersede in-flight work and invalidate inter-file dependencies.
@@ -295,14 +325,24 @@ impl PullStore {
         cancel: &CancellationToken,
     ) -> Result<PullReport, PullError> {
         uncancelled(cancel)?;
-        let mut query = self.query.lock().map_err(poisoned)?;
-        let revision = self.revision();
+        let shared = Arc::clone(&*self.query.lock().map_err(poisoned)?);
+        let mut query = shared.lock().map_err(poisoned)?;
+        let revision = self.query_revision(&shared)?;
         let generation = self.generation.load(Ordering::Acquire);
         let report = query.compute(uri, version, revision, generation, cancel)?;
         if self.revision() != revision {
             return Err(PullError::Superseded);
         }
         Ok(report)
+    }
+
+    /// A queued query cannot use discarded inputs under a replacement identity.
+    fn query_revision(&self, shared: &Arc<Mutex<QueryState>>) -> Result<u64, PullError> {
+        let current = self.query.lock().map_err(poisoned)?;
+        if !Arc::ptr_eq(&current, shared) {
+            return Err(PullError::Superseded);
+        }
+        Ok(self.revision())
     }
 }
 
@@ -323,4 +363,27 @@ impl std::fmt::Debug for PullStore {
 /// Snapshot identity in the wire-stable `p:…|d:…|g:…` form.
 fn identity(revision: u64, version: i32, generation: u64) -> String {
     format!("p:{revision}|d:{version}|g:{generation}")
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::{Arc, PullError, PullStore};
+
+    #[test]
+    fn cleared_database_cannot_publish_under_the_replacement_revision() {
+        let store = PullStore::new(Arc::new(|_| Ok(Arc::new(Vec::new()))));
+        let _report = store
+            .diagnostics("file:///closed.json", 1)
+            .expect("populate Salsa input");
+        let queued = Arc::clone(&store.query.lock().expect("database owner"));
+        let allocation = Arc::downgrade(&queued);
+        store.clear().expect("discard closed inputs");
+        assert_eq!(store.query_revision(&queued), Err(PullError::Superseded));
+        drop(queued);
+        assert_eq!(
+            allocation.strong_count(),
+            0,
+            "queued ownership releases Salsa inputs and URI strings"
+        );
+    }
 }

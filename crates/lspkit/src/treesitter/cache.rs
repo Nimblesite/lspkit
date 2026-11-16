@@ -50,7 +50,7 @@ impl ParseCache {
     /// Parse `source` for `language`, returning a shared tree.
     ///
     /// # Errors
-    /// Returns [`ParserError`] if tree-sitter rejects the language.
+    /// Returns [`ParserError`] if tree-sitter rejects the language or yields no tree.
     pub fn parse(
         &self,
         language_name: &str,
@@ -65,8 +65,17 @@ impl ParseCache {
         parser
             .set_language(language)
             .map_err(|source| ParserError::Language(language_name.to_owned(), source))?;
-        let Some(tree) = parser.parse(source, None) else {
-            return Err(ParserError::UnknownExtension(language_name.to_owned()));
+        self.store(key, parser.parse(source, None))
+    }
+
+    /// A native parse without a tree must never populate the shared cache.
+    fn store(
+        &self,
+        key: (String, ContentHash),
+        tree: Option<Tree>,
+    ) -> Result<Arc<Tree>, ParserError> {
+        let Some(tree) = tree else {
+            return Err(ParserError::NoTree(key.0));
         };
         let arc = Arc::new(tree);
         // Racing parsers may replace an equivalent tree; either tree remains valid.
@@ -97,5 +106,29 @@ impl std::fmt::Debug for ParseCache {
         f.debug_struct("ParseCache")
             .field("entries", &self.entries.len())
             .finish()
+    }
+}
+
+// The native parser's absent-result path cannot be forced through safe language handles.
+#[cfg(test)]
+mod tests {
+    use super::{ContentHash, ParseCache, ParserError};
+
+    #[test]
+    fn a_missing_native_tree_never_enters_the_cache() {
+        let cache = ParseCache::new();
+        let key = ("rust".to_owned(), ContentHash::of(b"fn main() {}"));
+        assert!(
+            matches!(cache.store(key.clone(), None), Err(ParserError::NoTree(name)) if name == "rust")
+        );
+        let message = cache
+            .store(key, None)
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+        assert_eq!(
+            message,
+            Err("tree-sitter produced no tree for language rust".to_owned())
+        );
+        assert!(cache.is_empty());
     }
 }

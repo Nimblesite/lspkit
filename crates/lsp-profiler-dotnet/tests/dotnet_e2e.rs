@@ -16,6 +16,8 @@
     missing_docs
 )]
 
+#[path = "dotnet_e2e/availability.rs"]
+mod availability;
 mod support;
 
 use std::path::PathBuf;

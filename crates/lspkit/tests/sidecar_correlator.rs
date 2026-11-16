@@ -3,7 +3,7 @@
 //! Drives the public API only — `Correlator::new`, `register`, `resolve`,
 //! `pending_count`, and `RequestId::get`.
 
-use lspkit::sidecar::{CorrelationError, Correlator, RequestId};
+use lspkit::sidecar::{CorrelationError, Correlator, PendingResponse, RequestId};
 
 /// Allocated IDs are monotonic starting at 1.
 #[tokio::test]
@@ -59,25 +59,25 @@ async fn resolving_unknown_id_errors() {
     }
 }
 
-/// Resolving against a dropped receiver yields
-/// `CorrelationError::AlreadyResolved`.
+/// An abandoned ID is removed immediately, without an unbounded cancellation history.
 #[tokio::test]
 async fn resolve_against_dropped_receiver_errors() {
     let correlator: Correlator<u32> = Correlator::new();
     let (id, rx) = correlator.register();
     drop(rx);
+    assert_eq!(correlator.pending_count(), 0);
 
     let err = correlator
         .resolve(id, 99)
         .expect_err("resolve should fail when receiver is gone");
     match err {
-        CorrelationError::AlreadyResolved(raw, response) => {
+        CorrelationError::UnknownId(raw) => {
             assert_eq!(raw, id.get());
-            assert_eq!(response, 99);
+            assert_eq!(correlator.pending_count(), 0);
         }
         other => assert!(
-            matches!(other, CorrelationError::AlreadyResolved(_, _)),
-            "expected AlreadyResolved, got {other:?}"
+            matches!(other, CorrelationError::UnknownId(_)),
+            "expected UnknownId, got {other:?}"
         ),
     }
 }
@@ -92,6 +92,25 @@ async fn default_constructor_is_usable() {
         .resolve(id, "ok".to_string())
         .expect("resolve should succeed");
     assert_eq!(rx.await.expect("receiver"), "ok");
+}
+
+/// Pending receivers must not keep a shut-down correlator's registry alive.
+#[tokio::test]
+async fn receivers_close_when_the_correlator_owner_is_dropped() {
+    let correlator = Correlator::<u32>::new();
+    let (_, mut checked) = correlator.register();
+    let (_, awaited) = correlator.register();
+    assert!(matches!(
+        checked.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    drop(correlator);
+    assert!(matches!(
+        checked.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Closed)
+    ));
+    assert!(awaited.await.is_err());
+    drop(checked);
 }
 
 /// Responses returning out of allocation order still match the correct
@@ -172,4 +191,17 @@ impl RequestIdTestExt for RequestId {
         }
         current
     }
+}
+
+/// Callers storing in-flight responses name the future through the sidecar facade. [MEM-FIX-SCOPE]
+#[tokio::test]
+async fn pending_response_is_nameable_from_the_sidecar_facade() {
+    let correlator: Correlator<String> = Correlator::new();
+    let (id, mut pending): (RequestId, PendingResponse<String>) = correlator.register();
+    assert!(pending.try_recv().is_err());
+    correlator
+        .resolve(id, "answer".to_owned())
+        .expect("resolve the stored registration");
+    assert_eq!(pending.await.expect("response delivered"), "answer");
+    assert_eq!(correlator.pending_count(), 0);
 }

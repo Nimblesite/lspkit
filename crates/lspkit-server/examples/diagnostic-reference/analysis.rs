@@ -138,24 +138,29 @@ fn zero_based(one_based: usize) -> u32 {
 }
 
 /// Watch the workspace root exactly once, feeding the shared scheduler.
-pub(super) fn watch_root(sources: &Sources, root: &Path, on_change: impl Fn() + Send + 'static) {
+pub(super) fn watch_root(
+    sources: &Sources,
+    root: &Path,
+    on_change: impl Fn() + Send + 'static,
+) -> Option<tokio::task::JoinHandle<()>> {
     let unclaimed = match sources.root.lock() {
         Ok(mut watched) if watched.is_none() => watched.replace(root.to_path_buf()).is_none(),
         _ => false,
     };
     if !unclaimed {
-        return;
+        return None;
     }
     match FileWatcher::new(root) {
         // `ScheduleConfig` is `#[non_exhaustive]`, so consumers take the
         // shared defaults; the watcher tests exercise real windows anyway.
-        Ok(watcher) => {
-            drop(tokio::spawn(forward_changes(
-                watcher.coalesced(ScheduleConfig::default()),
-                on_change,
-            )));
+        Ok(watcher) => Some(tokio::spawn(forward_changes(
+            watcher.coalesced(ScheduleConfig::default()),
+            on_change,
+        ))),
+        Err(error) => {
+            tracing::warn!(error = %error, "reference watcher unavailable");
+            None
         }
-        Err(error) => tracing::warn!(error = %error, "reference watcher unavailable"),
     }
 }
 

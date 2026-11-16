@@ -21,8 +21,13 @@ use crate::analysis::{self, Document, Sources};
 use crate::wire::{pump, Outbox};
 use crate::{ingress, scan};
 
+mod handlers;
+use handlers::{register_handlers, HandlerState};
+
 #[cfg(test)]
 mod memory_retention;
+#[cfg(test)]
+mod watch_memory_retention;
 
 /// The workspace pull method, answered with streamed partial replies.
 pub(super) const WORKSPACE_DIAGNOSTIC: &str = "workspace/diagnostic";
@@ -119,6 +124,7 @@ fn handle_notification(server: &Server, message: &Message) -> bool {
         "$/cancelRequest" => cancel_request(server, &params),
         "textDocument/didOpen" => store_document(server, opened(&params)),
         "textDocument/didChange" => store_document(server, changed(&params)),
+        "textDocument/didClose" => handlers::close_document(server, params),
         "workspace/didChangeWatchedFiles" => {
             ingress::changed(&server.dispatcher.cancellation_handle(), &params);
             server.pull.invalidate();
@@ -219,31 +225,8 @@ fn changed(params: &Value) -> Option<(String, Document)> {
     ))
 }
 
-/// Register the request handlers every reference session serves.
-fn register_handlers(server: &Server) {
-    let init = server.clone();
-    server.dispatcher.register("initialize", move |params, _| {
-        let init = init.clone();
-        async move { initialize(&init, params) }
-    });
-    let documents = server.clone();
-    server
-        .dispatcher
-        .register("textDocument/diagnostic", move |params, cancel| {
-            document_query(documents.clone(), params, cancel)
-        });
-    let work = server.clone();
-    server.dispatcher.register("reference/work", move |_, _| {
-        let work = work.clone();
-        async move { HandlerResult::Ok(work_report(&work)) }
-    });
-    server
-        .dispatcher
-        .register("shutdown", |_, _| async { HandlerResult::Ok(Value::Null) });
-}
-
 /// Supporting metadata: backend work count and the current revision.
-fn work_report(server: &Server) -> Value {
+fn work_report(server: &HandlerState) -> Value {
     json!({
         "analysisRuns": server.sources.analysis_runs(),
         "revision": server.pull.revision(),
@@ -251,21 +234,12 @@ fn work_report(server: &Server) -> Value {
 }
 
 /// Decode initialize capabilities and start watching the workspace root.
-fn initialize(server: &Server, params: Value) -> HandlerResult {
+fn initialize(server: &Arc<HandlerState>, params: Value) -> HandlerResult {
     let Ok(init) = decode_initialize(params) else {
         return HandlerResult::Err(JsonRpcError::new(-32602, "malformed initialize params"));
     };
     if let Some(root) = analysis::root_path(&init) {
-        let sources = server.sources.clone();
-        let invalidating = server.pull.clone();
-        let outbox = server.outbox.clone();
-        analysis::watch_root(&sources, &root, move || {
-            invalidating.invalidate();
-            let event = Message::notification("$/referenceWorkspaceChanged", json!({}));
-            if let Err(error) = outbox.send(event) {
-                tracing::warn!(%error, "reference watcher notification failed");
-            }
-        });
+        server.watch(&root);
     }
     let capabilities = Capabilities::new()
         .text_sync(TextSync::Full)
@@ -396,7 +370,11 @@ fn emit_terminal(server: &Server, gate: Option<ReplyGate>, message: Message) {
 }
 
 /// Native/compiler work must never block the foreground protocol reader.
-async fn document_query(server: Server, raw: Value, cancel: CancellationToken) -> HandlerResult {
+async fn document_query(
+    server: Arc<HandlerState>,
+    raw: Value,
+    cancel: CancellationToken,
+) -> HandlerResult {
     let params = match DocumentDiagnostic::decode(raw) {
         Ok(params) => params,
         Err(error) => return HandlerResult::Err(error),
@@ -416,7 +394,7 @@ async fn document_query(server: Server, raw: Value, cancel: CancellationToken) -
 
 /// Answer one document pull from the shared memoized store.
 fn document_pull(
-    server: &Server,
+    server: &HandlerState,
     params: &DocumentDiagnostic,
     version: i32,
     cancel: &CancellationToken,

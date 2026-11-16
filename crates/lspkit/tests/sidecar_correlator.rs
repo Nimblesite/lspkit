@@ -59,25 +59,25 @@ async fn resolving_unknown_id_errors() {
     }
 }
 
-/// Resolving against a dropped receiver yields
-/// `CorrelationError::AlreadyResolved`.
+/// An abandoned ID is removed immediately, without an unbounded cancellation history.
 #[tokio::test]
 async fn resolve_against_dropped_receiver_errors() {
     let correlator: Correlator<u32> = Correlator::new();
     let (id, rx) = correlator.register();
     drop(rx);
+    assert_eq!(correlator.pending_count(), 0);
 
     let err = correlator
         .resolve(id, 99)
         .expect_err("resolve should fail when receiver is gone");
     match err {
-        CorrelationError::AlreadyResolved(raw, response) => {
+        CorrelationError::UnknownId(raw) => {
             assert_eq!(raw, id.get());
-            assert_eq!(response, 99);
+            assert_eq!(correlator.pending_count(), 0);
         }
         other => assert!(
-            matches!(other, CorrelationError::AlreadyResolved(_, _)),
-            "expected AlreadyResolved, got {other:?}"
+            matches!(other, CorrelationError::UnknownId(_)),
+            "expected UnknownId, got {other:?}"
         ),
     }
 }

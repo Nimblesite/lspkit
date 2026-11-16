@@ -125,8 +125,13 @@ impl Dispatcher {
             .handlers
             .read()
             .ok()
-            .and_then(|guard| guard.get(method).cloned())
-            .ok_or_else(|| DispatchError::UnknownMethod(method.to_owned()))?;
+            .and_then(|guard| guard.get(method).cloned());
+        let Some(handler) = handler else {
+            // Ingress may already own input allocations for this terminal request.
+            // Adopt its guard so rejection releases them before returning.
+            let (_control, _guard) = self.register_cancellation(id)?;
+            return Err(DispatchError::UnknownMethod(method.to_owned()));
+        };
         self.prepare_call(id, move |cancel| handler(params, cancel))
     }
 

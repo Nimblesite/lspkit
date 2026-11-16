@@ -90,6 +90,7 @@ pub trait EngineApi: Send + Sync + 'static {
 
 ## Cross-cutting helpers — required behavior
 
+- **[SIDECAR-REQUEST-LIFETIME]** Dropping a correlator response future immediately unregisters and frees its response channel without another correlator call or a runtime. Abandoned IDs are no longer pending, so later responses return `UnknownId`; no cancellation tombstones accumulate. `register` returns `PendingResponse`, supporting `Future` and `try_recv`. A receiver holds only a weak registry reference, so it cannot prolong the correlator's lifetime. Inbound readers terminate when both destination receivers close, even without EOF or another frame.
 - **Position encoding** (`lspkit::vfs::PositionEncoding`): negotiates encoding at `initialize` per LSP 3.17 client capabilities; converts on every read; round-trips byte/char offsets correctly across multi-byte scalars and surrogate pairs.
 - **URI ↔ `PathBuf`** (`lspkit-server::uri`): handles `file://`, percent-decoding, Windows drive letters, UNC paths, and non-UTF-8 paths.
 - **Cancellation** (`lspkit-server::dispatch`): a `CancellationToken` is plumbed through every request handler and triggered when the client sends `$/cancelRequest`.

@@ -17,7 +17,7 @@ A leak claim requires allocations still owned after the relevant operation ends.
 - [x] Record exact failures, ownership chains, controls, and unproven/rejected candidates.
 - [x] Run static analysis, existing regressions, and Deslop without weakening gates.
 - [x] Record verified model results in PiNotes.
-- [ ] Remove audit temporary files and unnecessary owned build output, stop owned processes, and check disk space.
+- [x] Remove audit temporary files and unnecessary owned build output, stop owned processes, and check disk space.
 
 ## [MEM-AUDIT-CORRELATOR] Abandoned requests retain channel allocations
 
@@ -86,10 +86,10 @@ The parked Python runtime received a targeted lifecycle inspection, not an exhau
 - **New proofs:** 5 ownership assertions fail, 4 release controls pass; exact commands and complete output are in [the evidence file](memory-leak-audit-evidence.md).
 - **Existing nearby suites:** 9 correlator tests and 12 dispatcher tests pass, demonstrating why existing green checks missed these cases.
 - **`make lint`: exit 0.** Workspace release Clippy with warnings denied, spec-citation checks, skill-link checks, TypeScript 7/oxlint, and .NET builds pass. Cargo separately emits existing unused-manifest-dependency warnings; .NET reports zero warnings/errors.
-- **Deslop:** no connected Deslop MCP tools were available, so the documented [CLI fallback](https://deslop.live/docs/for-ai/) was used. Read the existing `0.0.0-dev` report before writing; then ran the installed bundled CLI and inspected the JSON. Final report has no cluster touching any new `memory_retention` test. Global duplication is 7.005%; thresholds/configuration unchanged. The repeated setup introduced by the pi draft was consolidated.
+- **Deslop:** no connected Deslop MCP tools were available, so the documented [CLI fallback](https://deslop.live/docs/for-ai/) was used. Read the existing `0.0.0-dev` report before writing; then ran the installed bundled CLI and inspected the JSON. Final report has no cluster touching any new `memory_retention` test. Global duplication is 7.006%; thresholds/configuration unchanged. The repeated setup introduced by the pi draft was consolidated.
 - **No full-suite green claim:** the requested leak regressions intentionally fail. No production repairs were made, so the fix skill's post-repair full test run is not represented as completed.
 - **Pi verification:** Rust, profiler/.NET, UI, and consumer reviews used `zai/glm-5.3`. The test draft used `zai/glm-5.3-flash`; its first control incorrectly left 31 deliberately queued requests and violated several lints. It was corrected before acceptance, and all final assertions were independently rerun. `kimi-coding/k3.1-pro-highspeed` returned a quota error and contributed no review. Missing APIs/compile failures suggested by reviewers were rejected as leak proofs. Details: `PiNotes/2026-11-16-lspkit-memory-audit.md`.
 
 ## [MEM-AUDIT-CLEANUP] Cleanup
 
-Pending final cleanup. No git commands, commits, pushes, issue changes, cloud jobs, or VS Code process termination were performed.
+Removed generated Cargo build output, the task-installed npm dependencies, the .NET Release build directories, and audit temporary files after preserving the evidence. All pi jobs ended; .NET build-server shutdown completed through its own CLI. Final disk check reports 163 GiB available (other workspace activity also changed disk usage, so this is not a claimed amount freed by the audit). No git commands, commits, pushes, issue changes, cloud jobs, or VS Code process termination were performed.

@@ -50,7 +50,7 @@ impl ParseCache {
     /// Parse `source` for `language`, returning a shared tree.
     ///
     /// # Errors
-    /// Returns [`ParserError`] if tree-sitter rejects the language.
+    /// Returns [`ParserError`] if tree-sitter rejects the language or yields no tree.
     pub fn parse(
         &self,
         language_name: &str,
@@ -75,7 +75,7 @@ impl ParseCache {
         tree: Option<Tree>,
     ) -> Result<Arc<Tree>, ParserError> {
         let Some(tree) = tree else {
-            return Err(ParserError::UnknownExtension(key.0));
+            return Err(ParserError::NoTree(key.0));
         };
         let arc = Arc::new(tree);
         // Racing parsers may replace an equivalent tree; either tree remains valid.
@@ -119,7 +119,15 @@ mod tests {
         let cache = ParseCache::new();
         let key = ("rust".to_owned(), ContentHash::of(b"fn main() {}"));
         assert!(
-            matches!(cache.store(key, None), Err(ParserError::UnknownExtension(name)) if name == "rust")
+            matches!(cache.store(key.clone(), None), Err(ParserError::NoTree(name)) if name == "rust")
+        );
+        let message = cache
+            .store(key, None)
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+        assert_eq!(
+            message,
+            Err("tree-sitter produced no tree for language rust".to_owned())
         );
         assert!(cache.is_empty());
     }

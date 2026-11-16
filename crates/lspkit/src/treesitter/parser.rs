@@ -25,6 +25,10 @@ pub enum ParserError {
     /// No parser registered for the given extension.
     #[error("no parser registered for extension: {0}")]
     UnknownExtension(String),
+    /// Tree-sitter returned no tree for the named language (parse cancelled or
+    /// timed out); the cache stores nothing for it.
+    #[error("tree-sitter produced no tree for language {0}")]
+    NoTree(String),
     /// Tree-sitter rejected the named language (an incompatible grammar ABI); the
     /// rejection is kept as the source.
     #[error("tree-sitter rejected language {0}")]

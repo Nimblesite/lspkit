@@ -32,6 +32,16 @@ Reusable Rust components for building language servers, plus the shared CPU and 
 - **Structured logging only**: `tracing` (Rust), the package `logger` module (TypeScript), `Microsoft.Extensions.Logging` (.NET). Never log PII, secrets, file contents or user paths.
 - **Bug fixes follow [fix-bug](.agents/skills/fix-bug/SKILL.md)**: failing test first. Skills live in `.agents/skills/`; run `node scripts/link-skills.mjs` after adding one.
 
+## Memory lifetimes 🛑
+
+Language servers run for days, so a retained allocation is a production bug. These rules come from the leaks fixed under `[MEM-FIX-SCOPE]` ([plan](docs/plans/memory-leak-fixes.md)); review every change against them.
+
+- **No ownership cycles.** A handler, callback or spawned task never captures an owner of the registry that stores it (`Server`, `Dispatcher`, correlator). Capture an `Arc` of only the data it needs; back-references are `Weak` and get upgraded per call.
+- **Every registration has an RAII owner.** Pending-response entries, cancellation controls, watcher tasks and subscriptions are removed by a guard's `Drop`. That includes error, rejection, cancellation and abandoned-future paths. Never rely on a later sweep or count call.
+- **Every spawned task is owned.** Keep the `JoinHandle` and abort it in the owner's `Drop`, never `drop(tokio::spawn(..))`. Background loops exit when their consumers close (`select!` on `closed()`), not only on EOF.
+- **Every keyed map or cache has an eviction boundary.** `didClose`, session teardown or an explicit `clear()` removes per-URI state from *every* map that holds it, including memo and Salsa inputs. A new map without a documented, tested eviction path is rejected.
+- **Every fix and every new long-lived structure ships a leak regression** that fails before the fix. Either a single-test binary using `test-support/state.rs` `assert_releases_heap` (exact allocator bytes), or a `Weak::strong_count() == 0` check after teardown. No RSS, timing or `sleep` probes.
+
 ## Rust
 
 - No `unwrap()`/`expect()` in production; tests may `expect` with a message.

@@ -26,6 +26,10 @@ const YEAR_DAYS: i128 = 365;
 const LEAP_CYCLE_DAYS: i128 = 1_460;
 /// Days in a century that skips its leap day.
 const CENTURY_DAYS: i128 = 36_524;
+/// Years between Julian leap days.
+const LEAP_YEAR_EVERY: i128 = 4;
+/// Years in a century, whose leap day is skipped.
+const CENTURY_YEARS: i128 = 100;
 /// Years in a Gregorian era.
 const ERA_YEARS: i128 = 400;
 /// Hinnant's month-from-day-of-year line: month = (5·doy + 2) / 153.
@@ -72,7 +76,8 @@ fn civil(days: i128) -> (i128, i128, i128) {
         - day_of_era.div_euclid(ERA_DAYS - 1))
     .div_euclid(YEAR_DAYS);
     let day_of_year = day_of_era
-        - (YEAR_DAYS * year_of_era + year_of_era.div_euclid(4) - year_of_era.div_euclid(100));
+        - (YEAR_DAYS * year_of_era + year_of_era.div_euclid(LEAP_YEAR_EVERY)
+            - year_of_era.div_euclid(CENTURY_YEARS));
     let (slope, offset, span) = MONTH_SLOPE;
     let march_month = (slope * day_of_year + offset).div_euclid(span);
     let day = day_of_year - (span * march_month + offset).div_euclid(slope) + 1;

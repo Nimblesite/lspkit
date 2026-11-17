@@ -48,20 +48,70 @@ function firstNonEmpty(values: readonly (string | undefined)[]): string | undefi
   return values.find((value) => hasText(value));
 }
 
-/** Split PATH into its non-empty directories. */
-function pathDirectories(env: NodeJS.ProcessEnv): string[] {
-  return (env.PATH ?? "").split(path.delimiter).filter((dir) => dir !== "");
+/** Extensions Windows runs when PATHEXT is unset. */
+const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
+
+/** Path rules of `platform`, never of the host running this code. */
+function pathRules(platform: NodeJS.Platform): typeof path.posix {
+  return platform === "win32" ? path.win32 : path.posix;
 }
 
-/** First directory on PATH that contains `command`, or undefined. */
+/**
+ * The environment variable `name`. Windows variable names are case-insensitive
+ * (PATH is usually spelled `Path`), and a copied environment object is not.
+ */
+function envValue(env: NodeJS.ProcessEnv, name: string, platform: NodeJS.Platform): string {
+  const key =
+    platform === "win32" ? Object.keys(env).find((candidate) => candidate.toUpperCase() === name) : name;
+  const value = key === undefined ? undefined : env[key];
+  return hasText(value) ? value : "";
+}
+
+/** Split PATH into its non-empty directories. */
+function pathDirectories(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
+  return envValue(env, "PATH", platform)
+    .split(pathRules(platform).delimiter)
+    .filter((dir) => dir !== "");
+}
+
+/**
+ * File names `command` can have on disk. On Windows a bare command only runs
+ * with one of the PATHEXT extensions (`netcoredbg` is `netcoredbg.exe`).
+ */
+function executableNames(command: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
+  if (platform !== "win32" || pathRules(platform).extname(command) !== "") {
+    return [command];
+  }
+  const pathext = envValue(env, "PATHEXT", platform);
+  return (hasText(pathext) ? pathext : DEFAULT_PATHEXT)
+    .split(";")
+    .filter((extension) => extension !== "")
+    .map((extension) => `${command}${extension.toLowerCase()}`);
+}
+
+/** Where a bare command is looked up: PATH and PATHEXT from `env`, the path rules of `platform`. */
+export type PathLookup = Pick<AdapterResolutionRequest, "env" | "existsSync" | "platform">;
+
+/**
+ * First directory on PATH that contains `command`, or undefined. PATH, its
+ * separator and executable extensions follow `lookup.platform`, not the host.
+ */
+export function findOnPath(command: string, lookup: PathLookup): string | undefined {
+  const { env, existsSync: fileExists, platform } = lookup;
+  const rules = pathRules(platform);
+  const names = executableNames(command, env, platform);
+  return pathDirectories(env, platform)
+    .flatMap((dir) => names.map((name) => rules.join(dir, name)))
+    .find((candidate) => fileExists(candidate));
+}
+
+/** {@link findOnPath} with this host's platform rules. */
 export function findExecutableOnPath(
   command: string,
   env: NodeJS.ProcessEnv,
   fileExists: (filePath: string) => boolean,
 ): string | undefined {
-  return pathDirectories(env)
-    .map((dir) => path.join(dir, command))
-    .find((candidate) => fileExists(candidate));
+  return findOnPath(command, { env, existsSync: fileExists, platform: process.platform });
 }
 
 function resolveConfigured(
@@ -72,7 +122,7 @@ function resolveConfigured(
   if (looksLikePath(configured)) {
     return fileExists(configured) ? configured : undefined;
   }
-  return findExecutableOnPath(configured, req.env, fileExists);
+  return findOnPath(configured, req);
 }
 
 /** Every bare command name to try on PATH, primary name first. */
@@ -81,9 +131,8 @@ function adapterCommandNames(req: AdapterResolutionRequest): string[] {
 }
 
 function resolveFromPathNames(req: AdapterResolutionRequest): string | undefined {
-  const { existsSync: fileExists } = req;
   return adapterCommandNames(req)
-    .map((name) => findExecutableOnPath(name, req.env, fileExists))
+    .map((name) => findOnPath(name, req))
     .find((found) => hasText(found));
 }
 

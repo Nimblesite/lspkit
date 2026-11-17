@@ -1,7 +1,9 @@
 import * as assert from "node:assert";
+import path from "node:path";
 import type { AdapterResolutionRequest } from "../adapter-resolution";
 import {
   findExecutableOnPath,
+  findOnPath,
   looksLikePath,
   missingAdapterMessage,
   resolveAdapterCommand,
@@ -32,25 +34,64 @@ suite("looksLikePath", () => {
   });
 });
 
-suite("findExecutableOnPath", () => {
+suite("findOnPath", () => {
   test("returns the first PATH dir that holds the command", () => {
-    const found = findExecutableOnPath(
-      "lldb-dap",
-      { PATH: ["/a", "/b"].join(":") },
-      (candidate) => candidate === "/b/lldb-dap",
-    );
+    const found = findOnPath("lldb-dap", { env: { PATH: ["/a", "/b"].join(":") }, existsSync: (candidate) => candidate === "/b/lldb-dap", platform: "linux" });
     assert.strictEqual(found, "/b/lldb-dap");
   });
   test("skips empty PATH segments and returns undefined when absent", () => {
-    const found = findExecutableOnPath(
-      "lldb-dap",
-      { PATH: ":/x:" },
-      () => false,
-    );
+    const found = findOnPath("lldb-dap", { env: { PATH: ":/x:" }, existsSync: () => false, platform: "linux" });
     assert.strictEqual(found, undefined);
   });
   test("tolerates an unset PATH", () => {
-    assert.strictEqual(findExecutableOnPath("x", {}, () => true), undefined);
+    assert.strictEqual(findOnPath("x", { env: {}, existsSync: () => true, platform: "linux" }), undefined);
+    assert.strictEqual(findOnPath("x", { env: {}, existsSync: () => true, platform: "win32" }), undefined);
+  });
+  test("follows the requested platform's rules, never the host's", () => {
+    const posix = findOnPath("lldb-dap", { env: { PATH: "/a:/b" }, existsSync: (candidate) => candidate === "/b/lldb-dap", platform: "darwin" });
+    assert.strictEqual(posix, "/b/lldb-dap");
+  });
+  test("on Windows, splits on ';', reads Path in any case and adds PATHEXT", () => {
+    const env = { Path: String.raw`C:\a;;C:\tools`, PATHEXT: ".COM;.EXE" };
+    const found = findOnPath("netcoredbg", { env, existsSync: (candidate) => candidate === String.raw`C:\tools\netcoredbg.exe`, platform: "win32" });
+    assert.strictEqual(found, String.raw`C:\tools\netcoredbg.exe`);
+  });
+  test("on Windows, a bare name without an extension never matches", () => {
+    const found = findOnPath("netcoredbg", { env: { PATH: String.raw`C:\tools` }, existsSync: (candidate) => candidate === String.raw`C:\tools\netcoredbg`, platform: "win32" });
+    assert.strictEqual(found, undefined);
+  });
+  test("on Windows, unset PATHEXT falls back to .COM .EXE .BAT .CMD", () => {
+    const found = findOnPath("lldb-dap", { env: { PATH: String.raw`C:\llvm\bin` }, existsSync: (candidate) => candidate === String.raw`C:\llvm\bin\lldb-dap.cmd`, platform: "win32" });
+    assert.strictEqual(found, String.raw`C:\llvm\bin\lldb-dap.cmd`);
+  });
+  test("on Windows, a command that already has an extension is used as given", () => {
+    const found = findOnPath("lldb-dap.exe", { env: { PATH: String.raw`C:\llvm\bin`, PATHEXT: ".EXE" }, existsSync: (candidate) => candidate === String.raw`C:\llvm\bin\lldb-dap.exe`, platform: "win32" });
+    assert.strictEqual(found, String.raw`C:\llvm\bin\lldb-dap.exe`);
+  });
+});
+
+suite("findExecutableOnPath", () => {
+  test("looks up with this host's separator and executable names", () => {
+    const tool = process.platform === "win32" ? "tool.exe" : "tool";
+    const dirs = [path.join("a", "bin"), path.join("b", "bin")];
+    const found = findExecutableOnPath(
+      "tool",
+      { PATH: dirs.join(path.delimiter), PATHEXT: ".EXE" },
+      (candidate) => candidate === path.join("b", "bin", tool),
+    );
+    assert.strictEqual(found, path.join("b", "bin", tool));
+  });
+});
+
+suite("resolveAdapterPath on Windows", () => {
+  test("a setting's bare name resolves through Path and PATHEXT", () => {
+    const request = req({
+      platform: "win32",
+      settingValue: "lldb-dap",
+      env: { Path: String.raw`C:\llvm\bin`, PATHEXT: ".EXE" },
+      existsSync: (candidate) => candidate === String.raw`C:\llvm\bin\lldb-dap.exe`,
+    });
+    assert.strictEqual(resolveAdapterPath(request), String.raw`C:\llvm\bin\lldb-dap.exe`);
   });
 });
 

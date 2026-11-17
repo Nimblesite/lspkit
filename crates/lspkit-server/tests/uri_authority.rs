@@ -1,12 +1,13 @@
 //! [URI-AUTHORITY] Issue #49 through the public API only, so this file also
 //! compiles against the pre-fix crate and fails there on the exact symptom.
+//! Unix-only: the Windows rows live in the Windows-hosted suite.
+#![cfg(not(windows))]
 
 use std::path::PathBuf;
 
 use lspkit_server::{path_to_uri, uri_to_path};
 
 /// A `localhost` or empty authority is the host, never the first path folder.
-#[cfg(not(windows))]
 #[test]
 fn localhost_authority_is_the_host_not_a_folder() {
     for uri in [

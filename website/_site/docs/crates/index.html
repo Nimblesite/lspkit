@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>Crates.</title>
+  <meta name="title" content="Crates.">
+  <meta name="description" content="What each published crate and package provides.">
+  
+  
+  <meta name="robots" content="index, follow">
+  <meta name="generator" content="Eleventy + techdoc">
+  <meta name="theme-color" content="#f4f1e9">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="http://localhost:8080/docs/crates/">
+
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/atom+xml" title="lspkit — The foundation for any language&#39;s tooling. Feed" href="http://localhost:8080/feed.xml">
+
+  <!-- Hreflang for language alternates -->
+  
+  <link rel="alternate" hreflang="en" href="http://localhost:8080/docs/crates/">
+  
+  <link rel="alternate" hreflang="x-default" href="http://localhost:8080/docs/crates/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="http://localhost:8080/docs/crates/">
+  <meta property="og:title" content="Crates.">
+  <meta property="og:description" content="What each published crate and package provides.">
+  <meta property="og:site_name" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:locale" content="en_US">
+  
+  
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="http://localhost:8080/docs/crates/">
+  <meta name="twitter:title" content="Crates.">
+  <meta name="twitter:description" content="What each published crate and package provides.">
+  
+  
+  
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "http://localhost:8080/#website",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "http://localhost:8080/docs/crates/#webpage",
+        "url": "http://localhost:8080/docs/crates/",
+        "name": "Crates.",
+        "description": "What each published crate and package provides.",
+        "isPartOf": { "@id": "http://localhost:8080/#website" },
+        "inLanguage": "en",
+        "datePublished": "2026-11-16T10:00:55.240Z"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "http://localhost:8080/docs/crates/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "http://localhost:8080/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Crates.",
+            "item": "http://localhost:8080/docs/crates/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+
+  <!-- Theme structural CSS (no colors) -->
+  <link rel="stylesheet" href="/techdoc/css/reset.css">
+  <link rel="stylesheet" href="/techdoc/css/layout.css">
+  <link rel="stylesheet" href="/techdoc/css/utilities.css">
+
+  <!-- Site styles (YOU provide colors and visual styling) -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a href="/" class="logo">
+        lspkit
+      </a>
+
+      <ul class="nav-links">
+        
+        
+        
+        <li>
+          
+          
+          <a href="/docs/" 
+             class="nav-link active">
+            Docs
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="/blog/" 
+             class="nav-link ">
+            Journal
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="https://github.com/Nimblesite/lspkit" target="_blank" rel="noopener noreferrer"
+             class="nav-link ">
+            GitHub ↗
+          </a>
+        </li>
+        
+      </ul>
+
+      <div class="nav-actions">
+        
+
+        
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☾</span>
+        </button>
+        
+
+        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Crates.",
+  "description": "What each published crate and package provides.",
+  "author": {
+    "@type": "Person",
+    "name": "lspkit — The foundation for any language&#39;s tooling."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "lspkit — The foundation for any language&#39;s tooling.",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "http://localhost:8080/assets/images/logo.png"
+    }
+  },
+  "datePublished": "2026-11-16T10:00:55.240Z",
+  "dateModified": "2026-11-16T10:00:55.240Z",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "http://localhost:8080/docs/crates/"
+  },
+  "inLanguage": "en"
+}
+</script>
+
+
+
+
+
+<div class="docs-layout">
+  <aside class="sidebar" id="docs-sidebar">
+    <nav class="docs-nav">
+      <ul>
+        
+        
+        
+        
+        <li>
+          <a href="/docs/" >
+            Overview
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/getting-started/" >
+            Getting started
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/crates/" class="active">
+            Crates
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/profiler/" >
+            Profiler
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/examples/" >
+            Examples
+          </a>
+          
+        </li>
+        
+        
+      </ul>
+    </nav>
+  </aside>
+
+  <article class="docs-content">
+    <header class="article-header">
+  <p class="eyebrow">Documentation</p>
+  <h1>Crates.</h1>
+  <p class="article-description">What each published crate and package provides.</p>
+</header>
+
+<figure class="page-illustration">
+  <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange shared engine connects to two terminal surfaces through circuit paths.">
+</figure>
+
+<div class="prose"><!-- [WEB-CONTENT] -->
+<table>
+<thead>
+<tr>
+<th>Crate</th>
+<th>What it gives you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://crates.io/crates/lspkit"><code>lspkit</code></a></td>
+<td><code>EngineApi</code> and its types, plus the <code>config</code>, <code>vfs</code> and <code>sidecar</code> modules.</td>
+</tr>
+<tr>
+<td><a href="https://crates.io/crates/lspkit-server"><code>lspkit-server</code></a></td>
+<td>JSON-RPC LSP server scaffolding on <code>lsp-types</code>: capabilities, dispatch, URIs, diagnostics, progress, cancellation and live file watching.</td>
+</tr>
+<tr>
+<td><a href="https://crates.io/crates/lsp-profiler"><code>lsp-profiler</code></a></td>
+<td>Language-neutral CPU and memory profiler for language servers.</td>
+</tr>
+<tr>
+<td><a href="https://crates.io/crates/lsp-profiler-dotnet"><code>lsp-profiler-dotnet</code></a></td>
+<td>The profiler's .NET runtime, using EventPipe.</td>
+</tr>
+</tbody>
+</table>
+<div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-processes.webp" width="2400" height="1500" loading="lazy" alt="SharpLsp sidebar with the Processes view listing a running .NET process with Profile CPU and Track Memory actions"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Processes view: profile any running process.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-results.webp" width="2400" height="1500" loading="lazy" alt="SharpLsp Profiler results panel with summary cards, an embedded flame graph and the hot functions table"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Results panel, flame graph and hot functions.</figcaption></figure></div>
+<h2 id="features" tabindex="-1"><a class="header-anchor" href="#features">Features</a></h2>
+<table>
+<thead>
+<tr>
+<th>Crate</th>
+<th>Feature</th>
+<th>Adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lspkit</code></td>
+<td><code>treesitter</code></td>
+<td>Tree-sitter parsing helpers.</td>
+</tr>
+<tr>
+<td><code>lspkit</code></td>
+<td><code>tracing-setup</code></td>
+<td>A ready-made <code>tracing</code> subscriber.</td>
+</tr>
+<tr>
+<td><code>lspkit-server</code></td>
+<td><code>mcp</code></td>
+<td>The MCP adapter over the same engine.</td>
+</tr>
+<tr>
+<td><code>lspkit-server</code></td>
+<td><code>pull</code></td>
+<td>Pull-based incremental analysis with salsa.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="editor-package" tabindex="-1"><a class="header-anchor" href="#editor-package">Editor package</a></h2>
+<p><a href="https://www.npmjs.com/package/@nimblesite/lsp-profiler-ui"><code>@nimblesite/lsp-profiler-ui</code></a> is the VS Code UI for the profiler: processes, CPU heat map, flame graph, memory dashboard and retention graph. It also carries Debug Adapter Protocol glue for extension tests.</p>
+<pre class="language-sh"><code class="language-sh"><span class="token function">npm</span> <span class="token function">install</span> @nimblesite/lsp-profiler-ui</code></pre>
+<div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-memory.webp" width="2400" height="1500" loading="lazy" alt="Memory dashboard with a steadily climbing heap timeline flagged as a possible leak, beside SessionCache.cs"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Live heap timeline.</figcaption></figure><figure><img src="/assets/images/examples/osprey-flamegraph.webp" width="1276" height="714" loading="lazy" alt="Osprey Profiler panel: 812 samples over 8 seconds, 5 functions, 6 hot lines, above a left-heavy flame graph"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Osprey results panel and flame graph.</figcaption></figure></div>
+</div>
+
+
+
+    
+  </article>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      
+      <div class="footer-grid">
+        
+        
+        <div class="footer-section">
+          <h3>The foundation for any language&#39;s tooling.</h3>
+          <ul>
+            
+            
+            
+            <li><a href="https://github.com/Nimblesite/lspkit">GitHub ↗</a></li>
+            
+            
+            
+            <li><a href="https://www.nimblesite.co">© 2026 Nimblesite ↗</a></li>
+            
+          </ul>
+        </div>
+        
+      </div>
+      
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 lspkit</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme JS -->
+  <script src="/techdoc/js/main.js" type="module"></script>
+
+  
+</body>
+</html>

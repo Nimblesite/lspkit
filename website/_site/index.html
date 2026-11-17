@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>lspkit — The foundation for any language&#39;s tooling.</title>
+  <meta name="title" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta name="description" content="lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.">
+  
+  
+  <meta name="robots" content="index, follow">
+  <meta name="generator" content="Eleventy + techdoc">
+  <meta name="theme-color" content="#f4f1e9">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="http://localhost:8080/">
+
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/atom+xml" title="lspkit — The foundation for any language&#39;s tooling. Feed" href="http://localhost:8080/feed.xml">
+
+  <!-- Hreflang for language alternates -->
+  
+  <link rel="alternate" hreflang="en" href="http://localhost:8080/">
+  
+  <link rel="alternate" hreflang="x-default" href="http://localhost:8080/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="http://localhost:8080/">
+  <meta property="og:title" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:description" content="lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.">
+  <meta property="og:site_name" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:locale" content="en_US">
+  
+  
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="http://localhost:8080/">
+  <meta name="twitter:title" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta name="twitter:description" content="lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.">
+  
+  
+  
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "http://localhost:8080/#website",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "WebPage",
+        "@id": "http://localhost:8080/#webpage",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "isPartOf": { "@id": "http://localhost:8080/#website" },
+        "inLanguage": "en",
+        "datePublished": "2026-11-16T10:00:55.241Z"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "http://localhost:8080/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "http://localhost:8080/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+
+  <!-- Theme structural CSS (no colors) -->
+  <link rel="stylesheet" href="/techdoc/css/reset.css">
+  <link rel="stylesheet" href="/techdoc/css/layout.css">
+  <link rel="stylesheet" href="/techdoc/css/utilities.css">
+
+  <!-- Site styles (YOU provide colors and visual styling) -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a href="/" class="logo">
+        lspkit
+      </a>
+
+      <ul class="nav-links">
+        
+        
+        
+        <li>
+          
+          
+          <a href="/docs/" 
+             class="nav-link ">
+            Docs
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="/blog/" 
+             class="nav-link ">
+            Journal
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="https://github.com/Nimblesite/lspkit" target="_blank" rel="noopener noreferrer"
+             class="nav-link ">
+            GitHub ↗
+          </a>
+        </li>
+        
+      </ul>
+
+      <div class="nav-actions">
+        
+
+        
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☾</span>
+        </button>
+        
+
+        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    
+<div class="home-shell">
+  <section class="hero" aria-labelledby="hero-title">
+    <div>
+      <p class="eyebrow"><span class="signal" aria-hidden="true"></span> The language server toolkit</p>
+      <h1 id="hero-title">The foundation for<br><span>any language's tooling.</span></h1>
+    </div>
+    <div class="hero-aside">
+      <p>Write your language analysis once, as one Rust trait. lspkit serves it to your VS Code extension over the Language Server Protocol and to Claude Code, Cursor and Codex as an MCP server. Find the hot path and the memory leak with a profiler built into VS Code.</p>
+      <div class="hero-links">
+        <a class="text-link" href="/docs/getting-started/">Get started <span aria-hidden="true">↗</span></a>
+        <a class="repo-link" href="https://github.com/Nimblesite/lspkit"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3.995.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.317 3.285-.995 3.285-.995.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+  
+  <section class="registries" aria-label="Packages">
+    
+    <div class="registry">
+      <span class="registry-name"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg>
+crates.io</span>
+      <ul><li><a href="https://crates.io/crates/lspkit">lspkit <span aria-hidden="true">↗</span></a></li><li><a href="https://crates.io/crates/lspkit-server">lspkit-server <span aria-hidden="true">↗</span></a></li><li><a href="https://crates.io/crates/lsp-profiler">lsp-profiler <span aria-hidden="true">↗</span></a></li><li><a href="https://crates.io/crates/lsp-profiler-dotnet">lsp-profiler-dotnet <span aria-hidden="true">↗</span></a></li></ul>
+    </div>
+    
+    <div class="registry">
+      <span class="registry-name"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#cb3837" d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z"/></svg>
+npm</span>
+      <ul><li><a href="https://www.npmjs.com/package/@nimblesite/lsp-profiler-ui">@nimblesite/lsp-profiler-ui <span aria-hidden="true">↗</span></a></li></ul>
+    </div>
+    
+  </section>
+  <section class="prose home-proof" aria-labelledby="proof-heading">
+    <h2 id="proof-heading">See it running.</h2>
+    <p>SharpLsp and Osprey ship the lspkit profiler in VS Code today: hot lines in the source, a flame graph beside it, and ranked memory leak suspects. <a href="/docs/examples/">See both examples</a>.</p>
+    <figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1200" poster="https://sharplsp.dev/assets/videos/profiler-csharp-poster.webp" aria-label="Profiling a C# app in VS Code with SharpLsp: CPU heat on hot lines, a flame graph and live memory tracking"><source src="https://sharplsp.dev/assets/videos/profiler-csharp.webm" type="video/webm"><source src="https://sharplsp.dev/assets/videos/profiler-csharp.mp4" type="video/mp4"><track kind="captions" src="https://sharplsp.dev/assets/videos/profiler-csharp.en.vtt" srclang="en" label="English"></video><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>SharpLsp profiling a real .NET app in VS Code. <a href="https://sharplsp.dev/docs/profiler/">Watch the walkthrough ↗</a></figcaption></figure>
+    <div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-heatmap.webp" width="2400" height="1500" loading="lazy" alt="CheckoutPipeline.cs with inline heat bars: ParseCatalog 66.8 percent, PriceBasket 25.1 percent, RenderInvoice 7.6 percent"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Hot lines, painted in the source.</figcaption></figure><figure><img src="/assets/images/examples/osprey-heatmap.webp" width="1276" height="714" loading="lazy" alt="busy.osp in VS Code with inline heat bars: collatz 76.4 percent, longest 73.0 percent, fib 22.5 percent"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Heat on Osprey source.</figcaption></figure></div>
+  </section>
+  <figure class="engineering-plate">
+    <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange engine connects through precise circuit paths to two dark terminal surfaces, representing LSP and MCP.">
+    <figcaption><span>FIG. A — One engine, two surfaces.</span><span>LSP / MCP / PROFILER</span></figcaption>
+  </figure>
+  <section class="journal-preview" aria-labelledby="journal-heading">
+    <div class="section-heading"><h2 id="journal-heading">From the workbench.</h2><a class="text-link" href="/blog/">All notes <span aria-hidden="true">↗</span></a></div>
+    
+    <article class="journal-row">
+      <span class="eyebrow">Field note / 1</span>
+      <div><h3><a href="/blog/one-engine/">Build an MCP server and a language server from one Rust engine. <span aria-hidden="true">↗</span></a></h3><p>Your editor speaks the Language Server Protocol. Claude Code, Cursor and Codex speak MCP. lspkit serves both from one Rust engine, and profiles it too.</p></div>
+      <time datetime="2026-10-31T00:00:00.000Z">October 31, 2026</time>
+    </article>
+    
+  </section>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      
+      <div class="footer-grid">
+        
+        
+        <div class="footer-section">
+          <h3>The foundation for any language&#39;s tooling.</h3>
+          <ul>
+            
+            
+            
+            <li><a href="https://github.com/Nimblesite/lspkit">GitHub ↗</a></li>
+            
+            
+            
+            <li><a href="https://www.nimblesite.co">© 2026 Nimblesite ↗</a></li>
+            
+          </ul>
+        </div>
+        
+      </div>
+      
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 lspkit</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme JS -->
+  <script src="/techdoc/js/main.js" type="module"></script>
+
+  
+</body>
+</html>

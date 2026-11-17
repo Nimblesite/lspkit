@@ -265,3 +265,16 @@ open_forget_cycles_of_distinct_uris_release_their_heap ... FAILED   (tests/pull_
 ```
 
 Green with retired-slot reuse: `pull_forget` 2/2 (B and C remain cache hits with unchanged result ids, A recomputes once, a recycled slot reports only its new URI), `pull_forget_heap` 1/1 (1000 distinct open/forget cycles, 17000 allocations and 17000 deallocations, equal bytes), and `pull_store` 4/4. Disabling `forget` again turns all three red.
+
+### #53 follow-up: the header block is capped too
+
+DeslopClaude1 measured 544 MB RSS for a 512 MiB header line with no newline at `0dc2f04`. The red came from stub `HeaderTooLarge` and `MAX_HEADER_BYTES` items that nothing enforced:
+
+```text
+header_blocks_past_the_cap_are_rejected_and_one_at_the_cap_decodes ... FAILED
+  one endless line: Closed
+a_short_body_allocates_what_arrived_not_what_was_claimed ... FAILED   (tests/jsonrpc_frame_heap.rs)
+  a 524288-byte header line under a 8192-byte cap allocated 1056768 bytes
+```
+
+Green once every header line is read through `take(budget)`: `tests/jsonrpc.rs` 21/21 and `jsonrpc_frame_heap` 1/1, each under 64 KiB. The test covers one endless line, endless `X: y` lines, a block exactly at the cap reaching the body, and one byte over it.

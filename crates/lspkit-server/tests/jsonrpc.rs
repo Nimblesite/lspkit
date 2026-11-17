@@ -1,6 +1,6 @@
 //! End-to-end tests for [`lspkit_server::jsonrpc`] framing and types.
 
-use lspkit_server::jsonrpc::{read_message_within, MAX_FRAME_BYTES};
+use lspkit_server::jsonrpc::{read_message_within, MAX_FRAME_BYTES, MAX_HEADER_BYTES};
 use lspkit_server::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
 use serde_json::{json, Value};
 use tokio::io::BufReader;
@@ -383,4 +383,50 @@ async fn a_cap_admits_its_limit_and_rejects_one_byte_more() {
         matches!(&short, FramingError::Io(io) if io.kind() == std::io::ErrorKind::UnexpectedEof),
         "{short:?}"
     );
+}
+
+/// [`MAX_HEADER_BYTES`] as a length; the test checks the two agree.
+const HEADER_CAP: usize = 8 * 1024;
+
+/// [JSONRPC-FRAME-LIMIT] An endless header line, or endless short header
+/// lines, end in `HeaderTooLarge`; a block of exactly the cap still decodes.
+#[tokio::test]
+async fn header_blocks_past_the_cap_are_rejected_and_one_at_the_cap_decodes() {
+    assert_eq!(u64::try_from(HEADER_CAP), Ok(MAX_HEADER_BYTES));
+    let endless_line = format!("Content-Length: 2\r\nX-Junk: {}", "A".repeat(HEADER_CAP));
+    let many_lines = format!("Content-Length: 2\r\n{}", "X: y\r\n".repeat(HEADER_CAP));
+    for (name, raw) in [
+        ("one endless line", endless_line),
+        ("endless short lines", many_lines),
+    ] {
+        let err = decode_err(raw.into_bytes())
+            .await
+            .expect_err("past the header cap");
+        assert!(
+            matches!(err, FramingError::HeaderTooLarge),
+            "{name}: {err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            format!("header block exceeds the {MAX_HEADER_BYTES}-byte limit")
+        );
+    }
+    let head = "Content-Length: 2\r\nX-Pad: ";
+    let tail = "\r\n\r\n";
+    let pad = "p".repeat(HEADER_CAP - head.len() - tail.len());
+    let at_cap = format!("{head}{pad}{tail}");
+    assert_eq!(at_cap.len(), HEADER_CAP);
+    let mut raw = at_cap.clone().into_bytes();
+    raw.extend_from_slice(b"{}");
+    let decoded = decode_err(raw).await;
+    assert!(
+        matches!(&decoded, Err(FramingError::BadJson(_))),
+        "a header block at the cap is read in full and reaches the body: {decoded:?}"
+    );
+    let mut over = format!("{head}{pad}p{tail}").into_bytes();
+    over.extend_from_slice(b"{}");
+    let err = decode_err(over)
+        .await
+        .expect_err("one byte over the header cap");
+    assert!(matches!(err, FramingError::HeaderTooLarge), "{err:?}");
 }

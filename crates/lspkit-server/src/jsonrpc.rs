@@ -159,7 +159,15 @@ pub enum FramingError {
         /// The cap it exceeded.
         max: usize,
     },
+    /// The header block ran past [`MAX_HEADER_BYTES`] without its blank line
+    /// ([JSONRPC-FRAME-LIMIT]).
+    #[error("header block exceeds the {MAX_HEADER_BYTES}-byte limit")]
+    HeaderTooLarge,
 }
+
+/// Largest header block, every line and its terminator included: 8 KiB. It
+/// bounds both one endless line and endless short lines ([JSONRPC-FRAME-LIMIT]).
+pub const MAX_HEADER_BYTES: u64 = 8 * 1024;
 
 /// Largest body [`read_message`] accepts: 64 MiB ([JSONRPC-FRAME-LIMIT]).
 pub const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
@@ -212,17 +220,35 @@ where
 {
     let mut content_length = None;
     let mut line = String::new();
+    let mut budget = MAX_HEADER_BYTES;
     loop {
         line.clear();
-        if reader.read_line(&mut line).await? == 0 {
-            return Err(FramingError::Closed);
-        }
+        budget = header_line(reader, budget, &mut line).await?;
         let header = line.trim_end_matches(['\r', '\n']);
         if header.is_empty() {
             return content_length
                 .ok_or_else(|| FramingError::BadHeader("missing".to_owned(), None));
         }
         content_length = declared_length(header)?.or(content_length);
+    }
+}
+
+/// Read one header line into `line` from what is left of the header budget;
+/// returns the budget that remains. Memory never passes [`MAX_HEADER_BYTES`].
+async fn header_line<R>(
+    reader: &mut BufReader<R>,
+    budget: u64,
+    line: &mut String,
+) -> Result<u64, FramingError>
+where
+    R: AsyncReadExt + Unpin,
+{
+    let mut bounded = (&mut *reader).take(budget);
+    let read = bounded.read_line(line).await?;
+    match (read, line.ends_with('\n'), bounded.limit()) {
+        (_, false, 0) => Err(FramingError::HeaderTooLarge),
+        (0, _, _) => Err(FramingError::Closed),
+        (_, _, left) => Ok(left),
     }
 }
 

@@ -1,6 +1,6 @@
 //! Locate exactly the real producer built for this test profile.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::{Child, Command};
@@ -24,17 +24,21 @@ pub fn reference_binary() -> Result<PathBuf, String> {
     }
 }
 
-/// Resolve the producer in this test executable's exact profile directory.
+/// Resolve the producer in this test executable's own profile directory.
+///
+/// Cargo's build-dir layout moves test executables (`<profile>/deps/` before
+/// 1.100, `<profile>/build/<pkg>/<hash>/out/` since), while examples stay in
+/// `<profile>/examples/`. The nearest ancestor holding the example is the
+/// profile, so either layout finds the producer built with this test.
 fn profile_binary() -> Result<PathBuf, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
-    let profile = executable
-        .parent()
-        .and_then(Path::parent)
-        .ok_or("test executable has no Cargo profile directory")?;
-    Ok(profile.join("examples").join(format!(
-        "diagnostic-reference{}",
-        std::env::consts::EXE_SUFFIX
-    )))
+    let name = format!("diagnostic-reference{}", std::env::consts::EXE_SUFFIX);
+    executable
+        .ancestors()
+        .skip(1)
+        .map(|directory| directory.join("examples").join(&name))
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| format!("no examples/{name} above {}", executable.display()))
 }
 
 /// Both test clients use the same actual producer and native stdio setup.

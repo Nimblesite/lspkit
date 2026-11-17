@@ -1,83 +1,78 @@
 //! End-to-end tests for [`lspkit_server::uri`] conversions.
 
+use std::path::Path;
+#[cfg(not(windows))]
 use std::path::PathBuf;
 
 use lspkit_server::{path_to_uri, uri_to_path, UriError};
 
+/// `path` encodes to exactly `uri`, which decodes back to exactly `path`.
+#[cfg(not(windows))]
+fn assert_round_trip(path: &Path, uri: &str) {
+    assert_eq!(
+        path_to_uri(path).ok().as_deref(),
+        Some(uri),
+        "{}",
+        path.display()
+    );
+    assert_eq!(uri_to_path(uri).ok().as_deref(), Some(path), "{uri}");
+}
+
 #[cfg(not(windows))]
 #[test]
 fn round_trip_simple_unix_path() {
-    let path = PathBuf::from("/tmp/foo.txt");
-    let uri = path_to_uri(&path).expect("encoded");
-    assert_eq!(uri, "file:///tmp/foo.txt");
-    let decoded = uri_to_path(&uri).expect("decoded");
-    assert_eq!(decoded, path);
+    assert_round_trip(Path::new("/tmp/foo.txt"), "file:///tmp/foo.txt");
 }
 
 #[cfg(not(windows))]
 #[test]
 fn round_trip_path_with_spaces() {
-    let path = PathBuf::from("/tmp/my project/foo bar.txt");
-    let uri = path_to_uri(&path).expect("encoded");
-    assert!(uri.contains("%20"));
-    let decoded = uri_to_path(&uri).expect("decoded");
-    assert_eq!(decoded, path);
+    assert_round_trip(
+        Path::new("/tmp/my project/foo bar.txt"),
+        "file:///tmp/my%20project/foo%20bar.txt",
+    );
 }
 
 #[cfg(not(windows))]
 #[test]
 fn round_trip_path_with_unicode() {
-    let path = PathBuf::from("/tmp/caf\u{00e9}/file.txt");
-    let uri = path_to_uri(&path).expect("encoded");
-    let decoded = uri_to_path(&uri).expect("decoded");
-    assert_eq!(decoded, path);
+    assert_round_trip(
+        Path::new("/tmp/caf\u{00e9}/file.txt"),
+        "file:///tmp/caf%C3%A9/file.txt",
+    );
 }
 
 #[cfg(not(windows))]
 #[test]
 fn round_trip_path_with_hash_and_question() {
-    let path = PathBuf::from("/tmp/a#b?c.txt");
-    let uri = path_to_uri(&path).expect("encoded");
-    assert!(uri.contains("%23"));
-    assert!(uri.contains("%3F"));
-    let decoded = uri_to_path(&uri).expect("decoded");
-    assert_eq!(decoded, path);
+    assert_round_trip(Path::new("/tmp/a#b?c.txt"), "file:///tmp/a%23b%3Fc.txt");
 }
 
 #[test]
 fn relative_path_rejected() {
-    let err = path_to_uri(&PathBuf::from("relative/foo.txt")).expect_err("must reject");
-    match err {
-        UriError::InvalidPath(p) => assert_eq!(p, PathBuf::from("relative/foo.txt")),
-        other => assert!(
-            matches!(other, UriError::InvalidPath(_)),
-            "wrong variant: {other:?}"
-        ),
-    }
+    let rejected = path_to_uri(Path::new("relative/foo.txt"));
+    assert!(
+        matches!(&rejected, Err(UriError::InvalidPath(p)) if p == Path::new("relative/foo.txt")),
+        "{rejected:?}"
+    );
 }
 
 #[test]
 fn non_file_scheme_rejected() {
-    let err = uri_to_path("https://example.com/foo").expect_err("must reject");
-    match err {
-        UriError::UnsupportedScheme(s) => assert_eq!(s, "https://example.com/foo"),
-        other => assert!(
-            matches!(other, UriError::UnsupportedScheme(_)),
-            "wrong variant: {other:?}"
-        ),
-    }
+    let rejected = uri_to_path("https://example.com/foo");
+    assert!(
+        matches!(&rejected, Err(UriError::UnsupportedScheme(s)) if s == "https://example.com/foo"),
+        "{rejected:?}"
+    );
 }
 
 #[test]
 fn invalid_percent_encoding_rejected() {
-    let err = uri_to_path("file:///tmp/%ZZbroken").expect_err("must reject");
-    match err {
-        UriError::InvalidUtf8(_) => {}
-        other => assert!(
-            matches!(other, UriError::InvalidUtf8(_)),
-            "wrong variant: {other:?}"
-        ),
-    }
+    let rejected = uri_to_path("file:///tmp/%ZZbroken");
+    assert!(
+        matches!(rejected, Err(UriError::InvalidUtf8(_))),
+        "{rejected:?}"
+    );
 }
 
 /// [URI-WINDOWS] A `%` not followed by two hex digits is malformed on every
@@ -85,23 +80,30 @@ fn invalid_percent_encoding_rejected() {
 #[test]
 fn truncated_percent_encoding_rejected() {
     for uri in ["file:///tmp/a%", "file:///tmp/a%2"] {
-        let err = uri_to_path(uri).expect_err("must reject");
-        assert!(matches!(err, UriError::InvalidUtf8(None)), "{uri}: {err:?}");
+        let rejected = uri_to_path(uri);
+        assert!(
+            matches!(rejected, Err(UriError::InvalidUtf8(None))),
+            "{uri}: {rejected:?}"
+        );
     }
 }
 
 #[cfg(not(windows))]
 #[test]
 fn lowercase_hex_percent_decodes() {
-    let decoded = uri_to_path("file:///tmp/a%2cb%c3%a9").expect("decoded");
-    assert_eq!(decoded, PathBuf::from("/tmp/a,b\u{e9}"));
+    assert_eq!(
+        uri_to_path("file:///tmp/a%2cb%c3%a9").ok(),
+        Some(PathBuf::from("/tmp/a,b\u{e9}"))
+    );
 }
 
 #[cfg(not(windows))]
 #[test]
 fn uppercase_hex_percent_decodes() {
-    let decoded = uri_to_path("file:///tmp/a%2Cb%C3%A9").expect("decoded");
-    assert_eq!(decoded, PathBuf::from("/tmp/a,b\u{e9}"));
+    assert_eq!(
+        uri_to_path("file:///tmp/a%2Cb%C3%A9").ok(),
+        Some(PathBuf::from("/tmp/a,b\u{e9}"))
+    );
 }
 
 /// [URI-WINDOWS] An encoded `/` stays inside its file name, which no Unix
@@ -110,49 +112,59 @@ fn uppercase_hex_percent_decodes() {
 #[test]
 fn encoded_separator_is_rejected_never_split_on() {
     for uri in ["file:///tmp/a%2fb", "file:///tmp/a%2Fb"] {
-        let err = uri_to_path(uri).expect_err("an encoded separator");
+        let rejected = uri_to_path(uri);
         assert!(
-            matches!(&err, UriError::NoLocalPath(rejected) if rejected == uri),
-            "{uri}: {err:?}"
+            matches!(&rejected, Err(UriError::NoLocalPath(named)) if named == uri),
+            "{uri}: {rejected:?}"
         );
     }
-    let backslash = uri_to_path("file:///tmp/a%5Cb").expect("a Unix name may hold a backslash");
-    assert_eq!(backslash, PathBuf::from(r"/tmp/a\b"));
-    let literal = uri_to_path("file:///tmp/a%252Fb").expect("an encoded percent");
     assert_eq!(
-        literal,
-        PathBuf::from("/tmp/a%2Fb"),
+        uri_to_path("file:///tmp/a%5Cb").ok(),
+        Some(PathBuf::from(r"/tmp/a\b")),
+        "a Unix name may hold a backslash"
+    );
+    assert_eq!(
+        uri_to_path("file:///tmp/a%252Fb").ok(),
+        Some(PathBuf::from("/tmp/a%2Fb")),
         "decoded once, never twice"
     );
-    let host = uri_to_path("file://host%2Fshare/a.rs").expect_err("an encoded / in the host");
-    assert!(matches!(host, UriError::NoLocalPath(_)), "{host:?}");
+    let host = uri_to_path("file://host%2Fshare/a.rs");
+    assert!(
+        matches!(host, Err(UriError::NoLocalPath(_))),
+        "an encoded / in the host: {host:?}"
+    );
 }
 
 #[test]
 fn invalid_utf8_after_decode_rejected() {
     // %FF %FE are not valid UTF-8.
-    let err = uri_to_path("file:///tmp/%FF%FE").expect_err("must reject");
-    match err {
-        UriError::InvalidUtf8(_) => {}
-        other => assert!(
-            matches!(other, UriError::InvalidUtf8(_)),
-            "wrong variant: {other:?}"
-        ),
-    }
+    let rejected = uri_to_path("file:///tmp/%FF%FE");
+    assert!(
+        matches!(rejected, Err(UriError::InvalidUtf8(_))),
+        "{rejected:?}"
+    );
 }
 
 #[test]
 fn error_display_lists_offending_input() {
-    let err = uri_to_path("ftp://x").expect_err("must reject");
-    let rendered = format!("{err}");
-    assert!(rendered.contains("ftp://x"));
+    let rejected = uri_to_path("ftp://x");
+    assert!(
+        rejected
+            .as_ref()
+            .is_err_and(|err| err.to_string().contains("ftp://x")),
+        "{rejected:?}"
+    );
 }
 
 #[test]
 fn error_debug_works() {
-    let err = path_to_uri(&PathBuf::from("rel")).expect_err("must reject");
-    let rendered = format!("{err:?}");
-    assert!(rendered.contains("InvalidPath"));
+    let rejected = path_to_uri(Path::new("rel"));
+    assert!(
+        rejected
+            .as_ref()
+            .is_err_and(|err| format!("{err:?}").contains("InvalidPath")),
+        "{rejected:?}"
+    );
 }
 
 /// [URI-AUTHORITY] A URI's host is its authority, never the first path segment.
@@ -165,35 +177,54 @@ fn uri_authority_is_parsed_not_read_as_a_path_segment() {
         "file:///tmp/a.rs",
     ];
     for uri in local_forms {
-        let decoded = uri_to_path(uri).expect("a local URI decodes");
-        assert_eq!(decoded, PathBuf::from("/tmp/a.rs"), "{uri}");
+        let decoded = uri_to_path(uri);
+        assert_eq!(
+            decoded.as_deref().ok(),
+            Some(Path::new("/tmp/a.rs")),
+            "{uri}"
+        );
         assert!(
-            decoded.is_absolute(),
+            decoded.as_ref().is_ok_and(|path| path.is_absolute()),
             "{uri} must decode to an absolute path"
         );
         assert_eq!(
-            path_to_uri(&decoded).expect("encoded"),
-            "file:///tmp/a.rs",
+            decoded
+                .as_deref()
+                .ok()
+                .and_then(|path| path_to_uri(path).ok())
+                .as_deref(),
+            Some("file:///tmp/a.rs"),
             "{uri} re-encodes without its host"
         );
     }
     for uri in ["file://", "file://localhost"] {
-        let decoded = uri_to_path(uri).expect("a URI with no path names the root");
-        assert_eq!(decoded, PathBuf::from("/"), "{uri}");
+        assert_eq!(
+            uri_to_path(uri).ok(),
+            Some(PathBuf::from("/")),
+            "{uri} names the root"
+        );
     }
-    let err = uri_to_path("file://%ZZhost/a.rs").expect_err("a malformed host");
-    assert!(matches!(err, UriError::InvalidUtf8(None)), "{err:?}");
+    let host = uri_to_path("file://%ZZhost/a.rs");
+    assert!(
+        matches!(host, Err(UriError::InvalidUtf8(None))),
+        "a malformed host: {host:?}"
+    );
     for uri in [
         "file://server/share/a.rs",
         "file://wsl.localhost/Ubuntu/a.rs",
         "file://server",
     ] {
-        let err = uri_to_path(uri).expect_err("a remote host has no local path here");
+        let rejected = uri_to_path(uri);
         assert!(
-            matches!(&err, UriError::NoLocalPath(rejected) if rejected == uri),
-            "{uri}: {err:?}"
+            matches!(&rejected, Err(UriError::NoLocalPath(named)) if named == uri),
+            "{uri}: {rejected:?}"
         );
-        assert!(format!("{err}").contains(uri), "the error names {uri}");
+        assert!(
+            rejected
+                .as_ref()
+                .is_err_and(|err| err.to_string().contains(uri)),
+            "the error names {uri}"
+        );
     }
 }
 
@@ -203,16 +234,15 @@ fn uri_authority_is_parsed_not_read_as_a_path_segment() {
 fn non_utf8_path_rejected() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
     let path = PathBuf::from("/tmp").join(OsStr::from_bytes(&[0x66, 0xFF, 0x6F]));
-    let err = path_to_uri(&path).expect_err("must reject");
+    let rejected = path_to_uri(&path);
     assert!(
-        matches!(&err, UriError::InvalidPath(rejected) if *rejected == path),
-        "{err:?}"
+        matches!(&rejected, Err(UriError::InvalidPath(named)) if *named == path),
+        "{rejected:?}"
     );
 }
 
 #[cfg(not(windows))]
 #[test]
 fn empty_path_after_scheme_decodes_to_root() {
-    let decoded = uri_to_path("file:///").expect("decoded");
-    assert_eq!(decoded, PathBuf::from("/"));
+    assert_eq!(uri_to_path("file:///").ok(), Some(PathBuf::from("/")));
 }

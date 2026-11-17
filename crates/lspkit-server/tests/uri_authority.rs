@@ -3,7 +3,7 @@
 //! Unix-only: the Windows rows live in `uri_windows.rs`.
 #![cfg(not(windows))]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use lspkit_server::{path_to_uri, uri_to_path};
 
@@ -15,10 +15,19 @@ fn localhost_authority_is_the_host_not_a_folder() {
         "file://LOCALHOST/tmp/a.rs",
         "file:///tmp/a.rs",
     ] {
-        let path = uri_to_path(uri).expect("a local file URI decodes");
-        assert_eq!(path, PathBuf::from("/tmp/a.rs"), "{uri}");
-        assert!(path.is_absolute(), "{uri} never yields a relative path");
-        assert_eq!(path_to_uri(&path).expect("encodes"), "file:///tmp/a.rs");
+        let path = uri_to_path(uri);
+        assert_eq!(path.as_deref().ok(), Some(Path::new("/tmp/a.rs")), "{uri}");
+        assert!(
+            path.as_ref().is_ok_and(|path| path.is_absolute()),
+            "{uri} never yields a relative path"
+        );
+        assert_eq!(
+            path.as_deref()
+                .ok()
+                .and_then(|path| path_to_uri(path).ok())
+                .as_deref(),
+            Some("file:///tmp/a.rs")
+        );
     }
     assert!(
         uri_to_path("file://server/share/a.rs").is_err(),

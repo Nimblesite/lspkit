@@ -79,7 +79,7 @@ fn forgetting_one_document_keeps_every_other_memo_warm() {
     }
     let revision = store.revision();
     let before = total_calls(&calls);
-    store.forget(A).expect("forget a closed document");
+    assert_eq!(store.forget(A), Ok(()), "forget a closed document");
     assert_eq!(store.revision(), revision, "forgetting supersedes nothing");
     assert_eq!(
         total_calls(&calls),
@@ -103,11 +103,13 @@ fn forget_is_idempotent_and_a_recycled_input_never_replays_old_truth() {
     for uri in [A, B, C] {
         let _first = pull(&store, uri);
     }
-    store
-        .forget("file:///never/opened.cs")
-        .expect("an unknown URI");
-    store.forget(B).expect("first forget");
-    store.forget(B).expect("a repeated forget");
+    assert_eq!(
+        store.forget("file:///never/opened.cs"),
+        Ok(()),
+        "an unknown URI"
+    );
+    assert_eq!(store.forget(B), Ok(()), "first forget");
+    assert_eq!(store.forget(B), Ok(()), "a repeated forget");
     let _fresh = pull(&store, D);
     assert_eq!(
         calls_for(&calls, D),
@@ -120,7 +122,7 @@ fn forget_is_idempotent_and_a_recycled_input_never_replays_old_truth() {
         let _warm = pull(&store, uri);
         assert_eq!(calls_for(&calls, uri), 1, "{uri} never recomputed");
     }
-    store.clear().expect("clear still drops everything");
+    assert_eq!(store.clear(), Ok(()), "clear still drops everything");
     let _cold = pull(&store, C);
     assert_eq!(calls_for(&calls, C), 2, "clear recomputes every document");
 }
@@ -135,17 +137,20 @@ fn forget_frees_the_closed_documents_diagnostics_before_it_returns() {
     };
     let (a, b) = (held(A), held(B));
     let strong = |weak: &Option<std::sync::Weak<Vec<Diagnostic>>>| {
-        weak.as_ref()
-            .map_or(usize::MAX, std::sync::Weak::strong_count)
+        weak.as_ref().map(std::sync::Weak::strong_count)
     };
-    assert_eq!((strong(&a), strong(&b)), (1, 1), "only the memos hold them");
-    store.forget(A).expect("forget A");
+    assert_eq!(
+        (strong(&a), strong(&b)),
+        (Some(1), Some(1)),
+        "only the memos hold them"
+    );
+    assert_eq!(store.forget(A), Ok(()), "forget A");
     assert_eq!(
         strong(&a),
-        0,
+        Some(0),
         "A's diagnostics are freed with no later pull"
     );
-    assert_eq!(strong(&b), 1, "B's memo is untouched");
+    assert_eq!(strong(&b), Some(1), "B's memo is untouched");
 }
 
 #[test]

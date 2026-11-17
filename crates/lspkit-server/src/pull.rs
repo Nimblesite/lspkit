@@ -473,12 +473,17 @@ mod memory_tests {
     #[test]
     fn cleared_database_cannot_publish_under_the_replacement_revision() {
         let store = PullStore::new(Arc::new(|_| Ok(Arc::new(Vec::new()))));
-        let _report = store
-            .diagnostics("file:///closed.json", 1)
-            .expect("populate Salsa input");
-        let queued = Arc::clone(&store.query.lock().expect("database owner"));
+        let populated = store.diagnostics("file:///closed.json", 1);
+        assert!(populated.is_ok(), "populate Salsa input: {populated:?}");
+        let owner = store.query.lock();
+        assert!(owner.is_ok(), "database owner lock");
+        let Ok(owner) = owner else {
+            return;
+        };
+        let queued = Arc::clone(&*owner);
+        drop(owner);
         let allocation = Arc::downgrade(&queued);
-        store.clear().expect("discard closed inputs");
+        assert_eq!(store.clear(), Ok(()), "discard closed inputs");
         assert_eq!(store.query_revision(&queued), Err(PullError::Superseded));
         drop(queued);
         assert_eq!(

@@ -10,15 +10,21 @@ mod cases;
 #[test]
 fn windows_uris_decode_to_exact_paths_and_round_trip() {
     for (uri, path, canonical) in cases::ROUND_TRIPS {
-        let decoded = uri_to_native(uri, Style::Windows).expect("a Windows URI decodes");
-        assert_eq!(decoded, path, "{uri}");
         assert_eq!(
-            native_to_uri(&decoded, Style::Windows).as_deref(),
+            uri_to_native(uri, Style::Windows).ok().as_deref(),
+            Some(path),
+            "{uri}"
+        );
+        assert_eq!(
+            native_to_uri(path, Style::Windows).as_deref(),
             Some(canonical),
             "{path}"
         );
-        let again = uri_to_native(canonical, Style::Windows).expect("re-decodes");
-        assert_eq!(again, path, "{canonical} round-trips");
+        assert_eq!(
+            uri_to_native(canonical, Style::Windows).ok().as_deref(),
+            Some(path),
+            "{canonical} round-trips"
+        );
     }
 }
 
@@ -30,10 +36,10 @@ fn windows_paths_encode_to_one_canonical_uri() {
             Some(uri),
             "{path}"
         );
-        let decoded = uri_to_native(uri, Style::Windows).expect("decodes");
+        let decoded = uri_to_native(uri, Style::Windows);
         assert!(
-            !decoded.contains('/'),
-            "{uri} decodes with native separators"
+            decoded.as_ref().is_ok_and(|native| !native.contains('/')),
+            "{uri} decodes with native separators: {decoded:?}"
         );
     }
 }
@@ -48,10 +54,15 @@ fn windows_device_and_rootless_paths_have_no_uri() {
 #[test]
 fn windows_uris_without_an_absolute_path_are_rejected() {
     for (uri, variant) in cases::URIS_REJECTED {
-        let err = uri_to_native(uri, Style::Windows).expect_err("no absolute path");
-        assert!(format!("{err:?}").starts_with(variant), "{uri}: {err:?}");
-        if let UriError::NoLocalPath(rejected) = &err {
-            assert_eq!(rejected, uri, "the error names the URI");
+        let rejected = uri_to_native(uri, Style::Windows);
+        assert!(
+            rejected
+                .as_ref()
+                .is_err_and(|err| format!("{err:?}").starts_with(variant)),
+            "{uri} must be {variant}: {rejected:?}"
+        );
+        if let Err(UriError::NoLocalPath(named)) = &rejected {
+            assert_eq!(named, uri, "the error names the URI");
         }
     }
 }
@@ -68,8 +79,8 @@ const UNIX_ROUND_TRIPS: [(&str, &str); 3] = [
 fn both_styles_share_one_authority_parser() {
     for (uri, path) in UNIX_ROUND_TRIPS {
         assert_eq!(
-            uri_to_native(uri, Style::Unix).expect("local"),
-            path,
+            uri_to_native(uri, Style::Unix).ok().as_deref(),
+            Some(path),
             "{uri}"
         );
     }
@@ -78,18 +89,21 @@ fn both_styles_share_one_authority_parser() {
         Some("file:///tmp/a%20b.rs")
     );
     for style in [Style::Unix, Style::Windows] {
-        let remote = uri_to_native("file://server/", style).expect_err("no share path");
-        assert!(matches!(remote, UriError::NoLocalPath(_)), "{style:?}");
-        let scheme = uri_to_native("https://server/a.rs", style).expect_err("not file");
+        let remote = uri_to_native("file://server/", style);
+        assert!(matches!(remote, Err(UriError::NoLocalPath(_))), "{style:?}");
+        let scheme = uri_to_native("https://server/a.rs", style);
         assert!(
-            matches!(scheme, UriError::UnsupportedScheme(_)),
+            matches!(scheme, Err(UriError::UnsupportedScheme(_))),
             "{style:?}"
         );
-        let encoded = uri_to_native("file:///C:/a%2Fb", style).expect_err("an encoded /");
-        assert!(matches!(encoded, UriError::NoLocalPath(_)), "{style:?}");
-        let truncated = uri_to_native("file:///C:/a%", style).expect_err("a lone %");
+        let encoded = uri_to_native("file:///C:/a%2Fb", style);
         assert!(
-            matches!(truncated, UriError::InvalidUtf8(None)),
+            matches!(encoded, Err(UriError::NoLocalPath(_))),
+            "{style:?}"
+        );
+        let truncated = uri_to_native("file:///C:/a%", style);
+        assert!(
+            matches!(truncated, Err(UriError::InvalidUtf8(None))),
             "{style:?}"
         );
     }

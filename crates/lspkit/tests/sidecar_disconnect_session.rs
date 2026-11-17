@@ -39,6 +39,12 @@ async fn produced_frame() -> TestResult<(Vec<u8>, Value)> {
     Ok((output.stdout, expected))
 }
 
+/// `result`'s value, or a failed assertion naming `what` and the error.
+fn ok<T, E: std::fmt::Debug>(result: Result<T, E>, what: &str) -> Option<T> {
+    assert!(result.is_ok(), "{what}: {:?}", result.as_ref().err());
+    result.ok()
+}
+
 /// A corrupt native stream produces one visible error, then releases both streams.
 fn assert_failure(events: &[Value]) {
     let failures: Vec<_> = events
@@ -46,8 +52,13 @@ fn assert_failure(events: &[Value]) {
         .filter(|event| at(event, "/kind") == "error")
         .collect();
     assert_eq!(failures.len(), 1, "one terminal native read error");
-    let failure = failures.first().copied().unwrap_or(&Value::Null);
-    assert_ne!(at(failure, "/message").as_str().unwrap_or_default(), "");
+    let message = failures
+        .first()
+        .and_then(|failure| at(failure, "/message").as_str());
+    assert!(
+        message.is_some_and(|text| !text.is_empty()),
+        "the error names its cause: {message:?}"
+    );
     frame_events::assert_closed(events, None);
 }
 
@@ -79,23 +90,30 @@ fn assert_valid_then_truncated(events: &[Value], expected: &Value) {
 async fn native_disconnects_preserve_prefix_and_payload_failures_after_valid_traffic() {
     let empty = frame_events::output(&["--backend"], &[]).await.stdout;
     assert!(empty.is_empty(), "real backend EOF has no synthetic reply");
-    let clean = received(&empty).await.expect("receive clean native EOF");
+    let Some(clean) = ok(received(&empty).await, "receive clean native EOF") else {
+        return;
+    };
     assert_eq!(clean.len(), 1, "zero-byte EOF is normal");
     frame_events::assert_closed(&clean, None);
-    let (frame, expected) = produced_frame().await.expect("produce native frame");
+    let Some((frame, expected)) = ok(produced_frame().await, "produce native frame") else {
+        return;
+    };
     assert!(frame.len() > 5, "actual backend emitted a complete frame");
-    let prefix = received(frame.get(..2).unwrap_or_default())
-        .await
-        .expect("receive torn prefix");
+    let (Some(torn_prefix), Some(torn_body)) = (frame.get(..2), frame.get(..5)) else {
+        return;
+    };
+    let Some(prefix) = ok(received(torn_prefix).await, "receive torn prefix") else {
+        return;
+    };
     assert_truncation(&prefix);
-    let body = received(frame.get(..5).unwrap_or_default())
-        .await
-        .expect("receive torn body");
+    let Some(body) = ok(received(torn_body).await, "receive torn body") else {
+        return;
+    };
     assert_truncation(&body);
-    let bytes = [frame.as_slice(), frame.get(..5).unwrap_or_default()].concat();
-    let events = received(&bytes)
-        .await
-        .expect("receive valid then torn frames");
+    let bytes = [frame.as_slice(), torn_body].concat();
+    let Some(events) = ok(received(&bytes).await, "receive valid then torn frames") else {
+        return;
+    };
     assert_valid_then_truncated(&events, &expected);
 }
 
@@ -103,8 +121,14 @@ async fn native_disconnects_preserve_prefix_and_payload_failures_after_valid_tra
 #[cfg(unix)]
 #[tokio::test]
 async fn native_initial_read_failure_stays_visible() {
-    let directory = tempfile::TempDir::new().expect("real directory input");
-    let source = directory.path().to_str().expect("UTF-8 fixture path");
+    let Some(directory) = ok(tempfile::TempDir::new(), "real directory input") else {
+        return;
+    };
+    let source = directory.path().to_str();
+    assert!(source.is_some(), "UTF-8 fixture path");
+    let Some(source) = source else {
+        return;
+    };
     let events = frame_events::journal(&["--receive", source], &[]).await;
     assert_failure(&events);
     assert_eq!(events.len(), 2);
@@ -120,9 +144,10 @@ mod owner;
 #[cfg(windows)]
 #[tokio::test]
 async fn native_initial_read_failure_stays_visible_on_windows() {
-    let (events, released) = locked_source_events()
-        .await
-        .expect("receive a locked source");
+    let Some((events, released)) = ok(locked_source_events().await, "receive a locked source")
+    else {
+        return;
+    };
     assert!(released.success(), "the lock holder exits cleanly");
     assert_failure(&events);
     assert_eq!(events.len(), 2);

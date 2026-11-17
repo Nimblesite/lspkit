@@ -13,7 +13,7 @@ export LSPKIT_REFERENCE_BIN=$PWD/target/debug/examples/diagnostic-reference
 |---|---|---|---|
 | #21 truncated frame read as clean EOF | `5590a52` (PR #27, added `next_frame` in `crates/lspkit-sidecar/src/inbound.rs`, now `crates/lspkit/src/sidecar/inbound.rs:109`) | v0.1.0 onward, including 0.5.0 | `crates/lspkit/tests/sidecar_disconnect_session.rs:79` `native_disconnects_preserve_prefix_and_payload_failures_after_valid_traffic` |
 | #26 cancellation test drops the earlier partial | `741e806` (PR #33, `crates/lspkit-server/tests/cli_sessions/dispatcher.rs:90`) | v0.1.0 onward, including 0.5.0 | `crates/lspkit-server/tests/cli_sessions/dispatcher.rs:119` `cancel_during_a_scan_stops_the_stream_with_the_standard_error` |
-| #49 URI host read as a path folder; UNC and `\\?\` paths | `384b341` (PR #50) | not yet; ships in v0.6.0 | `crates/lspkit-server/tests/uri_authority.rs` `localhost_authority_is_the_host_not_a_folder`; Windows rows in `crates/lspkit-server/src/uri_style_tests.rs:46` and `:57` |
+| #49 URI host read as a path folder; UNC and `\\?\` paths | `384b341` (PR #50) | not yet; ships in v0.6.0 | `crates/lspkit-server/tests/uri_authority.rs` `localhost_authority_is_the_host_not_a_folder`; the Windows plan's table in `crates/lspkit-server/src/uri_cases.rs`, run by `src/uri_style_tests.rs` (every OS) and `tests/uri_windows.rs` (Windows, public API); see [Windows](#windows) |
 | #48 no server→client requests | this branch | ships in v0.6.0 | `crates/lspkit-server/tests/outbound.rs:84` and `:183`, `crates/lspkit-server/tests/outbound_heap_leak.rs:66`, `crates/lspkit/tests/sidecar_correlator.rs:211` |
 
 ## #21: a truncated frame is an error, not a clean end of stream
@@ -297,3 +297,69 @@ post-query retire removed        → a close during a pull freed 160 of its 6553
 ```
 
 `set_open(..).to(false)` removed → `forgetting_one_document_keeps_every_other_memo_warm` fails with "a close never runs the compiler: left 4, right 3" (SharpLsp1's mutant, now killed).
+
+## Windows
+
+Captured natively on Microsoft Windows 11 Enterprise (NT 10.0.26300, AMD64), Rust 1.100.0 `x86_64-pc-windows-msvc`, .NET SDK 10. On this build, `cfg(windows)` selects the real Windows code paths. Linux rows were checked in WSL (`UbuntuDev`) and by CI.
+
+### #49: the issue's Windows verification plan
+
+The plan's tables live once, in `crates/lspkit-server/src/uri_cases.rs`: 35 round trips, 14 paths → URIs, 9 rejected paths and 23 rejected URIs. Two suites run them:
+
+- `src/uri_style_tests.rs` runs them through `Style::Windows`, on every OS.
+- `tests/uri_windows.rs` (`#![cfg(windows)]`) runs them through the public `uri_to_path` and `path_to_uri` only, so it also compiles against the pre-fix crate. It adds real-filesystem rows:
+  - `std::fs::canonicalize` output for a temp file, a temp dir, a dir with spaces, Unicode and reserved-character names;
+  - a file under a path longer than 300 characters, created through `\\?\`;
+  - files named `trailing dot.`, `trailing space `, `aux.rs`, `NUL`, `CON` and `com1.txt`, and a file inside a `CON` folder, each read back with its contents through the decoded path;
+  - a `mklink /J` junction;
+  - `C:\PROGRA~1`;
+  - drive-letter case.
+
+```sh
+git show 384b341~1:crates/lspkit-server/src/uri.rs > crates/lspkit-server/src/uri.rs   # or 384b341 for PR #50
+cargo nextest run -p lspkit-server --test uri_windows
+git checkout crates/lspkit-server/src/uri.rs
+```
+
+Failing rows, out of the table size:
+
+| `uri.rs` | `uri_windows` tests | Round trips | Paths → URIs | Rejected paths accepted | Rejected URIs accepted |
+|---|---|---|---|---|---|
+| pre-fix `384b341~1` | 0 / 10 | 22 / 34 | 12 / 14 | 4 / 9 | 15 / 20 |
+| PR #50 `384b341` | 4 / 10 | 12 / 34 | 4 / 14 | 4 / 9 | 8 / 20 |
+| `7f37353` and later | 10 / 10 | 0 / 35 | 0 / 14 | 0 / 9 | 0 / 23 |
+
+The per-row tallies were taken before the `%252F` round trip and the encoded-host rejections joined the tables.
+
+The PR #50 rows that failed on Windows:
+
+- `file://%3F/C:/a.rs` decoded to the verbatim path `\\?\C:\a.rs`, and `file://./C:/a.rs` to the device path `\\.\C:\a.rs`.
+- `\\.\pipe\name`, `\\?\Volume{…}` and `\\?\GLOBALROOT\…` encoded to URIs.
+- `%2F` and `%5C` inside a name became real separators.
+- A URI with a port or userinfo decoded to a UNC server name.
+- A lower-case drive letter or server name gave one file a second URI.
+- A real file named `trailing dot.` decoded to a path Win32 opens as `trailing dot` (NotFound).
+- A real file named `NUL` decoded to a path that opens the NUL device on Windows 11.
+
+The full row-by-row output is on #49 (comment 6959676768).
+
+Two more Windows-only failures came out of the same work:
+
+- `tests/uri_authority.rs` did not compile on Windows (`-D unused-imports` once its only test was gated off).
+- `tests/uri.rs` `truncated_percent_encoding_passes_through_bytes` failed there, because `/tmp/a%` has no drive.
+
+### #52 on Windows
+
+`pull_forget` 6/6 and `pull_forget_heap` 1/1 pass. `forget_frees_the_closed_documents_diagnostics_before_it_returns` holds a `Weak` to the forgotten report and was red on `d2a22c4`: `left: 1, right: 0`, because the memo stayed alive until a later pull and then until Salsa's next revision. It goes red again if either the immediate apply or the tombstone revision write is removed. `an_empty_uri_is_analyzed_never_mistaken_for_a_forgotten_slot` was red on `d2a22c4` with `left: [] right: [""]`.
+
+### Windows-only regressions found by running CI's steps here
+
+| Step | Failure on Windows | Fix |
+|---|---|---|
+| `make lint` | `clippy::doc_markdown` in a `cfg(windows)` doc comment in `lsp-profiler-dotnet/src/process.rs`. Linux never compiles it. | `13c6f82` |
+| `make website-test` | `FileNotFoundError` from `subprocess.run(["npm", …])`: `CreateProcess` cannot find `npm.cmd` by its bare name. Pages were also read in the Windows code page. | `13c6f82` |
+| `make test` | `clock::tests::century_leap_rules_hold_before_the_epoch` panicked with "overflow when subtracting duration from `SystemTime`". Windows `SystemTime` starts at 1601, so the 1600-02-29 row cannot be a `SystemTime` there, and fail-fast stopped the run. | `0dc2f04` |
+
+### #42 on Windows
+
+`sh scripts/release-assets.sh 0.0.0-test <dist> win-x64 linux-x64` produces both engine archives and the consumer kit. The kit holds no `bin/` or `obj/` output. With `LSP_PROFILER_DOTNET_ENGINE` pointing at the extracted `win-x64` `lsp-profiler-dotnet-engine.exe`, `cargo nextest run -p lsp-profiler-dotnet --all-features` passes 47 of 48, every .NET e2e session included. The one failure is `engine::tests::a_missing_engine_names_every_place_it_looked`, which checks the message for an absent engine and so needs the variable unset; it passes in `make test`.

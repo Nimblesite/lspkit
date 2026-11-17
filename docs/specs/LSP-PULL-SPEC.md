@@ -27,13 +27,20 @@ until they finish; they return superseded. Clearing never waits behind compiler 
 
 `PullStore::forget(uri)` releases one closed document. Every other document's memo
 stays warm, and no snapshot is superseded. Salsa input slots cannot be deleted, so
-the next query retires the document's input: its URI is emptied, its memo is
-recomputed to an empty report (the analyzer never sees a retired slot), and the
-slot is reused by the next newly opened document. Slots therefore never outnumber
-the documents open at once, and open/forget cycles of distinct URIs free exactly
-the heap they allocate. `forget` queues the URI behind its own lock, so a close
-never waits behind compiler work. A later pull of a forgotten URI recomputes.
-Forgetting an unknown or already forgotten URI is `Ok`.
+the document's input is retired instead:
+- Its URI is emptied and it is flagged closed (a flag, not the empty URI, so a
+  consumer's own `""` is still analyzed).
+- Its memo is recomputed to an empty report, and the analyzer never sees a retired slot.
+- One write to the retired slot starts Salsa's next revision, which frees the
+  replaced memo.
+- The slot is reused by the next newly opened document.
+
+`forget` retires the document before it returns, so its diagnostics are freed at
+once, whenever no query holds the lock. It never waits behind compiler work: while
+a query runs, the URI is queued behind its own lock and the next query retires it
+first. Slots never outnumber the documents open at once, and open/forget cycles of
+distinct URIs free exactly the heap they allocate. A later pull of a forgotten URI
+recomputes. Forgetting an unknown or already forgotten URI is `Ok`.
 
 ## [LSP-PULL-CONCURRENCY] Nonblocking Invalidation
 

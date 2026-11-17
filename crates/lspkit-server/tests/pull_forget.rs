@@ -109,3 +109,83 @@ fn forget_is_idempotent_and_a_recycled_input_never_replays_old_truth() {
     let _cold = pull(&store, C);
     assert_eq!(calls_for(&calls, C), 2, "clear recomputes every document");
 }
+
+#[test]
+fn forget_frees_the_closed_documents_diagnostics_before_it_returns() {
+    let (store, _calls) = counting_store();
+    let held = |uri| {
+        let pulled = store.diagnostics(uri, 1);
+        assert!(pulled.is_ok(), "{uri}: {pulled:?}");
+        pulled.map(|report| Arc::downgrade(&report.items)).ok()
+    };
+    let (a, b) = (held(A), held(B));
+    let strong = |weak: &Option<std::sync::Weak<Vec<Diagnostic>>>| {
+        weak.as_ref()
+            .map_or(usize::MAX, std::sync::Weak::strong_count)
+    };
+    assert_eq!((strong(&a), strong(&b)), (1, 1), "only the memos hold them");
+    store.forget(A).expect("forget A");
+    assert_eq!(
+        strong(&a),
+        0,
+        "A's diagnostics are freed with no later pull"
+    );
+    assert_eq!(strong(&b), 1, "B's memo is untouched");
+}
+
+#[test]
+fn forget_returns_while_a_compiler_query_runs_and_the_next_pull_applies_it() {
+    let started = Arc::new(std::sync::Barrier::new(2));
+    let release = Arc::new(std::sync::Barrier::new(2));
+    let calls: Calls = Arc::default();
+    let (in_flight, resume, counted) = (
+        Arc::clone(&started),
+        Arc::clone(&release),
+        Arc::clone(&calls),
+    );
+    let store = PullStore::new(Arc::new(move |uri| {
+        let seen = counted.lock().map(|mut calls| {
+            let count = calls.entry(uri.to_owned()).or_default();
+            *count += 1;
+            *count
+        });
+        if uri == B && matches!(seen, Ok(1)) {
+            let _started = in_flight.wait();
+            let _released = resume.wait();
+        }
+        Ok(Arc::new(vec![Diagnostic {
+            message: uri.to_owned(),
+            ..Diagnostic::default()
+        }]))
+    }));
+    let _a = pull(&store, A);
+    let worker = {
+        let store = store.clone();
+        std::thread::spawn(move || store.diagnostics(B, 1).map(|report| report.result_id))
+    };
+    let _computing = started.wait();
+    assert_eq!(
+        store.forget(A),
+        Ok(()),
+        "forget never waits for B's compiler"
+    );
+    let _done = release.wait();
+    assert!(matches!(worker.join(), Ok(Ok(_))), "B completes");
+    let _reopened = pull(&store, A);
+    assert_eq!(
+        calls_for(&calls, A),
+        2,
+        "the queued forget applied before A's pull"
+    );
+}
+
+#[test]
+fn an_empty_uri_is_analyzed_never_mistaken_for_a_forgotten_slot() {
+    let (store, calls) = counting_store();
+    let _empty = pull(&store, "");
+    assert_eq!(
+        calls_for(&calls, ""),
+        1,
+        "the compiler decides what \"\" means"
+    );
+}

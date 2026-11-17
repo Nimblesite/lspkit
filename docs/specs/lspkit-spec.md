@@ -110,7 +110,7 @@ pub trait EngineApi: Send + Sync + 'static {
 - `tokio` 1.x, `tracing` + `tracing-subscriber`, `serde` + `serde_derive`, `async-trait`.
 - `lsp-types` (current major).
 - `notify` 7.x, `ropey` 1.x, `dashmap` 6.x, `tokio-util` (for `CancellationToken`).
-- `rmp-serde` available as the default wire format for `lspkit::sidecar`; transport is generic over `serde`.
+- `lspkit::sidecar` carries opaque length-prefixed payloads; the consumer picks the encoding (JSON, MessagePack, CBOR) and its crate.
 - **No `tower-lsp`.** Ever.
 
 ## Public API hygiene

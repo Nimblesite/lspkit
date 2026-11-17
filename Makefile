@@ -44,6 +44,9 @@ COVERAGE_THRESHOLDS_FILE = coverage-thresholds.json
 build:
 	@echo "==> Building..."
 	cargo build --release --workspace --all-features --locked
+# The exact packaging step release.yml runs: each crate must build from its own
+# tarball with default features, so a release can never fail here first.
+	cargo package --workspace --locked --allow-dirty
 
 ## test: Fail-fast tests + coverage + threshold enforcement.
 ##       See REPO-STANDARDS-SPEC [TEST-RULES] and [COVERAGE-THRESHOLDS-JSON].

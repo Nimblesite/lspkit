@@ -234,3 +234,18 @@ Green, after `git apply fix-48.patch`:
      Summary [   0.010s] 3 tests run: 3 passed, 0 skipped
      Summary [   0.012s] 12 tests run: 12 passed, 0 skipped
 ```
+
+## #53: an oversized `Content-Length` is an error, never a panic or an up-front allocation
+
+[JSONRPC-FRAME-LIMIT]. Red against a stub (`read_message_within` existing but ignoring its cap), so the tests compile and fail on behaviour:
+
+```text
+oversized_content_length_is_rejected_before_any_body_is_read ... FAILED
+  panicked at library/alloc/src/raw_vec/mod.rs:29:5: capacity overflow
+a_cap_admits_its_limit_and_rejects_one_byte_more ... FAILED
+  one byte over the cap: Message { method: Some("x"), .. }
+a_short_body_allocates_what_arrived_not_what_was_claimed ... FAILED   (tests/jsonrpc_frame_heap.rs)
+  a 25-byte body claiming 67108864 allocated 67117299 bytes
+```
+
+Green after the cap check and the incremental `take(..).read_to_end` body read: `tests/jsonrpc.rs` 20/20, `tests/jsonrpc_frame_heap.rs` 1/1 (under 64 KiB allocated, and all of it released). Clippy is clean on the host and on `x86_64-pc-windows-msvc`.

@@ -151,43 +151,88 @@ pub enum FramingError {
     /// Peer closed the stream.
     #[error("peer closed the stream")]
     Closed,
+    /// The peer claimed a body larger than the cap ([JSONRPC-FRAME-LIMIT]).
+    #[error("frame of {claimed} bytes exceeds the {max}-byte limit")]
+    FrameTooLarge {
+        /// The `Content-Length` the peer sent.
+        claimed: u64,
+        /// The cap it exceeded.
+        max: usize,
+    },
 }
 
-/// Read one Content-Length-framed JSON-RPC message from `reader`.
+/// Largest body [`read_message`] accepts: 64 MiB ([JSONRPC-FRAME-LIMIT]).
+pub const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
+
+/// Read one Content-Length-framed JSON-RPC message of at most
+/// [`MAX_FRAME_BYTES`] from `reader`.
 ///
 /// # Errors
-/// Returns [`FramingError`] on I/O failure, header parse failure, or invalid JSON.
+/// Returns [`FramingError`] on I/O failure, header parse failure, an
+/// oversized frame, or invalid JSON.
 pub async fn read_message<R>(reader: &mut BufReader<R>) -> Result<Message, FramingError>
 where
     R: AsyncReadExt + Unpin,
 {
-    let mut content_length: Option<usize> = None;
+    read_message_within(reader, MAX_FRAME_BYTES).await
+}
+
+/// [`read_message`] with a server-chosen body cap of `max_bytes`.
+///
+/// # Errors
+/// As [`read_message`], with [`FramingError::FrameTooLarge`] above `max_bytes`.
+pub async fn read_message_within<R>(
+    reader: &mut BufReader<R>,
+    max_bytes: usize,
+) -> Result<Message, FramingError>
+where
+    R: AsyncReadExt + Unpin,
+{
+    let claimed = content_length(reader).await?;
+    let length = usize::try_from(claimed)
+        .ok()
+        .filter(|length| *length <= max_bytes)
+        .ok_or(FramingError::FrameTooLarge {
+            claimed,
+            max: max_bytes,
+        })?;
+    // Memory follows the bytes that arrive, never the length the peer claims.
+    let mut body = Vec::new();
+    let read = (&mut *reader).take(claimed).read_to_end(&mut body).await?;
+    if read < length {
+        return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+    }
+    Ok(serde_json::from_slice(&body)?)
+}
+
+/// Read headers up to the blank line; the `Content-Length` they declare.
+async fn content_length<R>(reader: &mut BufReader<R>) -> Result<u64, FramingError>
+where
+    R: AsyncReadExt + Unpin,
+{
+    let mut content_length = None;
     let mut line = String::new();
     loop {
         line.clear();
-        let read = reader.read_line(&mut line).await?;
-        if read == 0 {
+        if reader.read_line(&mut line).await? == 0 {
             return Err(FramingError::Closed);
         }
-        let trimmed = line.trim_end_matches(['\r', '\n']);
-        if trimmed.is_empty() {
-            break;
+        let header = line.trim_end_matches(['\r', '\n']);
+        if header.is_empty() {
+            return content_length
+                .ok_or_else(|| FramingError::BadHeader("missing".to_owned(), None));
         }
-        if let Some(value) = trimmed.strip_prefix("Content-Length:") {
-            content_length = Some(
-                value
-                    .trim()
-                    .parse()
-                    .map_err(|source| FramingError::BadHeader(trimmed.to_owned(), Some(source)))?,
-            );
-        }
+        content_length = declared_length(header)?.or(content_length);
     }
-    let length =
-        content_length.ok_or_else(|| FramingError::BadHeader("missing".to_owned(), None))?;
-    let mut body = vec![0u8; length];
-    let _ = reader.read_exact(&mut body).await?;
-    let message: Message = serde_json::from_slice(&body)?;
-    Ok(message)
+}
+
+/// The length a `Content-Length` header declares; other headers declare none.
+fn declared_length(header: &str) -> Result<Option<u64>, FramingError> {
+    header
+        .strip_prefix("Content-Length:")
+        .map(|value| value.trim().parse())
+        .transpose()
+        .map_err(|source| FramingError::BadHeader(header.to_owned(), Some(source)))
 }
 
 /// Writer half of a JSON-RPC connection, serialized so multiple tasks can send.

@@ -1,5 +1,6 @@
 //! End-to-end tests for [`lspkit_server::jsonrpc`] framing and types.
 
+use lspkit_server::jsonrpc::{read_message_within, MAX_FRAME_BYTES};
 use lspkit_server::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
 use serde_json::{json, Value};
 use tokio::io::BufReader;
@@ -297,4 +298,89 @@ fn message_clone_preserves_fields() {
     let cloned = msg.clone();
     assert_eq!(cloned.method, msg.method);
     assert_eq!(cloned.id, msg.id);
+}
+
+/// A frame whose header claims `length` bytes and that carries `body`.
+fn framed(length: impl std::fmt::Display, body: &[u8]) -> Vec<u8> {
+    let mut raw = format!("Content-Length: {length}\r\n\r\n").into_bytes();
+    raw.extend_from_slice(body);
+    raw
+}
+
+/// A notification whose JSON body is exactly `bytes` long.
+fn body_of_exactly(bytes: usize) -> Vec<u8> {
+    let shell = br#"{"jsonrpc":"2.0","method":"x","params":[""]}"#.len();
+    let pad = "a".repeat(bytes - shell);
+    format!(r#"{{"jsonrpc":"2.0","method":"x","params":["{pad}"]}}"#).into_bytes()
+}
+
+/// Decode `raw` under a server-chosen cap of `max` body bytes.
+async fn decode_within(raw: Vec<u8>, max: usize) -> Result<Message, FramingError> {
+    read_message_within(&mut BufReader::new(std::io::Cursor::new(raw)), max).await
+}
+
+/// [JSONRPC-FRAME-LIMIT] A hostile or garbled `Content-Length` is an error,
+/// never a panic and never an allocation of the claimed size.
+#[tokio::test]
+async fn oversized_content_length_is_rejected_before_any_body_is_read() {
+    let over_default = u64::try_from(MAX_FRAME_BYTES).expect("the cap fits u64") + 1;
+    for claimed in [u64::MAX, over_default] {
+        let err = decode_err(framed(claimed, b"{}"))
+            .await
+            .expect_err("over the cap");
+        assert!(
+            matches!(err, FramingError::FrameTooLarge { claimed: c, max } if c == claimed && max == MAX_FRAME_BYTES),
+            "{claimed}: {err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            format!("frame of {claimed} bytes exceeds the {MAX_FRAME_BYTES}-byte limit")
+        );
+    }
+    let beyond_u64 = decode_err(framed("18446744073709551616", b"{}"))
+        .await
+        .expect_err("not a u64");
+    assert!(
+        matches!(beyond_u64, FramingError::BadHeader(..)),
+        "{beyond_u64:?}"
+    );
+}
+
+/// [JSONRPC-FRAME-LIMIT] A cap admits a body of exactly its size, rejects one
+/// byte more, and a body shorter than its claim is an unexpected EOF.
+#[tokio::test]
+async fn a_cap_admits_its_limit_and_rejects_one_byte_more() {
+    const CAP: usize = 256;
+    let at_cap = body_of_exactly(CAP);
+    assert_eq!(at_cap.len(), CAP);
+    let decoded = decode_within(framed(CAP, &at_cap), CAP)
+        .await
+        .expect("a body at the cap decodes");
+    assert_eq!(decoded.method.as_deref(), Some("x"));
+    let over = body_of_exactly(CAP + 1);
+    let err = decode_within(framed(CAP + 1, &over), CAP)
+        .await
+        .expect_err("one byte over the cap");
+    assert!(
+        matches!(
+            err,
+            FramingError::FrameTooLarge {
+                claimed: 257,
+                max: CAP
+            }
+        ),
+        "{err:?}"
+    );
+    let largest = body_of_exactly(MAX_FRAME_BYTES);
+    let decoded = decode_ok(framed(MAX_FRAME_BYTES, &largest))
+        .await
+        .expect("a body at the default cap decodes");
+    assert_eq!(decoded.method.as_deref(), Some("x"));
+    let short = decode_within(framed(CAP, b"{}"), CAP)
+        .await
+        .expect_err("fewer bytes than claimed");
+    assert!(
+        matches!(&short, FramingError::Io(io) if io.kind() == std::io::ErrorKind::UnexpectedEof),
+        "{short:?}"
+    );
 }

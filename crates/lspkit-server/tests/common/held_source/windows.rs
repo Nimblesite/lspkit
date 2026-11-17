@@ -26,7 +26,7 @@ impl NativeSource {
         let mut child = spawn_owner(source)?;
         let Some(stdout) = child.stdout.take() else {
             child.kill()?;
-            child.wait()?;
+            let _killed = child.wait()?;
             return Err("oplock stdout".into());
         };
         let mut held = HeldRead {

@@ -110,3 +110,46 @@ async fn native_initial_read_failure_stays_visible() {
     assert_eq!(events.len(), 2);
     assert_eq!(at(entry(&events, 0), "/kind"), "error");
 }
+
+#[cfg(windows)]
+#[path = "../../../test-support/windows-oplock/owner.rs"]
+mod owner;
+
+/// Windows has no EISDIR. Another process's exclusive byte-range lock lets the
+/// open succeed and makes the first read fail with `ERROR_LOCK_VIOLATION`.
+#[cfg(windows)]
+#[tokio::test]
+async fn native_initial_read_failure_stays_visible_on_windows() {
+    let (events, released) = locked_source_events()
+        .await
+        .expect("receive a locked source");
+    assert!(released.success(), "the lock holder exits cleanly");
+    assert_failure(&events);
+    assert_eq!(events.len(), 2);
+    assert_eq!(at(entry(&events, 0), "/kind"), "error");
+    let message = at(entry(&events, 0), "/message");
+    assert!(
+        message
+            .as_str()
+            .is_some_and(|text| text.contains("(os error 33)")),
+        "the open succeeded and the first read hit the lock: {message}"
+    );
+}
+
+/// Receive a source another process holds under an exclusive byte-range lock,
+/// then release the lock. Readiness comes from the holder's state line.
+#[cfg(windows)]
+async fn locked_source_events() -> TestResult<(Vec<Value>, std::process::ExitStatus)> {
+    let fixture = tempfile::TempDir::new()?;
+    let path = fixture.path().join("locked.bin");
+    std::fs::write(&path, b"locked bytes")?;
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../test-support/windows-oplock/lock.ps1");
+    let mut holder = owner::spawn(&script, &path)?;
+    let stdout = holder.stdout.take().ok_or("lock holder stdout")?;
+    owner::state(&mut std::io::BufReader::new(stdout), "locked")?;
+    let source = path.to_str().ok_or("capture path is not UTF-8")?;
+    let events = frame_events::journal(&["--receive", source], &[]).await;
+    drop(holder.stdin.take());
+    Ok((events, holder.wait()?))
+}

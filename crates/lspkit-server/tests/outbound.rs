@@ -43,7 +43,10 @@ async fn editor_receives(editor: &mut Wire, method: &str, params: &Value) -> Ste
     assert_eq!(request.jsonrpc, "2.0");
     assert_eq!(request.method.as_deref(), Some(method));
     // `"params": null` decodes as absent; both mean "no params" on the wire.
-    assert_eq!(request.params.as_ref().unwrap_or(&Value::Null), params);
+    match request.params.as_ref() {
+        Some(sent) => assert_eq!(sent, params),
+        None => assert_eq!(params, &Value::Null, "only null params are omitted"),
+    }
     let id = request.id.ok_or("a server request carries an id")?;
     assert!(matches!(id, RequestId::Number(raw) if raw > 0), "{id:?}");
     Ok(id)

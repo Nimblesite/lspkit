@@ -76,9 +76,7 @@ impl Outbound {
         let (Some(id), None) = (message.id, message.method) else {
             return Err(OutboundError::NotAResponse);
         };
-        let answer = message
-            .error
-            .map_or_else(|| Ok(message.result.unwrap_or(Value::Null)), Err);
+        let answer = answer_of(message.error, message.result);
         let Some(raw) = correlated(&id) else {
             return Err(OutboundError::UnknownId(id));
         };
@@ -105,6 +103,15 @@ fn wire_id(raw: u64) -> Result<RequestId, OutboundError> {
     i64::try_from(raw)
         .map(RequestId::Number)
         .map_err(|_beyond_wire_numbers| OutboundError::IdsExhausted(raw))
+}
+
+/// The editor's answer: its error, its result, or `null` when it sent neither.
+fn answer_of(error: Option<JsonRpcError>, result: Option<Value>) -> OutboundResult {
+    match (error, result) {
+        (Some(error), _) => Err(error),
+        (None, Some(result)) => Ok(result),
+        (None, None) => Ok(Value::Null),
+    }
 }
 
 /// The correlator number behind a wire id this handle could have allocated.

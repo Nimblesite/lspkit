@@ -1,0 +1,27 @@
+# lspkit — The foundation for any language&#39;s tooling.
+
+> lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.
+
+## Documentation
+
+- [Crates.](http://localhost:8080/docs/crates/)
+
+- [Built with lspkit.](http://localhost:8080/docs/examples/)
+
+- [Getting started.](http://localhost:8080/docs/getting-started/)
+
+- [A small foundation.](http://localhost:8080/docs/)
+
+- [Profiler.](http://localhost:8080/docs/profiler/)
+
+
+## Blog Posts
+
+- [Build an MCP server and a language server from one Rust engine.](http://localhost:8080/blog/one-engine/)
+
+
+## Navigation
+- Home: http://localhost:8080/
+- Documentation: http://localhost:8080/docs/
+- Blog: http://localhost:8080/blog/
+- API Reference: http://localhost:8080/api/

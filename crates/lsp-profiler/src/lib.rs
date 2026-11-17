@@ -11,6 +11,7 @@
 //! The wire types in [`wire`] are generated from `docs/models/profiler.td`.
 
 pub mod aggregate;
+pub mod clock;
 pub mod commands;
 pub mod cooperative;
 pub mod diagnostics;

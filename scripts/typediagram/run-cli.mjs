@@ -28,13 +28,27 @@ export function captureStdout(command, args) {
 
 function runInto(command, args, file) {
   const stdout = openSync(file, "w");
+  // On Windows the npm shim is a `.cmd`, which only resolves through cmd.exe.
+  // A shell joins arguments into one command line unquoted, so each argument
+  // is quoted for it; a real executable runs directly, with Node's own quoting.
+  const shell = process.platform === "win32" && !/\.(exe|com)$/i.test(command);
   try {
-    // On Windows the npm shim is a `.cmd`, which only resolves through a shell.
-    execFileSync(command, args, {
+    const [program, argv] = shell ? [quoteForCmd(command), args.map(quoteForCmd)] : [command, args];
+    execFileSync(program, argv, {
       stdio: ["ignore", stdout, "inherit"],
-      shell: process.platform === "win32",
+      shell,
     });
   } finally {
     closeSync(stdout);
   }
+}
+
+/**
+ * One argument as the Windows C runtime parses it back from a command line:
+ * wrapped in quotes, with embedded quotes and the backslashes before them escaped.
+ * @param {string} arg
+ */
+export function quoteForCmd(arg) {
+  const escaped = arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1");
+  return `"${escaped}"`;
 }

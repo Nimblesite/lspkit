@@ -23,7 +23,6 @@ workspace = true
 async-trait.workspace = true
 dashmap.workspace = true
 futures-core.workspace = true
-rmp-serde.workspace = true
 ropey.workspace = true
 serde.workspace = true
 thiserror.workspace = true

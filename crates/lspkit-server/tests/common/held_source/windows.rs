@@ -23,8 +23,12 @@ impl NativeSource {
     /// Write the real held source and start the owner holding it.
     pub fn new(source: &Path) -> StepResult<Self> {
         std::fs::write(source, b"{\"unfinished\":")?;
-        let mut child = spawn_owner(source);
-        let stdout = child.stdout.take().ok_or("oplock stdout")?;
+        let mut child = spawn_owner(source)?;
+        let Some(stdout) = child.stdout.take() else {
+            child.kill()?;
+            let _killed = child.wait()?;
+            return Err("oplock stdout".into());
+        };
         let mut held = HeldRead {
             child,
             output: BufReader::new(stdout),
@@ -42,7 +46,7 @@ impl NativeSource {
 }
 
 /// Run the owned native fixture invisibly, with no persistent policy changes.
-fn spawn_owner(source: &Path) -> Child {
+fn spawn_owner(source: &Path) -> std::io::Result<Child> {
     let script =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-support/windows-oplock/hold.ps1");
     owner::spawn(&script, source)

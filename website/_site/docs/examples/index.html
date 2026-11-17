@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>Built with lspkit.</title>
+  <meta name="title" content="Built with lspkit.">
+  <meta name="description" content="SharpLsp and Osprey ship the lspkit profiler in VS Code today.">
+  
+  
+  <meta name="robots" content="index, follow">
+  <meta name="generator" content="Eleventy + techdoc">
+  <meta name="theme-color" content="#f4f1e9">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="http://localhost:8080/docs/examples/">
+
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/atom+xml" title="lspkit — The foundation for any language&#39;s tooling. Feed" href="http://localhost:8080/feed.xml">
+
+  <!-- Hreflang for language alternates -->
+  
+  <link rel="alternate" hreflang="en" href="http://localhost:8080/docs/examples/">
+  
+  <link rel="alternate" hreflang="x-default" href="http://localhost:8080/docs/examples/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="http://localhost:8080/docs/examples/">
+  <meta property="og:title" content="Built with lspkit.">
+  <meta property="og:description" content="SharpLsp and Osprey ship the lspkit profiler in VS Code today.">
+  <meta property="og:site_name" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:locale" content="en_US">
+  
+  
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="http://localhost:8080/docs/examples/">
+  <meta name="twitter:title" content="Built with lspkit.">
+  <meta name="twitter:description" content="SharpLsp and Osprey ship the lspkit profiler in VS Code today.">
+  
+  
+  
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "http://localhost:8080/#website",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "http://localhost:8080/docs/examples/#webpage",
+        "url": "http://localhost:8080/docs/examples/",
+        "name": "Built with lspkit.",
+        "description": "SharpLsp and Osprey ship the lspkit profiler in VS Code today.",
+        "isPartOf": { "@id": "http://localhost:8080/#website" },
+        "inLanguage": "en",
+        "datePublished": "2026-11-16T10:00:55.240Z"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "http://localhost:8080/docs/examples/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "http://localhost:8080/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Built with lspkit.",
+            "item": "http://localhost:8080/docs/examples/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+
+  <!-- Theme structural CSS (no colors) -->
+  <link rel="stylesheet" href="/techdoc/css/reset.css">
+  <link rel="stylesheet" href="/techdoc/css/layout.css">
+  <link rel="stylesheet" href="/techdoc/css/utilities.css">
+
+  <!-- Site styles (YOU provide colors and visual styling) -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a href="/" class="logo">
+        lspkit
+      </a>
+
+      <ul class="nav-links">
+        
+        
+        
+        <li>
+          
+          
+          <a href="/docs/" 
+             class="nav-link active">
+            Docs
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="/blog/" 
+             class="nav-link ">
+            Journal
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="https://github.com/Nimblesite/lspkit" target="_blank" rel="noopener noreferrer"
+             class="nav-link ">
+            GitHub ↗
+          </a>
+        </li>
+        
+      </ul>
+
+      <div class="nav-actions">
+        
+
+        
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☾</span>
+        </button>
+        
+
+        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Built with lspkit.",
+  "description": "SharpLsp and Osprey ship the lspkit profiler in VS Code today.",
+  "author": {
+    "@type": "Person",
+    "name": "lspkit — The foundation for any language&#39;s tooling."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "lspkit — The foundation for any language&#39;s tooling.",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "http://localhost:8080/assets/images/logo.png"
+    }
+  },
+  "datePublished": "2026-11-16T10:00:55.240Z",
+  "dateModified": "2026-11-16T10:00:55.240Z",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "http://localhost:8080/docs/examples/"
+  },
+  "inLanguage": "en"
+}
+</script>
+
+
+
+
+
+<div class="docs-layout">
+  <aside class="sidebar" id="docs-sidebar">
+    <nav class="docs-nav">
+      <ul>
+        
+        
+        
+        
+        <li>
+          <a href="/docs/" >
+            Overview
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/getting-started/" >
+            Getting started
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/crates/" >
+            Crates
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/profiler/" >
+            Profiler
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/examples/" class="active">
+            Examples
+          </a>
+          
+        </li>
+        
+        
+      </ul>
+    </nav>
+  </aside>
+
+  <article class="docs-content">
+    <header class="article-header">
+  <p class="eyebrow">Documentation</p>
+  <h1>Built with lspkit.</h1>
+  <p class="article-description">SharpLsp and Osprey ship the lspkit profiler in VS Code today.</p>
+</header>
+
+<figure class="page-illustration">
+  <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange shared engine connects to two terminal surfaces through circuit paths.">
+</figure>
+
+<div class="prose"><!-- [WEB-EXAMPLES] Real integrations; media is served by each project's own site. -->
+<p>Two language servers run on lspkit today. Both mount the same <code>lsp-profiler</code> engine and the same <code>@nimblesite/lsp-profiler-ui</code> panels; only the runtime crate differs.</p>
+<h2 id="sharplsp-c-and-f" tabindex="-1"><a class="header-anchor" href="#sharplsp-c-and-f">SharpLsp: C# and F#</a></h2>
+<p><a href="https://sharplsp.dev">SharpLsp</a> is a C# and F# language server for VS Code. Its profiler attaches to any running .NET process through <code>lsp-profiler-dotnet</code>, paints hot lines in your code, and ranks leak suspects while the app runs.</p>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1200" poster="https://sharplsp.dev/assets/videos/profiler-csharp-poster.webp" aria-label="Profiling a C# app in VS Code with SharpLsp: CPU heat on hot lines, a flame graph and live memory tracking"><source src="https://sharplsp.dev/assets/videos/profiler-csharp.webm" type="video/webm"><source src="https://sharplsp.dev/assets/videos/profiler-csharp.mp4" type="video/mp4"><track kind="captions" src="https://sharplsp.dev/assets/videos/profiler-csharp.en.vtt" srclang="en" label="English"></video><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>SharpLsp profiling a real .NET app in VS Code. <a href="https://sharplsp.dev/docs/profiler/">Watch the walkthrough ↗</a></figcaption></figure>
+<div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-heatmap.webp" width="2400" height="1500" loading="lazy" alt="CheckoutPipeline.cs with inline heat bars: ParseCatalog 66.8 percent, PriceBasket 25.1 percent, RenderInvoice 7.6 percent"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Hot lines, painted in the source.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-results.webp" width="2400" height="1500" loading="lazy" alt="SharpLsp Profiler results panel with summary cards, an embedded flame graph and the hot functions table"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Results panel, flame graph and hot functions.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-memory.webp" width="2400" height="1500" loading="lazy" alt="Memory dashboard with a steadily climbing heap timeline flagged as a possible leak, beside SessionCache.cs"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Live heap timeline.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-leaks.webp" width="2400" height="1500" loading="lazy" alt="Suspected leaks ranked HIGH with growth in megabytes and object counts, and an inline leak marker on the CustomerSession declaration"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Ranked leak suspects, marked in the source.</figcaption></figure></div>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1200" poster="https://sharplsp.dev/assets/videos/profiler-fsharp-poster.webp" aria-label="Profiling an F# app in VS Code with SharpLsp, from hot pipeline stages to leaks"><source src="https://sharplsp.dev/assets/videos/profiler-fsharp.webm" type="video/webm"><source src="https://sharplsp.dev/assets/videos/profiler-fsharp.mp4" type="video/mp4"><track kind="captions" src="https://sharplsp.dev/assets/videos/profiler-fsharp.en.vtt" srclang="en" label="English"></video><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>The same profiler on F#: pipeline stages keep their compiler names. <a href="https://sharplsp.dev/docs/fsharp-profiling/">Watch the walkthrough ↗</a></figcaption></figure>
+<p><a href="https://sharplsp.dev/docs/profiler/">Read the SharpLsp profiler guide ↗</a></p>
+<h2 id="osprey-a-native-functional-language" tabindex="-1"><a class="header-anchor" href="#osprey-a-native-functional-language">Osprey: a native functional language</a></h2>
+<p><a href="https://www.ospreylang.dev">Osprey</a> is a functional language with algebraic effects that compiles to native code. Its VS Code extension uses the same profiler to run and profile the open file, attach to a running program, and check for leaks.</p>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1080" poster="https://www.ospreylang.dev/assets/videos/osprey-profiler-poster.jpg" aria-label="Profiling Osprey in VS Code: CPU, memory and leaks"><source src="https://www.ospreylang.dev/assets/videos/osprey-profiler.mp4" type="video/mp4"><track kind="captions" src="https://www.ospreylang.dev/assets/videos/osprey-profiler.en.vtt" srclang="en" label="English"></video><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Osprey's VS Code extension running the lspkit profiler. <a href="https://www.ospreylang.dev/docs/tutorials/profiler/">Watch the walkthrough ↗</a></figcaption></figure>
+<div class="example-shots"><figure><img src="/assets/images/examples/osprey-heatmap.webp" width="1276" height="714" loading="lazy" alt="busy.osp in VS Code with inline heat bars: collatz 76.4 percent, longest 73.0 percent, fib 22.5 percent"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Heat on Osprey source.</figcaption></figure><figure><img src="/assets/images/examples/osprey-flamegraph.webp" width="1276" height="714" loading="lazy" alt="Osprey Profiler panel: 812 samples over 8 seconds, 5 functions, 6 hot lines, above a left-heavy flame graph"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Osprey results panel and flame graph.</figcaption></figure></div>
+<p><a href="https://www.ospreylang.dev/docs/tutorials/profiler/">Watch the Osprey profiler tutorial ↗</a></p>
+<h2 id="add-your-language" tabindex="-1"><a class="header-anchor" href="#add-your-language">Add your language</a></h2>
+<p>A new language needs only a runtime crate that samples its processes. See <a href="/docs/profiler/">Profiler</a> for how the pieces fit.</p>
+</div>
+
+
+
+    
+  </article>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      
+      <div class="footer-grid">
+        
+        
+        <div class="footer-section">
+          <h3>The foundation for any language&#39;s tooling.</h3>
+          <ul>
+            
+            
+            
+            <li><a href="https://github.com/Nimblesite/lspkit">GitHub ↗</a></li>
+            
+            
+            
+            <li><a href="https://www.nimblesite.co">© 2026 Nimblesite ↗</a></li>
+            
+          </ul>
+        </div>
+        
+      </div>
+      
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 lspkit</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme JS -->
+  <script src="/techdoc/js/main.js" type="module"></script>
+
+  
+</body>
+</html>

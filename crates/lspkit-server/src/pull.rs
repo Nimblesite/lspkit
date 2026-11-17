@@ -5,9 +5,9 @@
 //! lock-free supersession/generation counters; protocol-side invalidation never
 //! waits behind a running compiler query.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, TryLockError};
 
 use lsp_types::Diagnostic;
 use salsa::Setter;
@@ -116,6 +116,9 @@ struct DocumentInput {
     uri: String,
     version: i32,
     retry_revision: u64,
+    /// `false` once retired. A flag, not an empty URI, so a consumer's own
+    /// `""` is still analyzed. [LSP-PULL-FORGET]
+    open: bool,
 }
 
 #[salsa::tracked(returns(clone))]
@@ -123,7 +126,12 @@ fn analyze(db: &dyn DiagnosticDb, document: DocumentInput, workspace: WorkspaceI
     let _generation = workspace.generation(db);
     let _version = document.version(db);
     let _retry = document.retry_revision(db);
-    db.analyze(document.uri(db))
+    if *document.open(db) {
+        db.analyze(document.uri(db))
+    } else {
+        // A retired slot holds no document: its memo releases the old report.
+        Ok(Arc::default())
+    }
 }
 
 /// Query state serialized behind one mutex. Diagnostics computation is the only
@@ -136,6 +144,9 @@ struct QueryState {
     workspace: WorkspaceInput,
     /// Reusable per-document Salsa inputs keyed by canonical URI.
     documents: HashMap<String, DocumentInput>,
+    /// Forgotten inputs, emptied and reused by the next opened document, so
+    /// slots never outnumber the documents open at once. [LSP-PULL-FORGET]
+    retired: Vec<DocumentInput>,
 }
 
 impl QueryState {
@@ -151,15 +162,54 @@ impl QueryState {
             database,
             workspace,
             documents: HashMap::new(),
+            retired: Vec::new(),
         }
+    }
+
+    /// The input for a newly opened `uri`: a retired slot when one exists.
+    fn admit(&mut self, uri: &str) -> DocumentInput {
+        let document = match self.retired.pop() {
+            Some(retired) => {
+                let _empty = retired.set_uri(&mut self.database).to(uri.to_owned());
+                let _retired = retired.set_open(&mut self.database).to(true);
+                retired
+            }
+            None => DocumentInput::new(&self.database, uri.to_owned(), 0, 0, true),
+        };
+        let _absent = self.documents.insert(uri.to_owned(), document);
+        document
+    }
+
+    /// Retire each closed document: drop its URI and memo, keep its slot.
+    fn forget(&mut self, uris: &HashSet<String>) {
+        let closed: Vec<DocumentInput> = uris
+            .iter()
+            .filter_map(|uri| self.documents.remove(uri))
+            .collect();
+        for document in closed {
+            let _closed_uri = document.set_uri(&mut self.database).to(String::new());
+            let _open = document.set_open(&mut self.database).to(false);
+            let _released = analyze(&self.database, document, self.workspace);
+            // Salsa frees a replaced memo only when its next revision starts;
+            // a write to this retired slot alone starts it.
+            self.retry(document);
+            self.retired.push(document);
+        }
+    }
+
+    /// Retire every URI queued in `pending`.
+    fn forget_pending(&mut self, pending: &Mutex<HashSet<String>>) -> Result<(), PullError> {
+        let uris = std::mem::take(&mut *pending.lock().map_err(poisoned)?);
+        self.forget(&uris);
+        Ok(())
     }
 
     /// Get or create the document handle, then refresh its editor version.
     fn document(&mut self, uri: &str, version: i32) -> DocumentInput {
-        let document = *self
-            .documents
-            .entry(uri.to_owned())
-            .or_insert_with(|| DocumentInput::new(&self.database, uri.to_owned(), 0, 0));
+        let document = match self.documents.get(uri) {
+            Some(open) => *open,
+            None => self.admit(uri),
+        };
         if *document.version(&self.database) != version {
             let _previous_version = document.set_version(&mut self.database).to(version);
         }
@@ -221,6 +271,9 @@ pub struct PullStore {
     revision: Arc<AtomicU64>,
     /// Engine generation feeding Salsa without superseding in-flight snapshots.
     generation: Arc<AtomicU64>,
+    /// Closed URIs the next query retires, so a close never waits behind the
+    /// compiler. Drained by every query. [LSP-PULL-FORGET]
+    forgotten: Arc<Mutex<HashSet<String>>>,
 }
 
 impl PullStore {
@@ -240,6 +293,7 @@ impl PullStore {
             analyzer,
             revision: Arc::new(AtomicU64::new(1)),
             generation: Arc::new(AtomicU64::new(1)),
+            forgotten: Arc::default(),
         }
     }
 
@@ -261,6 +315,39 @@ impl PullStore {
         };
         drop(previous);
         Ok(())
+    }
+
+    /// Release one closed document's input and memos; every other memo stays
+    /// warm and no snapshot is superseded. [LSP-PULL-FORGET]
+    ///
+    /// When no query holds the lock, the document's diagnostics are freed
+    /// before this returns. It never waits behind compiler work: while a query
+    /// runs, the release is queued and the next query retires the document
+    /// first. A later pull of `uri` recomputes. Forgetting an unknown or
+    /// already forgotten URI is `Ok`.
+    ///
+    /// # Errors
+    /// Returns an error if a store lock was poisoned.
+    pub fn forget(&self, uri: &str) -> Result<(), PullError> {
+        let _queued = self
+            .forgotten
+            .lock()
+            .map_err(poisoned)?
+            .insert(uri.to_owned());
+        self.retire_forgotten()
+    }
+
+    /// Retire every queued close now, unless a query holds the state: that
+    /// query calls this again once it releases the state, so none waits for a
+    /// later pull. Lock order: database owner, query state, then the queue.
+    fn retire_forgotten(&self) -> Result<(), PullError> {
+        let shared = Arc::clone(&*self.query.lock().map_err(poisoned)?);
+        let applied = match shared.try_lock() {
+            Ok(mut query) => query.forget_pending(&self.forgotten),
+            Err(TryLockError::WouldBlock) => Ok(()),
+            Err(TryLockError::Poisoned(source)) => Err(poisoned(source).into()),
+        };
+        applied
     }
 
     /// Supersede in-flight work and invalidate inter-file dependencies.
@@ -325,8 +412,22 @@ impl PullStore {
         cancel: &CancellationToken,
     ) -> Result<PullReport, PullError> {
         uncancelled(cancel)?;
+        let pulled = self.pull_locked(uri, version, cancel);
+        // Closes that arrived while this query held the state retire now.
+        self.retire_forgotten()?;
+        pulled
+    }
+
+    /// One pull under the query lock, retiring queued closes first.
+    fn pull_locked(
+        &self,
+        uri: &str,
+        version: i32,
+        cancel: &CancellationToken,
+    ) -> Result<PullReport, PullError> {
         let shared = Arc::clone(&*self.query.lock().map_err(poisoned)?);
         let mut query = shared.lock().map_err(poisoned)?;
+        query.forget_pending(&self.forgotten)?;
         let revision = self.query_revision(&shared)?;
         let generation = self.generation.load(Ordering::Acquire);
         let report = query.compute(uri, version, revision, generation, cancel)?;
@@ -372,12 +473,17 @@ mod memory_tests {
     #[test]
     fn cleared_database_cannot_publish_under_the_replacement_revision() {
         let store = PullStore::new(Arc::new(|_| Ok(Arc::new(Vec::new()))));
-        let _report = store
-            .diagnostics("file:///closed.json", 1)
-            .expect("populate Salsa input");
-        let queued = Arc::clone(&store.query.lock().expect("database owner"));
+        let populated = store.diagnostics("file:///closed.json", 1);
+        assert!(populated.is_ok(), "populate Salsa input: {populated:?}");
+        let owner = store.query.lock();
+        assert!(owner.is_ok(), "database owner lock");
+        let Ok(owner) = owner else {
+            return;
+        };
+        let queued = Arc::clone(&*owner);
+        drop(owner);
         let allocation = Arc::downgrade(&queued);
-        store.clear().expect("discard closed inputs");
+        assert_eq!(store.clear(), Ok(()), "discard closed inputs");
         assert_eq!(store.query_revision(&queued), Err(PullError::Superseded));
         drop(queued);
         assert_eq!(

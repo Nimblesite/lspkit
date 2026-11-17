@@ -100,9 +100,11 @@ pub(super) fn close_document(server: &Server, params: Value) {
         tracing::warn!("recovering poisoned source registry to release closed document");
         poisoned.into_inner()
     });
-    let _ = documents.remove(params.text_document.uri.as_str());
+    let uri = params.text_document.uri.as_str();
+    let _ = documents.remove(uri);
     drop(documents);
-    if let Err(error) = server.pull.clear() {
+    // [LSP-PULL-FORGET] Only the closed document's memo goes; open ones stay warm.
+    if let Err(error) = server.pull.forget(uri) {
         tracing::warn!(%error, "closed document memo release failed");
     }
 }

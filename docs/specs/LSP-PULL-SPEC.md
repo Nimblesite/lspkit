@@ -17,11 +17,31 @@ identity of the same snapshot that produced its diagnostics. Document versions
 and workspace revisions invalidate the tracked query.
 
 Closing a document must release its retained inputs and diagnostic memos while
-the connection stays alive. `PullStore::clear` discards the complete Salsa database
-because Salsa input slots cannot be deleted individually. Consumers call it on
-`didClose` or an equivalent scope eviction. Other documents recompute under the
-advanced workspace identity. Active queries retain discarded storage only until
-they finish; they return superseded. Clearing never waits behind compiler work.
+the connection stays alive. Consumers call `PullStore::forget(uri)` on `didClose`
+([LSP-PULL-FORGET]). `PullStore::clear` discards the complete Salsa database for
+a scope eviction such as a solution switch; other documents then recompute under
+the advanced workspace identity. Active queries retain discarded storage only
+until they finish; they return superseded. Clearing never waits behind compiler work.
+
+## [LSP-PULL-FORGET] Per-Document Eviction
+
+`PullStore::forget(uri)` releases one closed document. Every other document's memo
+stays warm, and no snapshot is superseded. Salsa input slots cannot be deleted, so
+the document's input is retired instead:
+- Its URI is emptied and it is flagged closed (a flag, not the empty URI, so a
+  consumer's own `""` is still analyzed).
+- Its memo is recomputed to an empty report, and the analyzer never sees a retired slot.
+- One write to the retired slot starts Salsa's next revision, which frees the
+  replaced memo.
+- The slot is reused by the next newly opened document.
+
+`forget` retires the document before it returns, so its diagnostics are freed at
+once, whenever no query holds the lock. It never waits behind compiler work: while
+a query runs, the URI waits in a set behind its own lock (repeated closes are one
+entry), and that query retires it as it releases the state, so closing every tab
+during a pull and going idle still frees every report. Slots never outnumber the documents open at once, and open/forget cycles of
+distinct URIs free exactly the heap they allocate. A later pull of a forgotten URI
+recomputes. Forgetting an unknown or already forgotten URI is `Ok`.
 
 ## [LSP-PULL-CONCURRENCY] Nonblocking Invalidation
 

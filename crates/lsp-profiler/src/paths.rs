@@ -21,5 +21,8 @@ pub fn path_in_roots(candidate: &Path, roots: &[PathBuf]) -> bool {
 /// Canonicalize existing paths, retaining the original spelling if unavailable.
 #[must_use]
 pub fn normalize_path(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    match path.canonicalize() {
+        Ok(canonical) => canonical,
+        Err(_unresolvable) => path.to_path_buf(),
+    }
 }

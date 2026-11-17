@@ -1,7 +1,5 @@
 //! Coverage for [`lspkit_server::mcp::Adapter`] construction, dispatch, and errors.
 
-#![cfg(feature = "mcp")]
-
 #[path = "mcp_common/mod.rs"]
 mod common;
 

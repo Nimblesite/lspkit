@@ -64,6 +64,12 @@ jobs:
       - name: Install npm + typeDiagram
         run: npm install -g npm@11.21.1 typediagram@0.11.0
 
+      # Builds the .NET profiler engine release assets (net8.0, rolled
+      # forward to the SDK pinned in global.json). [REL-CONSUMER-ASSETS]
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
       - name: Install version stamper and vuln gate
         uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
@@ -137,6 +143,13 @@ jobs:
           set -euo pipefail
           npm run build --prefix packages/lsp-profiler-ui
           npm pack ./packages/lsp-profiler-ui --pack-destination "${DIST}"
+
+      # What consumers would otherwise need a source checkout for: the .NET
+      # engine per runtime id, and the fixtures, specs and test-support kit.
+      # They land in DIST, so SHA256SUMS, cosign and the attestations cover
+      # them like every other asset. [REL-CONSUMER-ASSETS]
+      - name: Package consumer assets
+        run: sh scripts/release-assets.sh "${GITHUB_REF_NAME#v}" "${DIST}"
 
       # One CycloneDX SBOM over the whole dependency graph. [SWR-SEC-SBOM]
       - name: Generate SBOM

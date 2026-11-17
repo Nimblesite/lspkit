@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>A small foundation.</title>
+  <meta name="title" content="A small foundation.">
+  <meta name="description" content="One engine behind your language server and MCP server, with a profiler built into VS Code.">
+  
+  
+  <meta name="robots" content="index, follow">
+  <meta name="generator" content="Eleventy + techdoc">
+  <meta name="theme-color" content="#f4f1e9">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="http://localhost:8080/docs/">
+
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/atom+xml" title="lspkit — The foundation for any language&#39;s tooling. Feed" href="http://localhost:8080/feed.xml">
+
+  <!-- Hreflang for language alternates -->
+  
+  <link rel="alternate" hreflang="en" href="http://localhost:8080/docs/">
+  
+  <link rel="alternate" hreflang="x-default" href="http://localhost:8080/docs/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="http://localhost:8080/docs/">
+  <meta property="og:title" content="A small foundation.">
+  <meta property="og:description" content="One engine behind your language server and MCP server, with a profiler built into VS Code.">
+  <meta property="og:site_name" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:locale" content="en_US">
+  
+  
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="http://localhost:8080/docs/">
+  <meta name="twitter:title" content="A small foundation.">
+  <meta name="twitter:description" content="One engine behind your language server and MCP server, with a profiler built into VS Code.">
+  
+  
+  
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "http://localhost:8080/#website",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "http://localhost:8080/docs/#webpage",
+        "url": "http://localhost:8080/docs/",
+        "name": "A small foundation.",
+        "description": "One engine behind your language server and MCP server, with a profiler built into VS Code.",
+        "isPartOf": { "@id": "http://localhost:8080/#website" },
+        "inLanguage": "en",
+        "datePublished": "2026-11-16T10:00:55.240Z"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "http://localhost:8080/docs/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "http://localhost:8080/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "A small foundation.",
+            "item": "http://localhost:8080/docs/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+
+  <!-- Theme structural CSS (no colors) -->
+  <link rel="stylesheet" href="/techdoc/css/reset.css">
+  <link rel="stylesheet" href="/techdoc/css/layout.css">
+  <link rel="stylesheet" href="/techdoc/css/utilities.css">
+
+  <!-- Site styles (YOU provide colors and visual styling) -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a href="/" class="logo">
+        lspkit
+      </a>
+
+      <ul class="nav-links">
+        
+        
+        
+        <li>
+          
+          
+          <a href="/docs/" 
+             class="nav-link active">
+            Docs
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="/blog/" 
+             class="nav-link ">
+            Journal
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="https://github.com/Nimblesite/lspkit" target="_blank" rel="noopener noreferrer"
+             class="nav-link ">
+            GitHub ↗
+          </a>
+        </li>
+        
+      </ul>
+
+      <div class="nav-actions">
+        
+
+        
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☾</span>
+        </button>
+        
+
+        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "A small foundation.",
+  "description": "One engine behind your language server and MCP server, with a profiler built into VS Code.",
+  "author": {
+    "@type": "Person",
+    "name": "lspkit — The foundation for any language&#39;s tooling."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "lspkit — The foundation for any language&#39;s tooling.",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "http://localhost:8080/assets/images/logo.png"
+    }
+  },
+  "datePublished": "2026-11-16T10:00:55.240Z",
+  "dateModified": "2026-11-16T10:00:55.240Z",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "http://localhost:8080/docs/"
+  },
+  "inLanguage": "en"
+}
+</script>
+
+
+
+
+
+<div class="docs-layout">
+  <aside class="sidebar" id="docs-sidebar">
+    <nav class="docs-nav">
+      <ul>
+        
+        
+        
+        
+        <li>
+          <a href="/docs/" class="active">
+            Overview
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/getting-started/" >
+            Getting started
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/crates/" >
+            Crates
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/profiler/" >
+            Profiler
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/examples/" >
+            Examples
+          </a>
+          
+        </li>
+        
+        
+      </ul>
+    </nav>
+  </aside>
+
+  <article class="docs-content">
+    <header class="article-header">
+  <p class="eyebrow">Documentation</p>
+  <h1>A small foundation.</h1>
+  <p class="article-description">One engine behind your language server and MCP server, with a profiler built into VS Code.</p>
+</header>
+
+<figure class="page-illustration">
+  <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange shared engine connects to two terminal surfaces through circuit paths.">
+</figure>
+
+<div class="prose"><!-- [WEB-CONTENT] Starter documentation: overview, setup, crates, profiler. -->
+<p>lspkit is a set of Rust crates for building language servers. Your analysis runs once, in one engine, and both an LSP server and an MCP server read from it.</p>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1200" poster="https://sharplsp.dev/assets/videos/profiler-csharp-poster.webp" aria-label="Profiling a C# app in VS Code with SharpLsp: CPU heat on hot lines, a flame graph and live memory tracking"><source src="https://sharplsp.dev/assets/videos/profiler-csharp.webm" type="video/webm"><source src="https://sharplsp.dev/assets/videos/profiler-csharp.mp4" type="video/mp4"><track kind="captions" src="https://sharplsp.dev/assets/videos/profiler-csharp.en.vtt" srclang="en" label="English"></video><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>SharpLsp profiling a real .NET app in VS Code. <a href="https://sharplsp.dev/docs/profiler/">Watch the walkthrough ↗</a></figcaption></figure>
+<h2 id="one-engine" tabindex="-1"><a class="header-anchor" href="#one-engine">One engine</a></h2>
+<p><code>EngineApi</code> is the boundary between your analysis and the protocols. Every report carries a generation number, so a client always knows which state of the workspace produced an answer.</p>
+<h2 id="two-surfaces" tabindex="-1"><a class="header-anchor" href="#two-surfaces">Two surfaces</a></h2>
+<p>The LSP server and the MCP adapter consume the same engine. Protocol handling stays at the edges; analysis lives in one place.</p>
+<h2 id="shared-plumbing" tabindex="-1"><a class="header-anchor" href="#shared-plumbing">Shared plumbing</a></h2>
+<p>File tracking, configuration, sidecar processes, tree-sitter parsing, transport and profiling are ready-made. Use the parts that fit your server.</p>
+<div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-heatmap.webp" width="2400" height="1500" loading="lazy" alt="CheckoutPipeline.cs with inline heat bars: ParseCatalog 66.8 percent, PriceBasket 25.1 percent, RenderInvoice 7.6 percent"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Hot lines, painted in the source.</figcaption></figure><figure><img src="/assets/images/examples/osprey-heatmap.webp" width="1276" height="714" loading="lazy" alt="busy.osp in VS Code with inline heat bars: collatz 76.4 percent, longest 73.0 percent, fib 22.5 percent"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Heat on Osprey source.</figcaption></figure></div>
+<h2 id="next-steps" tabindex="-1"><a class="header-anchor" href="#next-steps">Next steps</a></h2>
+<ul>
+<li><a href="/docs/getting-started/">Getting started</a>: add the crates and implement <code>EngineApi</code>.</li>
+<li><a href="/docs/crates/">Crates</a>: what each crate and feature provides.</li>
+<li><a href="/docs/profiler/">Profiler</a>: CPU and memory profiling for any language server.</li>
+<li><a href="/docs/examples/">Examples</a>: SharpLsp and Osprey running the profiler in VS Code.</li>
+<li><a href="/blog/one-engine/">The architectural field note</a>: why one engine serves two surfaces.</li>
+</ul>
+</div>
+
+
+
+    
+  </article>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      
+      <div class="footer-grid">
+        
+        
+        <div class="footer-section">
+          <h3>The foundation for any language&#39;s tooling.</h3>
+          <ul>
+            
+            
+            
+            <li><a href="https://github.com/Nimblesite/lspkit">GitHub ↗</a></li>
+            
+            
+            
+            <li><a href="https://www.nimblesite.co">© 2026 Nimblesite ↗</a></li>
+            
+          </ul>
+        </div>
+        
+      </div>
+      
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 lspkit</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme JS -->
+  <script src="/techdoc/js/main.js" type="module"></script>
+
+  
+</body>
+</html>

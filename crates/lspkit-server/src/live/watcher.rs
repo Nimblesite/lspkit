@@ -156,11 +156,10 @@ impl RootAlias {
 
     /// The same file under the given root; a path outside the reported root is kept.
     fn rebase(&self, path: PathBuf) -> PathBuf {
-        let rebased = path
-            .strip_prefix(&self.reported)
-            .ok()
-            .map(|rest| self.given.join(rest));
-        rebased.unwrap_or(path)
+        match path.strip_prefix(&self.reported) {
+            Ok(rest) => self.given.join(rest),
+            Err(_outside_the_reported_root) => path,
+        }
     }
 }
 

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>Getting started.</title>
+  <meta name="title" content="Getting started.">
+  <meta name="description" content="Add lspkit to a language server and implement the engine.">
+  
+  
+  <meta name="robots" content="index, follow">
+  <meta name="generator" content="Eleventy + techdoc">
+  <meta name="theme-color" content="#f4f1e9">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="http://localhost:8080/docs/getting-started/">
+
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/atom+xml" title="lspkit — The foundation for any language&#39;s tooling. Feed" href="http://localhost:8080/feed.xml">
+
+  <!-- Hreflang for language alternates -->
+  
+  <link rel="alternate" hreflang="en" href="http://localhost:8080/docs/getting-started/">
+  
+  <link rel="alternate" hreflang="x-default" href="http://localhost:8080/docs/getting-started/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="http://localhost:8080/docs/getting-started/">
+  <meta property="og:title" content="Getting started.">
+  <meta property="og:description" content="Add lspkit to a language server and implement the engine.">
+  <meta property="og:site_name" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:locale" content="en_US">
+  
+  
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="http://localhost:8080/docs/getting-started/">
+  <meta name="twitter:title" content="Getting started.">
+  <meta name="twitter:description" content="Add lspkit to a language server and implement the engine.">
+  
+  
+  
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "http://localhost:8080/#website",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "http://localhost:8080/docs/getting-started/#webpage",
+        "url": "http://localhost:8080/docs/getting-started/",
+        "name": "Getting started.",
+        "description": "Add lspkit to a language server and implement the engine.",
+        "isPartOf": { "@id": "http://localhost:8080/#website" },
+        "inLanguage": "en",
+        "datePublished": "2026-11-16T10:00:55.240Z"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "http://localhost:8080/docs/getting-started/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "http://localhost:8080/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Getting started.",
+            "item": "http://localhost:8080/docs/getting-started/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+
+  <!-- Theme structural CSS (no colors) -->
+  <link rel="stylesheet" href="/techdoc/css/reset.css">
+  <link rel="stylesheet" href="/techdoc/css/layout.css">
+  <link rel="stylesheet" href="/techdoc/css/utilities.css">
+
+  <!-- Site styles (YOU provide colors and visual styling) -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a href="/" class="logo">
+        lspkit
+      </a>
+
+      <ul class="nav-links">
+        
+        
+        
+        <li>
+          
+          
+          <a href="/docs/" 
+             class="nav-link active">
+            Docs
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="/blog/" 
+             class="nav-link ">
+            Journal
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="https://github.com/Nimblesite/lspkit" target="_blank" rel="noopener noreferrer"
+             class="nav-link ">
+            GitHub ↗
+          </a>
+        </li>
+        
+      </ul>
+
+      <div class="nav-actions">
+        
+
+        
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☾</span>
+        </button>
+        
+
+        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Getting started.",
+  "description": "Add lspkit to a language server and implement the engine.",
+  "author": {
+    "@type": "Person",
+    "name": "lspkit — The foundation for any language&#39;s tooling."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "lspkit — The foundation for any language&#39;s tooling.",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "http://localhost:8080/assets/images/logo.png"
+    }
+  },
+  "datePublished": "2026-11-16T10:00:55.240Z",
+  "dateModified": "2026-11-16T10:00:55.240Z",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "http://localhost:8080/docs/getting-started/"
+  },
+  "inLanguage": "en"
+}
+</script>
+
+
+
+
+
+<div class="docs-layout">
+  <aside class="sidebar" id="docs-sidebar">
+    <nav class="docs-nav">
+      <ul>
+        
+        
+        
+        
+        <li>
+          <a href="/docs/" >
+            Overview
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/getting-started/" class="active">
+            Getting started
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/crates/" >
+            Crates
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/profiler/" >
+            Profiler
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/examples/" >
+            Examples
+          </a>
+          
+        </li>
+        
+        
+      </ul>
+    </nav>
+  </aside>
+
+  <article class="docs-content">
+    <header class="article-header">
+  <p class="eyebrow">Documentation</p>
+  <h1>Getting started.</h1>
+  <p class="article-description">Add lspkit to a language server and implement the engine.</p>
+</header>
+
+<figure class="page-illustration">
+  <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange shared engine connects to two terminal surfaces through circuit paths.">
+</figure>
+
+<div class="prose"><!-- [WEB-CONTENT] -->
+<p>This is what you are building toward: your language server, profiled inside VS Code.</p>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1080" poster="https://www.ospreylang.dev/assets/videos/osprey-profiler-poster.jpg" aria-label="Profiling Osprey in VS Code: CPU, memory and leaks"><source src="https://www.ospreylang.dev/assets/videos/osprey-profiler.mp4" type="video/mp4"><track kind="captions" src="https://www.ospreylang.dev/assets/videos/osprey-profiler.en.vtt" srclang="en" label="English"></video><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Osprey's VS Code extension running the lspkit profiler. <a href="https://www.ospreylang.dev/docs/tutorials/profiler/">Watch the walkthrough ↗</a></figcaption></figure>
+<h2 id="add-the-crates" tabindex="-1"><a class="header-anchor" href="#add-the-crates">Add the crates</a></h2>
+<pre class="language-sh"><code class="language-sh"><span class="token function">cargo</span> <span class="token function">add</span> lspkit lspkit-server</code></pre>
+<p>Turn on the features you need:</p>
+<pre class="language-sh"><code class="language-sh"><span class="token function">cargo</span> <span class="token function">add</span> lspkit <span class="token parameter variable">--features</span> treesitter
+<span class="token function">cargo</span> <span class="token function">add</span> lspkit-server <span class="token parameter variable">--features</span> mcp</code></pre>
+<h2 id="implement-the-engine" tabindex="-1"><a class="header-anchor" href="#implement-the-engine">Implement the engine</a></h2>
+<p>Your analysis implements <code>EngineApi</code>. It defines its own report, query and error types, and four operations:</p>
+<pre class="language-rust"><code class="language-rust"><span class="token attribute attr-name">#[async_trait]</span>
+<span class="token keyword">pub</span> <span class="token keyword">trait</span> <span class="token type-definition class-name">EngineApi</span><span class="token punctuation">:</span> <span class="token class-name">Send</span> <span class="token operator">+</span> <span class="token class-name">Sync</span> <span class="token operator">+</span> <span class="token lifetime-annotation symbol">'static</span> <span class="token punctuation">{</span>
+    <span class="token keyword">type</span> <span class="token type-definition class-name">Report</span><span class="token punctuation">:</span> <span class="token class-name">Send</span> <span class="token operator">+</span> <span class="token class-name">Sync</span> <span class="token operator">+</span> <span class="token lifetime-annotation symbol">'static</span><span class="token punctuation">;</span>
+    <span class="token keyword">type</span> <span class="token type-definition class-name">Query</span><span class="token punctuation">:</span> <span class="token class-name">Send</span> <span class="token operator">+</span> <span class="token class-name">Sync</span><span class="token punctuation">;</span>
+    <span class="token keyword">type</span> <span class="token type-definition class-name">Error</span><span class="token punctuation">:</span> <span class="token class-name">StdError</span> <span class="token operator">+</span> <span class="token class-name">Send</span> <span class="token operator">+</span> <span class="token class-name">Sync</span> <span class="token operator">+</span> <span class="token lifetime-annotation symbol">'static</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">fn</span> <span class="token function-definition function">generation</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Generation</span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">report</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> query<span class="token punctuation">:</span> <span class="token keyword">Self</span><span class="token punctuation">::</span><span class="token class-name">Query</span><span class="token punctuation">,</span> cancel<span class="token punctuation">:</span> <span class="token class-name">CancellationToken</span><span class="token punctuation">)</span>
+        <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token class-name">Snapshot</span><span class="token operator">&lt;</span><span class="token keyword">Self</span><span class="token punctuation">::</span><span class="token class-name">Report</span><span class="token operator">></span><span class="token punctuation">,</span> <span class="token keyword">Self</span><span class="token punctuation">::</span><span class="token class-name">Error</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">rescan</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> scope<span class="token punctuation">:</span> <span class="token class-name">RescanScope</span><span class="token punctuation">,</span> progress<span class="token punctuation">:</span> <span class="token class-name">Progress</span><span class="token punctuation">)</span>
+        <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token class-name">RescanTicket</span><span class="token punctuation">,</span> <span class="token keyword">Self</span><span class="token punctuation">::</span><span class="token class-name">Error</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">fn</span> <span class="token function-definition function">subscribe</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">GenerationEventStream</span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">shutdown</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token keyword">Self</span><span class="token punctuation">::</span><span class="token class-name">Error</span><span class="token operator">></span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span></code></pre>
+<ul>
+<li><code>generation</code> increases on every successful rescan.</li>
+<li><code>report</code> answers a query from a snapshot and stops promptly when cancelled.</li>
+<li><code>rescan</code> refreshes the analysis and may coalesce concurrent requests.</li>
+<li><code>subscribe</code> streams generation changes to listeners.</li>
+<li><code>shutdown</code> drains in-flight work; every later call returns an error.</li>
+</ul>
+<h2 id="serve-it" tabindex="-1"><a class="header-anchor" href="#serve-it">Serve it</a></h2>
+<p>Hand one engine instance to the <code>lspkit-server</code> scaffolding for the editor and, with the <code>mcp</code> feature, to the MCP adapter for agents. Both read the same snapshots.</p>
+<div class="example-shots"><figure><img src="/assets/images/examples/osprey-heatmap.webp" width="1276" height="714" loading="lazy" alt="busy.osp in VS Code with inline heat bars: collatz 76.4 percent, longest 73.0 percent, fib 22.5 percent"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Heat on Osprey source.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-heatmap.webp" width="2400" height="1500" loading="lazy" alt="CheckoutPipeline.cs with inline heat bars: ParseCatalog 66.8 percent, PriceBasket 25.1 percent, RenderInvoice 7.6 percent"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Hot lines, painted in the source.</figcaption></figure></div>
+<h2 id="learn-more" tabindex="-1"><a class="header-anchor" href="#learn-more">Learn more</a></h2>
+<p>The full behavioural contract is in the <a href="https://github.com/Nimblesite/lspkit/blob/main/docs/specs/lspkit-spec.md">spec</a>, and the API reference is on <a href="https://docs.rs/lspkit">docs.rs</a>.</p>
+</div>
+
+
+
+    
+  </article>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      
+      <div class="footer-grid">
+        
+        
+        <div class="footer-section">
+          <h3>The foundation for any language&#39;s tooling.</h3>
+          <ul>
+            
+            
+            
+            <li><a href="https://github.com/Nimblesite/lspkit">GitHub ↗</a></li>
+            
+            
+            
+            <li><a href="https://www.nimblesite.co">© 2026 Nimblesite ↗</a></li>
+            
+          </ul>
+        </div>
+        
+      </div>
+      
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 lspkit</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme JS -->
+  <script src="/techdoc/js/main.js" type="module"></script>
+
+  
+</body>
+</html>

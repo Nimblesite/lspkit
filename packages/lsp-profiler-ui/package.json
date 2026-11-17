@@ -7,6 +7,7 @@
   "main": "./out/src/index.js",
   "types": "./out/src/index.d.ts",
   "files": [
+    "CHANGELOG.md",
     "out/src",
     "!out/src/test",
     "!out/src/debug/test",

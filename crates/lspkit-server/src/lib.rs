@@ -21,8 +21,8 @@ pub mod diagnostics;
 pub mod dispatch;
 pub mod jsonrpc;
 pub mod live;
-#[cfg(feature = "mcp")]
 pub mod mcp;
+pub mod outbound;
 pub mod progress;
 #[cfg(feature = "pull")]
 pub mod pull;
@@ -38,6 +38,7 @@ pub use crate::dispatch::{
     CancellationHandle, DispatchError, Dispatcher, HandlerResult, RequestInterest,
 };
 pub use crate::jsonrpc::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
+pub use crate::outbound::{Outbound, OutboundError, OutboundResponse, OutboundResult};
 pub use crate::progress::{NoopReporter, ProgressReporter, ProgressSink, ProgressUpdate};
 pub use crate::reply::{EmissionError, ReplyGate};
 pub use crate::uri::{path_to_uri, uri_to_path, UriError};

@@ -205,3 +205,29 @@ async fn pending_response_is_nameable_from_the_sidecar_facade() {
     assert_eq!(pending.await.expect("response delivered"), "answer");
     assert_eq!(correlator.pending_count(), 0);
 }
+
+/// A response decoded off the wire carries only the raw number; it rebuilds the id. [SIDECAR-REQUEST-LIFETIME]
+#[tokio::test]
+async fn raw_wire_ids_rebuild_the_request_id_and_resolve() {
+    let correlator: Correlator<&str> = Correlator::new();
+    let (first, first_wait) = correlator.register();
+    let (second, second_wait) = correlator.register();
+    let wire = serde_json::json!({ "id": second.get(), "result": "second" });
+    let raw = wire
+        .get("id")
+        .and_then(serde_json::Value::as_u64)
+        .expect("numeric wire id");
+    assert_eq!(RequestId::from(raw), second);
+    correlator
+        .resolve(RequestId::from(raw), "second")
+        .expect("rebuilt id resolves");
+    correlator
+        .resolve(RequestId::from(first.get()), "first")
+        .expect("first resolves");
+    assert_eq!(second_wait.await.expect("second delivered"), "second");
+    assert_eq!(first_wait.await.expect("first delivered"), "first");
+    assert!(
+        matches!(correlator.resolve(RequestId::from(raw), "again"), Err(CorrelationError::UnknownId(id)) if id == raw)
+    );
+    assert_eq!(correlator.pending_count(), 0);
+}

@@ -11,7 +11,7 @@ These are non-negotiable. Any patch violating one is illegal.
 - **Generic only.** Toolkit code, docs, READMEs, comments, and examples MUST NOT reference any specific consumer, domain, language ecosystem, or product. A grep for known consumer names returns zero hits in `crates/` and `README.md`.
 - **No language-specific backend code.** No Roslyn, FCS, Pyright, Ruff, tree-sitter grammar bundling, nor any other language ecosystem glue lives in any crate. `lspkit::sidecar` is pure transport — its public surface MUST NOT name any backend technology.
 - **Maintained bedrock or self-owned.** Toolkit MUST NOT depend on unmaintained crates for core protocol handling. `tower-lsp` is forbidden (last release 2023). The toolkit depends on `lsp-types` (maintained) and ships its own JSON-RPC server loop inside `lspkit-server`.
-- **Third-party LSP/MCP types stay hidden.** No `rmcp::*` or `lsp_types::*` request/response type appears in a `pub` signature of `lspkit` or `lspkit-server`. Newtype wrappers are required at every boundary.
+- **Third-party LSP/MCP types stay hidden.** No MCP SDK or `lsp_types::*` request/response type appears in a `pub` signature of `lspkit` or `lspkit-server`. Newtype wrappers are required at every boundary.
 - **No wire-format coupling.** The toolkit ships no typeDiagram-generated types. Consumers define their own wire schemas case-by-case.
 - **Locks never span `.await`.** `lspkit::vfs` MUST scope all `DashMap` and `Mutex` guards inside synchronous blocks; methods MUST NOT return guards.
 
@@ -22,7 +22,7 @@ Four published crates. The split is locked.
 | Crate | Public surface (intent) |
 |---|---|
 | **lspkit** | Façade. Exposes `EngineApi` trait + `Generation`, `Snapshot<R>`, `GenerationEvent`, `Cause`, `RescanScope`, `RescanTicket` types. Feature `tracing-setup` exposes a stdio-safe `tracing-subscriber` builder. `prelude` module re-exports the headline items. Modules `config` (layered TOML loader), `vfs` (concurrent open-document store), `sidecar` (framed IPC transport) and `treesitter` (parse cache, behind the `treesitter` feature). |
-| **lspkit-server** | LSP server scaffolding built on `lsp-types`: Content-Length framing, JSON-RPC request/response/notification dispatcher, capability builder, URI ↔ `PathBuf` helpers, workspace-folders abstraction, diagnostics fan-out bus, progress sink, cancellation plumbing. Consumers register handlers; the crate routes them to an `EngineApi` + VFS pair. Modules `live` (file-watcher → debouncer → single-flight scheduler → session lifecycle) and `mcp` (`rmcp` adapter, behind the `mcp` feature). |
+| **lspkit-server** | LSP server scaffolding built on `lsp-types`: Content-Length framing, JSON-RPC request/response/notification dispatcher, capability builder, URI ↔ `PathBuf` helpers, workspace-folders abstraction, diagnostics fan-out bus, progress sink, cancellation plumbing. Consumers register handlers; the crate routes them to an `EngineApi` + VFS pair. Modules `live` (file-watcher → debouncer → single-flight scheduler → session lifecycle) and `mcp` (tool adapter, always on; it takes no MCP SDK, since every `rmcp` release pulls unmaintained `chrono`, RUSTSEC-2026-0543). |
 | **lsp-profiler** | Language-neutral CPU and memory profiler core: sessions, hotspots, flame graphs, speedscope/V8 exports, heap snapshots, leak scoring, one JSON-RPC protocol. Spec: [LSP-PROFILER-SPEC.md](LSP-PROFILER-SPEC.md). |
 | **lsp-profiler-dotnet** | The profiler's .NET runtime: EventPipe CPU sampling and heap snapshots through the engine in `dotnet/`. |
 
@@ -33,7 +33,7 @@ Implementation tracker: [docs/plans/crate-consolidation-plan.md](../plans/crate-
 - **[CRATE-LAYOUT]** The workspace publishes exactly four crates in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `lsp-profiler-python` is parked: it stays in the repo, excluded from the workspace and unpublished.
 - **[CRATE-LAYOUT-LAYERS]** An L1 crate depends only on its own tree's L0 crate. An L0 crate has no internal dependencies.
 - **[CRATE-LAYOUT-MODULES]** Each absorbed crate becomes a top-level module with the same name: `lspkit::config`, `lspkit::vfs`, `lspkit::treesitter`, `lspkit::sidecar`, `lspkit_server::live`, `lspkit_server::mcp`. Each module keeps its absorbed crate's coverage floor as a `<crate>::<module>` key in `coverage-thresholds.json`.
-- **[CRATE-LAYOUT-FEATURES]** Heavy dependency cones are opt-in cargo features, all default off: `lspkit-server/mcp` (`rmcp`), `lspkit-server/pull` (`salsa`), `lspkit/treesitter` (`tree-sitter`, a C runtime) and `lspkit/tracing-setup` (`tracing-subscriber`). `lspkit::sidecar` is always on; its dependencies are already in `lspkit`'s core.
+- **[CRATE-LAYOUT-FEATURES]** Heavy dependency cones are opt-in cargo features, all default off: `lspkit-server/pull` (`salsa`), `lspkit/treesitter` (`tree-sitter`, a C runtime) and `lspkit/tracing-setup` (`tracing-subscriber`). `lspkit::sidecar` is always on; its dependencies are already in `lspkit`'s core.
 - **[CRATE-LAYOUT-HELPER]** `lsp-profiler-helper` is a `[[bin]]` target of `lsp-profiler-python` (`src/bin/lsp-profiler-helper/`), not a crate.
 - **[CRATE-RETIRE]** The six absorbed `lspkit-*` names are already on crates.io at 0.0.1. After the consolidated release ships, delete `lspkit-config`, `lspkit-treesitter`, `lspkit-sidecar`, `lspkit-mcp` and `lspkit-live` on crates.io, and yank `lspkit-vfs` 0.0.1 with a deprecation README pointing to `lspkit::vfs`.
 
@@ -91,9 +91,16 @@ pub trait EngineApi: Send + Sync + 'static {
 ## Cross-cutting helpers — required behavior
 
 - **[SIDECAR-REQUEST-LIFETIME]** Dropping a correlator response future immediately unregisters and frees its response channel without another correlator call or a runtime. Abandoned IDs are no longer pending, so later responses return `UnknownId`; no cancellation tombstones accumulate. `register` returns `PendingResponse`, supporting `Future` and `try_recv`. A receiver holds only a weak registry reference, so it cannot prolong the correlator's lifetime. Inbound readers terminate when both destination receivers close, even without EOF or another frame.
+- **[JSONRPC-FRAME-LIMIT]** `read_message` accepts a body of at most `MAX_FRAME_BYTES` (64 MiB); `read_message_within` takes a server-chosen cap. A larger `Content-Length` is `FramingError::FrameTooLarge` before any body byte is read, a length beyond `u64` is `BadHeader`, and the body is read incrementally, so memory follows the bytes that arrive, never the claimed length. A body shorter than its claim is `Io(UnexpectedEof)`. The header block, every line and terminator included, is read through one `MAX_HEADER_BYTES` (8 KiB) budget, so one endless line and endless short lines both end in `HeaderTooLarge` with memory bounded by the cap. Peer input never panics.
+- **[LSP-OUTBOUND]** Server→client requests (`lspkit-server::outbound::Outbound`): `request` allocates a numeric JSON-RPC id from the sidecar correlator and returns the request frame plus an `OutboundResponse` future; once ids pass `i64::MAX` it returns `IdsExhausted` instead of reusing a number. `null` params are omitted from the frame. `resolve` routes an inbound response to its waiter as the editor's `result` (absent or `null` is `Value::Null`) or its `JsonRpcError`. Requests and notifications are `NotAResponse`; ids never allocated, already answered or abandoned are `UnknownId`. Dropping a wait unregisters it ([SIDECAR-REQUEST-LIFETIME]). `sidecar::RequestId` rebuilds from its raw wire number with `From<u64>`, and `JsonRpcError` implements `Display` and `std::error::Error`.
 - **Position encoding** (`lspkit::vfs::PositionEncoding`): negotiates encoding at `initialize` per LSP 3.17 client capabilities; converts on every read; round-trips byte/char offsets correctly across multi-byte scalars and surrogate pairs.
 - **URI ↔ `PathBuf`** (`lspkit-server::uri`): handles `file://`, percent-decoding, Windows drive letters, UNC paths, and non-UTF-8 paths.
   - **[URI-AUTHORITY]** A URI's authority is its host, never a path segment. An empty or `localhost` host names a local path; any other host names a UNC path (`file://server/share/a.rs` ↔ `\\server\share\a.rs`) on Windows and is an error elsewhere. `uri_to_path` never returns a relative path. `path_to_uri` removes the extended-length prefixes `\\?\` and `\\?\UNC\` that `std::fs::canonicalize` adds.
+  - **[URI-WINDOWS]** All path ↔ URI handling in the lspkit tree lives in `lspkit-server::uri`; nothing else parses or builds a file path from a URI. On Windows one file has one URI, and every URI decodes to one exact, absolute path:
+    - The drive letter is upper case and the UNC server name lower case, in both directions. Repeated separators collapse, and `.` and `..` resolve lexically without climbing above the drive or share.
+    - `file:////server/share` (an empty authority before a UNC path) decodes like `file://server/share`. An IPv6 host `[fe80::1%25eth0]` becomes the server `fe80--1seth0.ipv6-literal.net`.
+    - `uri_to_path` returns the `\\?\` form only when Win32 would otherwise open a different file: a segment ending in `.` or a space, or a DOS device name (`CON`, `NUL`, `aux.rs`, `COM1`).
+    - These are errors, never a relative path: a URI with no drive or share; a host with a port, userinfo, or the device namespaces `.` and `?`; a `%2F` or `%5C` inside a name; and, on every platform, a `%` not followed by two hex digits. `path_to_uri` rejects device paths (`\\.\…`, `\\?\Volume{…}`, `\\?\GLOBALROOT\…`).
 - **Cancellation** (`lspkit-server::dispatch`): a `CancellationToken` is plumbed through every request handler and triggered when the client sends `$/cancelRequest`.
 - **Progress** (`lspkit-server::progress`): wraps LSP `window/workDoneProgress`; the `Progress` sink is a no-op when the client did not advertise the capability.
 - **Diagnostics bus** (`lspkit-server::diagnostics`): fan-out from one source to LSP `publishDiagnostics` AND MCP resource-updated notifications, atomically per generation.
@@ -103,9 +110,8 @@ pub trait EngineApi: Send + Sync + 'static {
 
 - `tokio` 1.x, `tracing` + `tracing-subscriber`, `serde` + `serde_derive`, `async-trait`.
 - `lsp-types` (current major).
-- `rmcp` (current minor, pinned).
 - `notify` 7.x, `ropey` 1.x, `dashmap` 6.x, `tokio-util` (for `CancellationToken`).
-- `rmp-serde` available as the default wire format for `lspkit::sidecar`; transport is generic over `serde`.
+- `lspkit::sidecar` carries opaque length-prefixed payloads; the consumer picks the encoding (JSON, MessagePack, CBOR) and its crate.
 - **No `tower-lsp`.** Ever.
 
 ## Public API hygiene
@@ -140,6 +146,11 @@ lspkit runs a **release-only** regime modelled on [Shipwright](https://github.co
 
   Every `uses:` is pinned to a 40-character commit SHA. Workflows default to `permissions: contents: read` and elevate per job. Installs are frozen (`npm ci`, `--locked`), and the release job uses no caches.
 - **[REL-GITHUB]** The release attaches every crate tarball, every npm tarball, a CycloneDX SBOM and one `SHA256SUMS` over them all, cosign keyless-signed (`SHA256SUMS.sigstore.json`). Build provenance and the SBOM are attested against `SHA256SUMS`, so consumers can run `gh attestation verify <file> --repo Nimblesite/lspkit`. `[SWR-SEC-CHECKSUM]` `[SWR-SEC-PROVENANCE]` `[SWR-SEC-SBOM]`
+- **[REL-CONSUMER-ASSETS]** Nothing a consumer needs requires a source checkout. `scripts/release-assets.sh` attaches two more kinds of asset to the release, which `SHA256SUMS`, cosign and the attestations cover like every other asset:
+  - `lsp-profiler-dotnet-engine-<version>-<rid>.tar.gz` for `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64` and `win-arm64`: the framework-dependent .NET engine that `lsp-profiler-dotnet` launches. Point `LSP_PROFILER_DOTNET_ENGINE` at the extracted `lsp-profiler-dotnet-engine` executable, or place it beside the language server ([PROF-DOTNET-ENGINE-LOCATE]).
+  - `lspkit-consumer-kit-<version>.tar.gz`: the profiler fixtures (`dotnet/fixtures`, as source), `LSP-PROFILER-SPEC.md`, `LSP-PULL-SPEC.md`, `test-support/` and `scripts/typediagram/run-cli.mjs`.
+
+  The `lsp-profiler-dotnet` e2e suites honour `LSP_PROFILER_DOTNET_ENGINE`, so they run unchanged against a released engine.
 - **[REL-OIDC]** crates.io and npm both publish through OIDC Trusted Publishing from `release.yml` in the protected `release` environment. The repo stores no `CARGO_REGISTRY_TOKEN` or `NPM_TOKEN`. npm packages also publish with `--provenance`. `[SWR-SEC-OIDC-PUBLISH]`
 - **[REL-ORDER]** Crates publish in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `cargo publish` waits for each crate to appear in the index, so no sleeps are needed. The npm package (`@nimblesite/lsp-profiler-ui`) publishes after the crates. Both publish wrappers skip a version that is already on the registry, so a re-run after a failure partway through is safe.
 - **[REL-METADATA]** Every published crate and npm package declares `license = "MIT"` and a repository. The root `LICENSE-MIT` is staged into each crate (`LICENSE-MIT`) and each npm package (`LICENSE`) at publish time, so the declared license ships with the package. `[SWR-REL-LICENSE]`
@@ -156,7 +167,7 @@ A patch is acceptable iff:
 3. `cargo doc --workspace --no-deps` produces docs with zero `missing_docs` warnings.
 4. `cargo clippy --workspace -- -D warnings` is clean.
 5. `rg -i -e 'basilisk' -e 'deslop' -e 'sharplsp' -e 'lql' -e 'tower-lsp' -e 'roslyn' -e 'pyright' crates/` returns **zero hits**. The crates stay generic; the README and website name consumers only as showcased examples.
-6. `grep -R 'tower_lsp\|rmcp::' crates/*/src/lib.rs` returns **zero hits** in `pub` signatures (manual review against the rule).
+6. `grep -R 'tower_lsp' crates/*/src/lib.rs` returns **zero hits** in `pub` signatures (manual review against the rule).
 7. The `EngineApi` trait skeleton compiles and is exercised by a smoke test that constructs a no-op implementation and calls each method.
 8. Each of the four source repos has a "Migration to `lspkit`" section in its AI-guidance file.
 9. **[REL-OIDC]** `.github/workflows/release.yml` publishes crates.io (`rust-lang/crates-io-auth-action`) and npm (`--provenance`) under `environment: release`, references no registry token secret, and pins every `uses:` to a 40-char SHA.

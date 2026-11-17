@@ -1,6 +1,6 @@
 //! Adapter that mounts an [`lspkit::EngineApi`] implementation as an MCP server.
 //!
-//! The adapter does not leak `rmcp::*` types into its public surface; every
+//! The adapter exposes no MCP SDK types in its public surface; every
 //! request/response shape is wrapped behind newtypes defined in this crate.
 
 use std::sync::Arc;

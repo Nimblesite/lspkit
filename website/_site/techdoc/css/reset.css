@@ -1,0 +1,41 @@
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  ⚠️  DO NOT MODIFY THIS FILE DIRECTLY!  ⚠️                                ║
+ * ╠══════════════════════════════════════════════════════════════════════════╣
+ * ║  This file is part of the techdoc npm package.                          ║
+ * ║  Changes here will be OVERWRITTEN when techdoc is updated.              ║
+ * ║                                                                          ║
+ * ║  HOW TO CUSTOMIZE CSS:                                                   ║
+ * ║  1. ALL visual styling goes in YOUR site's styles.css                   ║
+ * ║  2. Override any techdoc CSS with higher specificity                    ║
+ * ║  3. Use CSS custom properties (--var-name) for theming                  ║
+ * ║                                                                          ║
+ * ║  Example in your styles.css:                                            ║
+ * ║    .nav { background: var(--color-bg); }   // override nav bg            ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * techdoc reset.css
+ * Deliberately minimal so the theme NEVER clobbers the consuming site's CSS.
+ *
+ * This file intentionally contains NO global content overrides:
+ *   - NO `* { margin: 0; padding: 0 }`  (would wipe the host site's spacing)
+ *   - NO `ul, ol { list-style: none }`   (would strip bullets from host content)
+ *   - NO line-height / font-smoothing / overflow-wrap  (typography is the host's)
+ *   - NO img / table / form element overrides            (content is the host's)
+ *
+ * The theme resets ONLY the structural elements it actually owns (nav, sidebar,
+ * footer lists, theme buttons). Those scoped resets live in layout.css. The
+ * single global rule below is box-sizing, which every consuming site expects,
+ * is required by techdoc's grid/flex layout, and is overridable per-element.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Prevent iOS text-size inflation. Not a visual/typographic choice. */
+html {
+  -webkit-text-size-adjust: 100%;
+}

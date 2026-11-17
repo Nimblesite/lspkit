@@ -22,7 +22,6 @@ workspace = true
 lspkit.workspace = true
 
 async-trait.workspace = true
-futures-util.workspace = true
 lsp-types.workspace = true
 notify.workspace = true
 serde.workspace = true
@@ -32,12 +31,9 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 
-# Optional: the MCP SDK stays out of LSP-only consumers. [CRATE-LAYOUT-FEATURES]
-rmcp = { workspace = true, optional = true }
 salsa = { version = "0.28.5", optional = true }
 
 [features]
-mcp = ["dep:rmcp"]
 pull = ["dep:salsa"]
 
 [dev-dependencies]

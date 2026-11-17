@@ -25,6 +25,13 @@ impl RequestId {
     }
 }
 
+/// Rebuild an id from the raw number a peer echoes back on the wire.
+impl From<u64> for RequestId {
+    fn from(raw: u64) -> Self {
+        Self(raw)
+    }
+}
+
 /// Errors from the correlator.
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]

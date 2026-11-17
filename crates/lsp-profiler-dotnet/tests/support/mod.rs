@@ -121,12 +121,16 @@ impl ProfilerEvents for Silent {
     async fn notify(&self, _method: &'static str, _params: Value) {}
 }
 
-/// The built engine executable.
+/// The engine under test: `LSP_PROFILER_DOTNET_ENGINE` when set, the way a
+/// consumer points at a released engine asset, else the source build.
 pub fn engine() -> PathBuf {
-    built(
-        "dotnet/LspProfiler.DotNet.Engine/bin/Release/net8.0/lsp-profiler-dotnet-engine",
-        "make dotnet",
-    )
+    match std::env::var_os(lsp_profiler_dotnet::engine::ENGINE_ENV) {
+        Some(released) => PathBuf::from(released),
+        None => built(
+            "dotnet/LspProfiler.DotNet.Engine/bin/Release/net8.0/lsp-profiler-dotnet-engine",
+            "make dotnet",
+        ),
+    }
 }
 
 /// The shared service with only the .NET runtime, writing under `output_dir`.

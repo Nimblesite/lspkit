@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>Build an MCP server and a language server from one Rust engine.</title>
+  <meta name="title" content="Build an MCP server and a language server from one Rust engine.">
+  <meta name="description" content="How to give Claude Code, Cursor and Codex the same live code intelligence as your VS Code extension, with one Rust engine behind an MCP server and a language server.">
+  
+  
+  <meta name="robots" content="index, follow">
+  <meta name="generator" content="Eleventy + techdoc">
+  <meta name="theme-color" content="#f4f1e9">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="http://localhost:8080/blog/one-engine/">
+
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/atom+xml" title="lspkit — The foundation for any language&#39;s tooling. Feed" href="http://localhost:8080/feed.xml">
+
+  <!-- Hreflang for language alternates -->
+  
+  <link rel="alternate" hreflang="en" href="http://localhost:8080/blog/one-engine/">
+  
+  <link rel="alternate" hreflang="x-default" href="http://localhost:8080/blog/one-engine/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="http://localhost:8080/blog/one-engine/">
+  <meta property="og:title" content="Build an MCP server and a language server from one Rust engine.">
+  <meta property="og:description" content="How to give Claude Code, Cursor and Codex the same live code intelligence as your VS Code extension, with one Rust engine behind an MCP server and a language server.">
+  <meta property="og:site_name" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:locale" content="en_US">
+  
+  
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="http://localhost:8080/blog/one-engine/">
+  <meta name="twitter:title" content="Build an MCP server and a language server from one Rust engine.">
+  <meta name="twitter:description" content="How to give Claude Code, Cursor and Codex the same live code intelligence as your VS Code extension, with one Rust engine behind an MCP server and a language server.">
+  
+  
+  
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "http://localhost:8080/#website",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "BlogPosting",
+        "@id": "http://localhost:8080/blog/one-engine/#webpage",
+        "url": "http://localhost:8080/blog/one-engine/",
+        "name": "Build an MCP server and a language server from one Rust engine.",
+        "description": "How to give Claude Code, Cursor and Codex the same live code intelligence as your VS Code extension, with one Rust engine behind an MCP server and a language server.",
+        "isPartOf": { "@id": "http://localhost:8080/#website" },
+        "inLanguage": "en",
+        "datePublished": "2026-10-31T00:00:00.000Z",
+        "author": {
+          "@type": "Person",
+          "name": "lspkit"
+        }
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "http://localhost:8080/blog/one-engine/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "http://localhost:8080/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Build an MCP server and a language server from one Rust engine.",
+            "item": "http://localhost:8080/blog/one-engine/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+
+  <!-- Theme structural CSS (no colors) -->
+  <link rel="stylesheet" href="/techdoc/css/reset.css">
+  <link rel="stylesheet" href="/techdoc/css/layout.css">
+  <link rel="stylesheet" href="/techdoc/css/utilities.css">
+
+  <!-- Site styles (YOU provide colors and visual styling) -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a href="/" class="logo">
+        lspkit
+      </a>
+
+      <ul class="nav-links">
+        
+        
+        
+        <li>
+          
+          
+          <a href="/docs/" 
+             class="nav-link ">
+            Docs
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="/blog/" 
+             class="nav-link active">
+            Journal
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="https://github.com/Nimblesite/lspkit" target="_blank" rel="noopener noreferrer"
+             class="nav-link ">
+            GitHub ↗
+          </a>
+        </li>
+        
+      </ul>
+
+      <div class="nav-actions">
+        
+
+        
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☾</span>
+        </button>
+        
+
+        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Build an MCP server and a language server from one Rust engine.",
+  "description": "How to give Claude Code, Cursor and Codex the same live code intelligence as your VS Code extension, with one Rust engine behind an MCP server and a language server.",
+  "author": {
+    "@type": "Person",
+    "name": "lspkit"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "lspkit — The foundation for any language&#39;s tooling.",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "http://localhost:8080/assets/images/logo.png"
+    }
+  },
+  "datePublished": "2026-10-31T00:00:00.000Z",
+  "dateModified": "2026-10-31T00:00:00.000Z",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "http://localhost:8080/blog/one-engine/"
+  },
+  "inLanguage": "en",
+  "keywords": "posts, mcp-server, language-server-protocol, rust, vscode-extension",
+  "articleSection": "field-notes"
+}
+</script>
+
+
+
+
+<article class="blog-post">
+  <div class="blog-container">
+    <header class="blog-post-header">
+      <p class="blog-post-meta">
+        <time datetime="2026-10-31T00:00:00.000Z">October 31, 2026</time>
+         &middot; lspkit
+         &middot; <a href="/blog/categories/field-notes/">Field-notes</a>
+      </p>
+      <h1>Build an MCP server and a language server from one Rust engine.</h1>
+      
+      <div class="blog-post-tags">
+        
+        
+        
+        
+        <a href="/blog/tags/mcp-server/" class="tag">mcp-server</a>
+        
+        
+        
+        <a href="/blog/tags/language-server-protocol/" class="tag">language-server-protocol</a>
+        
+        
+        
+        <a href="/blog/tags/rust/" class="tag">rust</a>
+        
+        
+        
+        <a href="/blog/tags/vscode-extension/" class="tag">vscode-extension</a>
+        
+        
+      </div>
+      
+    </header>
+
+    <div class="blog-post-content">
+      
+<figure class="page-illustration">
+  <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange shared engine connects to two terminal surfaces through circuit paths.">
+</figure>
+
+<div class="prose"><!-- [WEB-CONTENT] [WEB-SEO-KEYWORDS] Keywords from Google Trends, 12 months to 2026-10: "mcp server", "what is mcp server", "claude code", "cursor", "codex", "language server protocol", "rust language server", "vscode extension", "memory leak". -->
+<p>Your VS Code extension talks to a <strong>language server</strong> over the <strong>Language Server Protocol</strong> (LSP). AI coding agents such as <strong>Claude Code</strong>, <strong>Cursor</strong> and <strong>Codex</strong> talk to tools over the <strong>Model Context Protocol</strong> (MCP). If you build developer tools, you now need both, and they should give the same answers.</p>
+<h2 id="what-is-an-mcp-server" tabindex="-1"><a class="header-anchor" href="#what-is-an-mcp-server">What is an MCP server?</a></h2>
+<p>An MCP server exposes tools and data to an AI agent over a small JSON-RPC protocol. Where a language server answers &quot;what's the type at this cursor?&quot; for an editor, an MCP server answers &quot;find every caller of this function&quot; for an agent. Both need the same thing underneath: a live, accurate model of the code.</p>
+<h2 id="the-trap-two-pipelines" tabindex="-1"><a class="header-anchor" href="#the-trap-two-pipelines">The trap: two pipelines</a></h2>
+<p>The obvious build is a language server with its own caches, then an MCP server bolted on with another set. Now two pipelines parse the same files, watch the same folders and drift apart. The agent sees stale results the editor has already fixed.</p>
+<h2 id="one-engine-two-surfaces" tabindex="-1"><a class="header-anchor" href="#one-engine-two-surfaces">One engine, two surfaces</a></h2>
+<p>lspkit puts analysis behind one Rust trait, <code>EngineApi</code>. The <code>lspkit-server</code> crate serves it over LSP to VS Code; its <code>mcp</code> feature serves the same engine over MCP to Claude Code, Cursor or Codex.</p>
+<pre class="language-sh"><code class="language-sh"><span class="token function">cargo</span> <span class="token function">add</span> lspkit lspkit-server <span class="token parameter variable">--features</span> lspkit-server/mcp</code></pre>
+<p>Every report carries a <strong>generation</strong> number, so the editor and the agent can both tell which state of the workspace produced an answer. Cancellation and progress live at the same boundary, so a slow query from the agent never blocks the editor.</p>
+<h2 id="find-the-memory-leak-before-your-users-do" tabindex="-1"><a class="header-anchor" href="#find-the-memory-leak-before-your-users-do">Find the memory leak before your users do</a></h2>
+<p>Long-running language servers leak. lspkit ships <code>lsp-profiler</code>, a CPU and memory profiler that runs inside VS Code: hot lines painted in your source, a flame graph beside it, and a live heap timeline that ranks <strong>memory leak</strong> suspects. <a href="https://sharplsp.dev/docs/profiler/">SharpLsp</a> uses it for C# and F#; <a href="https://www.ospreylang.dev/docs/tutorials/profiler/">Osprey</a> uses it for a native functional language. <a href="/docs/examples/">Watch both on the examples page</a>.</p>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1200" poster="https://sharplsp.dev/assets/videos/profiler-fix-memory-leak-poster.webp" aria-label="Fixing a C# memory leak in VS Code with the SharpLsp memory profiler, from leak suspects to the retaining path"><source src="https://sharplsp.dev/assets/videos/profiler-fix-memory-leak.webm" type="video/webm"><source src="https://sharplsp.dev/assets/videos/profiler-fix-memory-leak.mp4" type="video/mp4"><track kind="captions" src="https://sharplsp.dev/assets/videos/profiler-fix-memory-leak.en.vtt" srclang="en" label="English"></video><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Finding and fixing a memory leak in a running C# app. <a href="https://sharplsp.dev/docs/memory-leaks/">Watch the walkthrough ↗</a></figcaption></figure>
+<div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-leaks.webp" width="2400" height="1500" loading="lazy" alt="Suspected leaks ranked HIGH with growth in megabytes and object counts, and an inline leak marker on the CustomerSession declaration"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Ranked leak suspects, marked in the source.</figcaption></figure><figure><img src="/assets/images/examples/osprey-heatmap.webp" width="1276" height="714" loading="lazy" alt="busy.osp in VS Code with inline heat bars: collatz 76.4 percent, longest 73.0 percent, fib 22.5 percent"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Heat on Osprey source.</figcaption></figure></div>
+<h2 id="start-building" tabindex="-1"><a class="header-anchor" href="#start-building">Start building</a></h2>
+<ul>
+<li><a href="/docs/getting-started/">Getting started</a>: add the crates and implement <code>EngineApi</code>.</li>
+<li><a href="/docs/crates/">Crates</a>: what each crate and feature gives you.</li>
+<li><a href="https://github.com/Nimblesite/lspkit">Source on GitHub ↗</a></li>
+</ul>
+</div>
+
+
+    </div>
+
+    <footer class="blog-post-footer">
+      <a href="/blog/" class="btn">← Back to the journal</a>
+    </footer>
+  </div>
+</article>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      
+      <div class="footer-grid">
+        
+        
+        <div class="footer-section">
+          <h3>The foundation for any language&#39;s tooling.</h3>
+          <ul>
+            
+            
+            
+            <li><a href="https://github.com/Nimblesite/lspkit">GitHub ↗</a></li>
+            
+            
+            
+            <li><a href="https://www.nimblesite.co">© 2026 Nimblesite ↗</a></li>
+            
+          </ul>
+        </div>
+        
+      </div>
+      
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 lspkit</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme JS -->
+  <script src="/techdoc/js/main.js" type="module"></script>
+
+  
+</body>
+</html>

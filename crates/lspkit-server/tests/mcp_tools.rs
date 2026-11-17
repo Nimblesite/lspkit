@@ -1,7 +1,5 @@
 //! Coverage for `ToolDescription` and `ToolRegistry`.
 
-#![cfg(feature = "mcp")]
-
 use lspkit_server::mcp::{ToolDescription, ToolRegistry};
 use serde_json::json;
 

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta Tags -->
+  <title>Profiler.</title>
+  <meta name="title" content="Profiler.">
+  <meta name="description" content="One CPU and memory profiler for every language server.">
+  
+  
+  <meta name="robots" content="index, follow">
+  <meta name="generator" content="Eleventy + techdoc">
+  <meta name="theme-color" content="#f4f1e9">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="http://localhost:8080/docs/profiler/">
+
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/atom+xml" title="lspkit — The foundation for any language&#39;s tooling. Feed" href="http://localhost:8080/feed.xml">
+
+  <!-- Hreflang for language alternates -->
+  
+  <link rel="alternate" hreflang="en" href="http://localhost:8080/docs/profiler/">
+  
+  <link rel="alternate" hreflang="x-default" href="http://localhost:8080/docs/profiler/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="http://localhost:8080/docs/profiler/">
+  <meta property="og:title" content="Profiler.">
+  <meta property="og:description" content="One CPU and memory profiler for every language server.">
+  <meta property="og:site_name" content="lspkit — The foundation for any language&#39;s tooling.">
+  <meta property="og:locale" content="en_US">
+  
+  
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="http://localhost:8080/docs/profiler/">
+  <meta name="twitter:title" content="Profiler.">
+  <meta name="twitter:description" content="One CPU and memory profiler for every language server.">
+  
+  
+  
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "http://localhost:8080/#website",
+        "url": "http://localhost:8080/",
+        "name": "lspkit — The foundation for any language&#39;s tooling.",
+        "description": "lspkit is the language server toolkit: write your language analysis once in Rust, serve it over LSP and as an MCP server, and profile it with a CPU and memory profiler built into VS Code.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "TechArticle",
+        "@id": "http://localhost:8080/docs/profiler/#webpage",
+        "url": "http://localhost:8080/docs/profiler/",
+        "name": "Profiler.",
+        "description": "One CPU and memory profiler for every language server.",
+        "isPartOf": { "@id": "http://localhost:8080/#website" },
+        "inLanguage": "en",
+        "datePublished": "2026-11-16T10:00:55.241Z"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "http://localhost:8080/docs/profiler/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "http://localhost:8080/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Profiler.",
+            "item": "http://localhost:8080/docs/profiler/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
+
+  <!-- Theme structural CSS (no colors) -->
+  <link rel="stylesheet" href="/techdoc/css/reset.css">
+  <link rel="stylesheet" href="/techdoc/css/layout.css">
+  <link rel="stylesheet" href="/techdoc/css/utilities.css">
+
+  <!-- Site styles (YOU provide colors and visual styling) -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <nav class="nav">
+      <a href="/" class="logo">
+        lspkit
+      </a>
+
+      <ul class="nav-links">
+        
+        
+        
+        <li>
+          
+          
+          <a href="/docs/" 
+             class="nav-link active">
+            Docs
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="/blog/" 
+             class="nav-link ">
+            Journal
+          </a>
+        </li>
+        
+        <li>
+          
+          
+          <a href="https://github.com/Nimblesite/lspkit" target="_blank" rel="noopener noreferrer"
+             class="nav-link ">
+            GitHub ↗
+          </a>
+        </li>
+        
+      </ul>
+
+      <div class="nav-actions">
+        
+
+        
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☾</span>
+        </button>
+        
+
+        <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Profiler.",
+  "description": "One CPU and memory profiler for every language server.",
+  "author": {
+    "@type": "Person",
+    "name": "lspkit — The foundation for any language&#39;s tooling."
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "lspkit — The foundation for any language&#39;s tooling.",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "http://localhost:8080/assets/images/logo.png"
+    }
+  },
+  "datePublished": "2026-11-16T10:00:55.241Z",
+  "dateModified": "2026-11-16T10:00:55.241Z",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "http://localhost:8080/docs/profiler/"
+  },
+  "inLanguage": "en"
+}
+</script>
+
+
+
+
+
+<div class="docs-layout">
+  <aside class="sidebar" id="docs-sidebar">
+    <nav class="docs-nav">
+      <ul>
+        
+        
+        
+        
+        <li>
+          <a href="/docs/" >
+            Overview
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/getting-started/" >
+            Getting started
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/crates/" >
+            Crates
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/profiler/" class="active">
+            Profiler
+          </a>
+          
+        </li>
+        
+        
+        
+        
+        
+        <li>
+          <a href="/docs/examples/" >
+            Examples
+          </a>
+          
+        </li>
+        
+        
+      </ul>
+    </nav>
+  </aside>
+
+  <article class="docs-content">
+    <header class="article-header">
+  <p class="eyebrow">Documentation</p>
+  <h1>Profiler.</h1>
+  <p class="article-description">One CPU and memory profiler for every language server.</p>
+</header>
+
+<figure class="page-illustration">
+  <img src="/assets/images/engine.svg" width="1440" height="600" alt="An orange shared engine connects to two terminal surfaces through circuit paths.">
+</figure>
+
+<div class="prose"><!-- [WEB-CONTENT] -->
+<p><code>lsp-profiler</code> profiles a running language server without leaving the editor. A language plugs in a runtime crate; sessions, reports and the protocol are shared.</p>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1200" poster="https://sharplsp.dev/assets/videos/profiler-cpu-recording-poster.webp" aria-label="Unedited screen recording of a CPU profiling session in VS Code"><source src="https://sharplsp.dev/assets/videos/profiler-cpu-recording.mp4" type="video/mp4"></video><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Unedited, in real time: Profile CPU on a running process, then the results open. <a href="https://sharplsp.dev/docs/profiler/">Watch the walkthrough ↗</a></figcaption></figure>
+<h2 id="what-it-measures" tabindex="-1"><a class="header-anchor" href="#what-it-measures">What it measures</a></h2>
+<ul>
+<li><strong>CPU:</strong> sampling sessions, hotspots and flame graphs, exported as speedscope or V8 profiles.</li>
+<li><strong>Memory:</strong> heap snapshots, retention paths and leak scoring.</li>
+</ul>
+<div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-heatmap.webp" width="2400" height="1500" loading="lazy" alt="CheckoutPipeline.cs with inline heat bars: ParseCatalog 66.8 percent, PriceBasket 25.1 percent, RenderInvoice 7.6 percent"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Hot lines, painted in the source.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-results.webp" width="2400" height="1500" loading="lazy" alt="SharpLsp Profiler results panel with summary cards, an embedded flame graph and the hot functions table"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Results panel, flame graph and hot functions.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-memory.webp" width="2400" height="1500" loading="lazy" alt="Memory dashboard with a steadily climbing heap timeline flagged as a possible leak, beside SessionCache.cs"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Live heap timeline.</figcaption></figure><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-leaks.webp" width="2400" height="1500" loading="lazy" alt="Suspected leaks ranked HIGH with growth in megabytes and object counts, and an inline leak marker on the CustomerSession declaration"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Ranked leak suspects, marked in the source.</figcaption></figure></div>
+<div class="example-shots"><figure><img src="https://sharplsp.dev/assets/screenshots/profiler/profiler-flamegraph-zoom.webp" width="2400" height="393" loading="lazy" alt="Flame graph zoomed into ParseCatalog, showing the System.Text.Json deserialization stack"><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Zoom the flame graph into one call.</figcaption></figure></div>
+<figure class="example-video"><video controls preload="metadata" playsinline width="1920" height="1200" poster="https://sharplsp.dev/assets/videos/profiler-memory-timelapse-poster.webp" aria-label="Screen recording of memory tracking in VS Code at three times speed"><source src="https://sharplsp.dev/assets/videos/profiler-memory-timelapse.mp4" type="video/mp4"></video><figcaption><a class="example-project" href="https://sharplsp.dev"><strong>SharpLsp</strong> · C# and F# language server for VS Code ↗</a>Memory tracking, sped up three times: the heap timeline climbs and leak suspects appear. <a href="https://sharplsp.dev/docs/profiler/">Watch the walkthrough ↗</a></figcaption></figure>
+<h2 id="how-it-fits-together" tabindex="-1"><a class="header-anchor" href="#how-it-fits-together">How it fits together</a></h2>
+<ol>
+<li>Your server mounts <code>lsp-profiler</code> and a runtime crate, such as <code>lsp-profiler-dotnet</code> for .NET.</li>
+<li>The editor talks to it over one JSON-RPC protocol.</li>
+<li><code>@nimblesite/lsp-profiler-ui</code> renders the results in VS Code.</li>
+</ol>
+<div class="example-shots"><figure><img src="/assets/images/examples/osprey-heatmap.webp" width="1276" height="714" loading="lazy" alt="busy.osp in VS Code with inline heat bars: collatz 76.4 percent, longest 73.0 percent, fib 22.5 percent"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Heat on Osprey source.</figcaption></figure><figure><img src="/assets/images/examples/osprey-flamegraph.webp" width="1276" height="714" loading="lazy" alt="Osprey Profiler panel: 812 samples over 8 seconds, 5 functions, 6 hot lines, above a left-heavy flame graph"><figcaption><a class="example-project" href="https://www.ospreylang.dev"><strong>Osprey</strong> · native functional language with a VS Code extension ↗</a>Osprey results panel and flame graph.</figcaption></figure></div>
+<h2 id="add-it" tabindex="-1"><a class="header-anchor" href="#add-it">Add it</a></h2>
+<pre class="language-sh"><code class="language-sh"><span class="token function">cargo</span> <span class="token function">add</span> lsp-profiler
+<span class="token function">cargo</span> <span class="token function">add</span> lsp-profiler-dotnet   <span class="token comment"># for .NET language servers</span></code></pre>
+<p>See it running in <a href="/docs/examples/">SharpLsp and Osprey</a>. The full design is in the <a href="https://github.com/Nimblesite/lspkit/blob/main/docs/specs/LSP-PROFILER-SPEC.md">profiler spec</a>.</p>
+</div>
+
+
+
+    
+  </article>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      
+      <div class="footer-grid">
+        
+        
+        <div class="footer-section">
+          <h3>The foundation for any language&#39;s tooling.</h3>
+          <ul>
+            
+            
+            
+            <li><a href="https://github.com/Nimblesite/lspkit">GitHub ↗</a></li>
+            
+            
+            
+            <li><a href="https://www.nimblesite.co">© 2026 Nimblesite ↗</a></li>
+            
+          </ul>
+        </div>
+        
+      </div>
+      
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 lspkit</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme JS -->
+  <script src="/techdoc/js/main.js" type="module"></script>
+
+  
+</body>
+</html>

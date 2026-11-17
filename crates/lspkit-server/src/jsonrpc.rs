@@ -45,7 +45,8 @@ pub struct Message {
 }
 
 /// A JSON-RPC 2.0 error object.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[error("JSON-RPC error {code}: {message}")]
 pub struct JsonRpcError {
     /// Numeric error code (see JSON-RPC spec for reserved ranges).
     pub code: i32,

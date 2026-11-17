@@ -124,8 +124,6 @@ rmp-serde = "1"
 # LSP protocol types (maintained; we ship our own server loop)
 lsp-types = "0.97"
 
-# MCP SDK
-rmcp = "3.10"
 
 # Document / state
 dashmap = "6"
@@ -143,7 +141,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Profiler ([PROF-INVARIANTS]: only the core and runtime crates use these)
-humantime = "2"
 inferno = { version = "0.12", default-features = false }
 num-traits = "0.2"
 sysinfo = { version = "0.39.3", default-features = false, features = ["system", "user"] }

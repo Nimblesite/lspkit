@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info};
 
 use crate::aggregate::{saturating_i64, HotspotConfig, ProfileData};
+use crate::clock::rfc3339_now;
 use crate::error::ProfilerError;
 use crate::runtime::Runtime;
 use crate::sampler::{SampleBatch, SamplerHandle, SamplerStop};
@@ -376,12 +377,6 @@ pub fn mint_id(prefix: &str, sequence: u64) -> String {
     )
 }
 
-/// The current time as RFC 3339 UTC, to the second.
-#[must_use]
-pub fn rfc3339_now() -> String {
-    humantime::format_rfc3339_seconds(SystemTime::now()).to_string()
-}
-
 /// The function the program spends its own time in: the most self samples,
 /// ties broken by name. Ranked by inclusive samples, the root of every whole
 /// stack would always be the hottest [PROF-CPU-PROGRESS].
@@ -399,16 +394,6 @@ fn hottest_by_self(functions: &[HotFunction]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn rfc3339_now_is_utc_to_the_second() {
-        let now = rfc3339_now();
-        assert_eq!(now.len(), "2026-10-14T00:00:00Z".len(), "{now}");
-        assert!(
-            now.ends_with('Z') && now.as_bytes().get(10) == Some(&b'T'),
-            "{now}"
-        );
-    }
 
     fn hot(name: &str, samples: i64, self_samples: i64) -> HotFunction {
         HotFunction {

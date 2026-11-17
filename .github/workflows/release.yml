@@ -65,10 +65,10 @@ jobs:
         run: npm install -g npm@11.21.1 typediagram@0.11.0
 
       # Builds the .NET profiler engine release assets (net8.0, rolled
-      # forward to this SDK's runtime). [REL-CONSUMER-ASSETS]
+      # forward to the SDK pinned in global.json). [REL-CONSUMER-ASSETS]
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: "10.0.x"
+          global-json-file: global.json
 
       - name: Install version stamper and vuln gate
         uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32

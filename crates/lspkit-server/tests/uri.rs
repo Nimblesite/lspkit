@@ -80,25 +80,52 @@ fn invalid_percent_encoding_rejected() {
     }
 }
 
+/// [URI-WINDOWS] A `%` not followed by two hex digits is malformed on every
+/// platform; it is never passed through into the path.
 #[test]
-fn truncated_percent_encoding_passes_through_bytes() {
-    // Only two-char-followed percents are decoded; a stray `%` near end falls through.
-    let decoded = uri_to_path("file:///tmp/a%").expect("decoded");
-    assert!(decoded.to_string_lossy().contains('%'));
+fn truncated_percent_encoding_rejected() {
+    for uri in ["file:///tmp/a%", "file:///tmp/a%2"] {
+        let err = uri_to_path(uri).expect_err("must reject");
+        assert!(matches!(err, UriError::InvalidUtf8(None)), "{uri}: {err:?}");
+    }
 }
 
 #[cfg(not(windows))]
 #[test]
 fn lowercase_hex_percent_decodes() {
-    let decoded = uri_to_path("file:///tmp/a%2fb").expect("decoded");
-    assert_eq!(decoded, PathBuf::from("/tmp/a/b"));
+    let decoded = uri_to_path("file:///tmp/a%2cb%c3%a9").expect("decoded");
+    assert_eq!(decoded, PathBuf::from("/tmp/a,b\u{e9}"));
 }
 
 #[cfg(not(windows))]
 #[test]
 fn uppercase_hex_percent_decodes() {
-    let decoded = uri_to_path("file:///tmp/a%2Fb").expect("decoded");
-    assert_eq!(decoded, PathBuf::from("/tmp/a/b"));
+    let decoded = uri_to_path("file:///tmp/a%2Cb%C3%A9").expect("decoded");
+    assert_eq!(decoded, PathBuf::from("/tmp/a,b\u{e9}"));
+}
+
+/// [URI-WINDOWS] An encoded `/` stays inside its file name, which no Unix
+/// file can hold, so the URI is rejected instead of gaining a folder.
+#[cfg(not(windows))]
+#[test]
+fn encoded_separator_is_rejected_never_split_on() {
+    for uri in ["file:///tmp/a%2fb", "file:///tmp/a%2Fb"] {
+        let err = uri_to_path(uri).expect_err("an encoded separator");
+        assert!(
+            matches!(&err, UriError::NoLocalPath(rejected) if rejected == uri),
+            "{uri}: {err:?}"
+        );
+    }
+    let backslash = uri_to_path("file:///tmp/a%5Cb").expect("a Unix name may hold a backslash");
+    assert_eq!(backslash, PathBuf::from(r"/tmp/a\b"));
+    let literal = uri_to_path("file:///tmp/a%252Fb").expect("an encoded percent");
+    assert_eq!(
+        literal,
+        PathBuf::from("/tmp/a%2Fb"),
+        "decoded once, never twice"
+    );
+    let host = uri_to_path("file://host%2Fshare/a.rs").expect_err("an encoded / in the host");
+    assert!(matches!(host, UriError::NoLocalPath(_)), "{host:?}");
 }
 
 #[test]

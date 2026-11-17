@@ -125,6 +125,25 @@ async fn server_requests_resolve_from_the_editors_wire_answers() {
         Value::Null
     );
 
+    // A frame with no `result` key at all is also success with Value::Null.
+    let (bare_id, bare_wait) = round_trip(&outbound, &server, &mut editor, refresh, Value::Null)
+        .await
+        .expect("request reaches the editor");
+    let bare: Message = serde_json::from_value(json!({ "jsonrpc": "2.0", "id": bare_id }))
+        .expect("a result-less response frame decodes");
+    assert!(bare.result.is_none() && bare.error.is_none());
+    answer(&outbound, &mut server, &editor, &bare)
+        .await
+        .expect("wire")
+        .expect("bare answer matches");
+    assert_eq!(
+        bare_wait
+            .await
+            .expect("delivered")
+            .expect("absent is success"),
+        Value::Null
+    );
+
     // Error: the editor's JsonRpcError reaches the caller, and it is a std error.
     let missing = json!({ "uri": "file:///missing" });
     let (error_id, error_wait) = round_trip(
@@ -214,6 +233,12 @@ async fn abandoned_waits_unregister_and_unmatched_messages_are_rejected() {
         .resolve(Message::notification("$/progress", json!({})))
         .expect_err("not a response");
     assert!(matches!(notification, OutboundError::NotAResponse));
+    let null_id: Message = serde_json::from_value(json!({
+        "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "parse error" }
+    }))
+    .expect("a null-id error frame decodes");
+    let unaddressed = outbound.resolve(null_id).expect_err("names no request");
+    assert!(matches!(unaddressed, OutboundError::NotAResponse));
     let hover = Message::request(RequestId::Number(1), "textDocument/hover", json!({}));
     let request = outbound.resolve(hover).expect_err("a request");
     assert!(matches!(request, OutboundError::NotAResponse));

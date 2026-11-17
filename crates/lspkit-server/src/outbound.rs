@@ -28,6 +28,9 @@ pub enum OutboundError {
 }
 
 /// Allocates server request ids and routes the editor's answers back.
+///
+/// Use exactly one handle per connection: ids are unique only within a handle,
+/// so two handles on one connection would allocate the same ids.
 #[derive(Debug)]
 pub struct Outbound {
     /// The only pending table; entries leave when answered or abandoned.
@@ -55,7 +58,8 @@ impl Outbound {
     /// Deliver an inbound response to the request that is waiting for it.
     ///
     /// # Errors
-    /// [`OutboundError::NotAResponse`] for requests and notifications, and
+    /// [`OutboundError::NotAResponse`] for requests, notifications and
+    /// `"id": null` error responses (they name no request to wake), and
     /// [`OutboundError::UnknownId`] when no waiting request has the id.
     pub fn resolve(&self, message: Message) -> Result<(), OutboundError> {
         let (Some(id), None) = (message.id, message.method) else {

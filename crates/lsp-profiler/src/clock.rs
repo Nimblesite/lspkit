@@ -44,7 +44,13 @@ const MARCH: i128 = 3;
 /// `time` as RFC 3339 UTC, truncated (floored) to the second.
 #[must_use]
 pub fn rfc3339(time: SystemTime) -> String {
-    let secs = epoch_seconds(time);
+    rfc3339_seconds(epoch_seconds(time))
+}
+
+/// Whole seconds since the Unix epoch as RFC 3339 UTC. Kept apart from
+/// [`SystemTime`], which cannot hold every instant on every platform: on
+/// Windows it starts at 1601-01-01.
+fn rfc3339_seconds(secs: i128) -> String {
     let (year, month, day) = civil(secs.div_euclid(DAY_SECS));
     let clock = secs.rem_euclid(DAY_SECS);
     let (hour, minute, second) = (
@@ -121,8 +127,12 @@ mod tests {
     #[test]
     fn century_leap_rules_hold_before_the_epoch() {
         for (secs, want) in BEFORE_EPOCH {
-            let instant = UNIX_EPOCH - Duration::from_secs(secs);
-            assert_eq!(rfc3339(instant), want, "-{secs}s");
+            assert_eq!(rfc3339_seconds(-i128::from(secs)), want, "-{secs}s");
+            // Windows' SystemTime starts at 1601, so the 1600 row exists
+            // there only as seconds; elsewhere it goes through SystemTime too.
+            if let Some(instant) = UNIX_EPOCH.checked_sub(Duration::from_secs(secs)) {
+                assert_eq!(rfc3339(instant), want, "-{secs}s as SystemTime");
+            }
         }
     }
 

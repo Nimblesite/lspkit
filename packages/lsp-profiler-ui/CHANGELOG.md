@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- The profiler's .NET engine, fixtures, specs and test-support ship as GitHub Release assets (`lsp-profiler-dotnet-engine-<version>-<rid>.tar.gz`, `lspkit-consumer-kit-<version>.tar.gz`), so consumers no longer need a source checkout. [REL-CONSUMER-ASSETS]
+- The profiler's .NET engine, fixtures, specs and test-support ship as GitHub Release assets (`lsp-profiler-dotnet-engine-<version>-<rid>.tar.gz`, `lspkit-consumer-kit-<version>.tar.gz`), so consumers no longer need a source checkout.
 
 ## 0.4.0
 

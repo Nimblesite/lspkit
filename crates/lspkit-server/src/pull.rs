@@ -5,7 +5,7 @@
 //! lock-free supersession/generation counters; protocol-side invalidation never
 //! waits behind a running compiler query.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, TryLockError};
 
@@ -181,7 +181,7 @@ impl QueryState {
     }
 
     /// Retire each closed document: drop its URI and memo, keep its slot.
-    fn forget(&mut self, uris: &[String]) {
+    fn forget(&mut self, uris: &HashSet<String>) {
         let closed: Vec<DocumentInput> = uris
             .iter()
             .filter_map(|uri| self.documents.remove(uri))
@@ -198,7 +198,7 @@ impl QueryState {
     }
 
     /// Retire every URI queued in `pending`.
-    fn forget_pending(&mut self, pending: &Mutex<Vec<String>>) -> Result<(), PullError> {
+    fn forget_pending(&mut self, pending: &Mutex<HashSet<String>>) -> Result<(), PullError> {
         let uris = std::mem::take(&mut *pending.lock().map_err(poisoned)?);
         self.forget(&uris);
         Ok(())
@@ -273,7 +273,7 @@ pub struct PullStore {
     generation: Arc<AtomicU64>,
     /// Closed URIs the next query retires, so a close never waits behind the
     /// compiler. Drained by every query. [LSP-PULL-FORGET]
-    forgotten: Arc<Mutex<Vec<String>>>,
+    forgotten: Arc<Mutex<HashSet<String>>>,
 }
 
 impl PullStore {
@@ -329,10 +329,18 @@ impl PullStore {
     /// # Errors
     /// Returns an error if a store lock was poisoned.
     pub fn forget(&self, uri: &str) -> Result<(), PullError> {
-        self.forgotten
+        let _queued = self
+            .forgotten
             .lock()
             .map_err(poisoned)?
-            .push(uri.to_owned());
+            .insert(uri.to_owned());
+        self.retire_forgotten()
+    }
+
+    /// Retire every queued close now, unless a query holds the state: that
+    /// query calls this again once it releases the state, so none waits for a
+    /// later pull. Lock order: database owner, query state, then the queue.
+    fn retire_forgotten(&self) -> Result<(), PullError> {
         let shared = Arc::clone(&*self.query.lock().map_err(poisoned)?);
         let applied = match shared.try_lock() {
             Ok(mut query) => query.forget_pending(&self.forgotten),
@@ -404,6 +412,19 @@ impl PullStore {
         cancel: &CancellationToken,
     ) -> Result<PullReport, PullError> {
         uncancelled(cancel)?;
+        let pulled = self.pull_locked(uri, version, cancel);
+        // Closes that arrived while this query held the state retire now.
+        self.retire_forgotten()?;
+        pulled
+    }
+
+    /// One pull under the query lock, retiring queued closes first.
+    fn pull_locked(
+        &self,
+        uri: &str,
+        version: i32,
+        cancel: &CancellationToken,
+    ) -> Result<PullReport, PullError> {
         let shared = Arc::clone(&*self.query.lock().map_err(poisoned)?);
         let mut query = shared.lock().map_err(poisoned)?;
         query.forget_pending(&self.forgotten)?;

@@ -37,8 +37,9 @@ the document's input is retired instead:
 
 `forget` retires the document before it returns, so its diagnostics are freed at
 once, whenever no query holds the lock. It never waits behind compiler work: while
-a query runs, the URI is queued behind its own lock and the next query retires it
-first. Slots never outnumber the documents open at once, and open/forget cycles of
+a query runs, the URI waits in a set behind its own lock (repeated closes are one
+entry), and that query retires it as it releases the state, so closing every tab
+during a pull and going idle still frees every report. Slots never outnumber the documents open at once, and open/forget cycles of
 distinct URIs free exactly the heap they allocate. A later pull of a forgotten URI
 recomputes. Forgetting an unknown or already forgotten URI is `Ok`.
 

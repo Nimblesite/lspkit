@@ -278,3 +278,20 @@ a_short_body_allocates_what_arrived_not_what_was_claimed ... FAILED   (tests/jso
 ```
 
 Green once every header line is read through `take(budget)`: `tests/jsonrpc.rs` 21/21 and `jsonrpc_frame_heap` 1/1, each under 64 KiB. The test covers one endless line, endless `X: y` lines, a block exactly at the cap reaching the body, and one byte over it.
+
+### #52 follow-up: closes made during a pull, and repeated closes
+
+SharpLsp1 found that deleting the release `analyze` call in `d2a22c4` left all tests green. `029e583` (Windows agent) then retired documents on close via `try_lock`, using an `open` flag and a retry write. On top of it, this change retires closes queued during an in-flight pull as soon as that pull releases the state, instead of waiting for a later pull, and makes the queue a set, so repeated closes are one entry. `pull_forget_heap` asserts that closing 32 idle 64 KiB documents frees every report byte, that a close during an in-flight pull is freed by that pull as it finishes, and that 1000 repeated closes keep no heap. Red at `d2a22c4`:
+
+```text
+closing 32 idle documents freed 0 of their 2097152 report bytes
+```
+
+On the merged code, each fix line mutated on its own turns the test red:
+
+```text
+release `analyze` removed        → freed 7072 of their 2097152 report bytes
+retry write removed              → freed 2050592 of their 2097152 report bytes
+retire-on-close removed          → freed 1532 of their 2097152 report bytes
+post-query retire removed        → a close during a pull freed 160 of its 65536 report bytes
+```

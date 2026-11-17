@@ -17,11 +17,23 @@ identity of the same snapshot that produced its diagnostics. Document versions
 and workspace revisions invalidate the tracked query.
 
 Closing a document must release its retained inputs and diagnostic memos while
-the connection stays alive. `PullStore::clear` discards the complete Salsa database
-because Salsa input slots cannot be deleted individually. Consumers call it on
-`didClose` or an equivalent scope eviction. Other documents recompute under the
-advanced workspace identity. Active queries retain discarded storage only until
-they finish; they return superseded. Clearing never waits behind compiler work.
+the connection stays alive. Consumers call `PullStore::forget(uri)` on `didClose`
+([LSP-PULL-FORGET]). `PullStore::clear` discards the complete Salsa database for
+a scope eviction such as a solution switch; other documents then recompute under
+the advanced workspace identity. Active queries retain discarded storage only
+until they finish; they return superseded. Clearing never waits behind compiler work.
+
+## [LSP-PULL-FORGET] Per-Document Eviction
+
+`PullStore::forget(uri)` releases one closed document. Every other document's memo
+stays warm, and no snapshot is superseded. Salsa input slots cannot be deleted, so
+the next query retires the document's input: its URI is emptied, its memo is
+recomputed to an empty report (the analyzer never sees a retired slot), and the
+slot is reused by the next newly opened document. Slots therefore never outnumber
+the documents open at once, and open/forget cycles of distinct URIs free exactly
+the heap they allocate. `forget` queues the URI behind its own lock, so a close
+never waits behind compiler work. A later pull of a forgotten URI recomputes.
+Forgetting an unknown or already forgotten URI is `Ok`.
 
 ## [LSP-PULL-CONCURRENCY] Nonblocking Invalidation
 

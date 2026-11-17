@@ -249,3 +249,19 @@ a_short_body_allocates_what_arrived_not_what_was_claimed ... FAILED   (tests/jso
 ```
 
 Green after the cap check and the incremental `take(..).read_to_end` body read: `tests/jsonrpc.rs` 20/20, `tests/jsonrpc_frame_heap.rs` 1/1 (under 64 KiB allocated, and all of it released). Clippy is clean on the host and on `x86_64-pc-windows-msvc`.
+
+## #52: closing one document keeps every other memo warm
+
+[LSP-PULL-FORGET]. Red against a stub `forget` that returns `Ok(())` and does nothing:
+
+```text
+forgetting_one_document_keeps_every_other_memo_warm ... FAILED
+  a forgotten document recomputes  left: 1  right: 2
+forget_is_idempotent_and_a_recycled_input_never_replays_old_truth ... FAILED
+  B recomputes after its forget  left: 1  right: 2
+open_forget_cycles_of_distinct_uris_release_their_heap ... FAILED   (tests/pull_forget_heap.rs)
+  completed work still retains heap bytes: allocations 12089, deallocations 4072,
+  bytes_allocated 1439392, bytes_deallocated 334016
+```
+
+Green with retired-slot reuse: `pull_forget` 2/2 (B and C remain cache hits with unchanged result ids, A recomputes once, a recycled slot reports only its new URI), `pull_forget_heap` 1/1 (1000 distinct open/forget cycles, 17000 allocations and 17000 deallocations, equal bytes), and `pull_store` 4/4. Disabling `forget` again turns all three red.

@@ -123,7 +123,11 @@ fn analyze(db: &dyn DiagnosticDb, document: DocumentInput, workspace: WorkspaceI
     let _generation = workspace.generation(db);
     let _version = document.version(db);
     let _retry = document.retry_revision(db);
-    db.analyze(document.uri(db))
+    match document.uri(db).as_str() {
+        // A retired slot holds no document: its memo releases the old report.
+        "" => Ok(Arc::default()),
+        uri => db.analyze(uri),
+    }
 }
 
 /// Query state serialized behind one mutex. Diagnostics computation is the only
@@ -136,6 +140,9 @@ struct QueryState {
     workspace: WorkspaceInput,
     /// Reusable per-document Salsa inputs keyed by canonical URI.
     documents: HashMap<String, DocumentInput>,
+    /// Forgotten inputs, emptied and reused by the next opened document, so
+    /// slots never outnumber the documents open at once. [LSP-PULL-FORGET]
+    retired: Vec<DocumentInput>,
 }
 
 impl QueryState {
@@ -151,15 +158,42 @@ impl QueryState {
             database,
             workspace,
             documents: HashMap::new(),
+            retired: Vec::new(),
+        }
+    }
+
+    /// The input for a newly opened `uri`: a retired slot when one exists.
+    fn admit(&mut self, uri: &str) -> DocumentInput {
+        let document = match self.retired.pop() {
+            Some(retired) => {
+                let _empty = retired.set_uri(&mut self.database).to(uri.to_owned());
+                retired
+            }
+            None => DocumentInput::new(&self.database, uri.to_owned(), 0, 0),
+        };
+        let _absent = self.documents.insert(uri.to_owned(), document);
+        document
+    }
+
+    /// Retire each closed document: drop its URI and memo, keep its slot.
+    fn forget(&mut self, uris: &[String]) {
+        let closed: Vec<DocumentInput> = uris
+            .iter()
+            .filter_map(|uri| self.documents.remove(uri))
+            .collect();
+        for document in closed {
+            let _closed_uri = document.set_uri(&mut self.database).to(String::new());
+            let _released = analyze(&self.database, document, self.workspace);
+            self.retired.push(document);
         }
     }
 
     /// Get or create the document handle, then refresh its editor version.
     fn document(&mut self, uri: &str, version: i32) -> DocumentInput {
-        let document = *self
-            .documents
-            .entry(uri.to_owned())
-            .or_insert_with(|| DocumentInput::new(&self.database, uri.to_owned(), 0, 0));
+        let document = match self.documents.get(uri) {
+            Some(open) => *open,
+            None => self.admit(uri),
+        };
         if *document.version(&self.database) != version {
             let _previous_version = document.set_version(&mut self.database).to(version);
         }
@@ -221,6 +255,9 @@ pub struct PullStore {
     revision: Arc<AtomicU64>,
     /// Engine generation feeding Salsa without superseding in-flight snapshots.
     generation: Arc<AtomicU64>,
+    /// Closed URIs the next query retires, so a close never waits behind the
+    /// compiler. Drained by every query. [LSP-PULL-FORGET]
+    forgotten: Arc<Mutex<Vec<String>>>,
 }
 
 impl PullStore {
@@ -240,6 +277,7 @@ impl PullStore {
             analyzer,
             revision: Arc::new(AtomicU64::new(1)),
             generation: Arc::new(AtomicU64::new(1)),
+            forgotten: Arc::default(),
         }
     }
 
@@ -260,6 +298,23 @@ impl PullStore {
             std::mem::replace(&mut *slot, replacement)
         };
         drop(previous);
+        Ok(())
+    }
+
+    /// Release one closed document's input and memos; every other memo stays
+    /// warm and no snapshot is superseded. [LSP-PULL-FORGET]
+    ///
+    /// Never waits behind compiler work: the next query retires the document,
+    /// so a later pull of `uri` recomputes. Forgetting an unknown or already
+    /// forgotten URI is `Ok`.
+    ///
+    /// # Errors
+    /// Returns an error if the pending-forget lock was poisoned.
+    pub fn forget(&self, uri: &str) -> Result<(), PullError> {
+        self.forgotten
+            .lock()
+            .map_err(poisoned)?
+            .push(uri.to_owned());
         Ok(())
     }
 
@@ -327,6 +382,9 @@ impl PullStore {
         uncancelled(cancel)?;
         let shared = Arc::clone(&*self.query.lock().map_err(poisoned)?);
         let mut query = shared.lock().map_err(poisoned)?;
+        query.forget(&std::mem::take(
+            &mut *self.forgotten.lock().map_err(poisoned)?,
+        ));
         let revision = self.query_revision(&shared)?;
         let generation = self.generation.load(Ordering::Acquire);
         let report = query.compute(uri, version, revision, generation, cancel)?;

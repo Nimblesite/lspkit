@@ -86,19 +86,7 @@ fn uri_to_native(uri: &str, style: Style) -> Result<String, UriError> {
     let host = percent_decode(authority)?;
     let local = host.is_empty() || host.eq_ignore_ascii_case(LOCAL_HOST);
     let no_path = || UriError::NoLocalPath(uri.to_owned());
-    // Each segment is decoded on its own, so an encoded `%2F` (or `%5C` on
-    // Windows) stays inside its name and is rejected, never split on.
-    let segments = path
-        .split('/')
-        .skip(1)
-        .map(percent_decode)
-        .collect::<Result<Vec<_>, _>>()?;
-    if segments
-        .iter()
-        .any(|segment| segment.contains(style.separators()))
-    {
-        return Err(no_path());
-    }
+    let segments = decode_segments(path, style)?.ok_or_else(no_path)?;
     match (style, local) {
         (Style::Unix, true) => Ok(format!("/{}", segments.join("/"))),
         (Style::Unix, false) => Err(no_path()),
@@ -106,6 +94,20 @@ fn uri_to_native(uri: &str, style: Style) -> Result<String, UriError> {
             .map(|parsed| parsed.native())
             .ok_or_else(no_path),
     }
+}
+
+/// Decodes each path segment on its own, so an encoded `%2F` (or `%5C` on
+/// Windows) stays inside its name; `None` when a decoded name holds one.
+fn decode_segments(path: &str, style: Style) -> Result<Option<Vec<String>>, UriError> {
+    let segments = path
+        .split('/')
+        .skip(1)
+        .map(percent_decode)
+        .collect::<Result<Vec<_>, _>>()?;
+    let split = segments
+        .iter()
+        .any(|segment| segment.contains(style.separators()));
+    Ok((!split).then_some(segments))
 }
 
 impl Style {
@@ -144,6 +146,11 @@ fn native_to_uri(path: &str, style: Style) -> Option<String> {
         Style::Unix => Some(format!("{FILE_SCHEME}{}", percent_encode(path))),
         Style::Windows => WindowsPath::from_native(path).map(|parsed| parsed.uri()),
     }
+}
+
+/// A native Windows path split on both separators.
+fn native_parts(path: &str) -> impl Iterator<Item = String> + '_ {
+    path.split(['\\', '/']).map(str::to_owned)
 }
 
 /// Where an absolute Windows path is rooted.
@@ -190,23 +197,25 @@ impl WindowsPath {
     /// Parses an absolute Windows path, removing an extended-length prefix.
     /// Device paths (`\\.\`, `\\?\Volume{…}`) name no file and give `None`.
     fn from_native(path: &str) -> Option<Self> {
-        let is_separator = |c: char| c == '\\' || c == '/';
         if let Some(unc) = path.strip_prefix(VERBATIM_UNC_PREFIX) {
-            let mut parts = unc.split(is_separator).map(str::to_owned);
+            let mut parts = native_parts(unc);
             let host = parts.next()?;
             return Self::unc(&host, parts);
         }
-        if let Some(drive) = path.strip_prefix(VERBATIM_PREFIX) {
-            let mut parts = drive.split(is_separator).map(str::to_owned);
-            let first = parts.next()?;
-            return Self::drive(&first, parts);
-        }
-        let mut parts = path.split(is_separator).map(str::to_owned);
+        let (verbatim, body) = match path.strip_prefix(VERBATIM_PREFIX) {
+            Some(drive) => (true, drive),
+            None => (false, path),
+        };
+        let mut parts = native_parts(body);
         let first = parts.next()?;
-        if !first.is_empty() {
+        if verbatim || !first.is_empty() {
             return Self::drive(&first, parts);
         }
-        // A leading separator must be the pair that opens `\\server\share`.
+        Self::unc_after_root(parts)
+    }
+
+    /// A leading separator must be the pair that opens `\\server\share`.
+    fn unc_after_root(mut parts: impl Iterator<Item = String>) -> Option<Self> {
         let host = parts
             .next()
             .filter(String::is_empty)

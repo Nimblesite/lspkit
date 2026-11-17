@@ -94,14 +94,32 @@ mod tests {
     use std::time::Duration;
 
     /// Seconds after the epoch and the timestamp they must format as.
-    const KNOWN: [(u64, &str); 6] = [
+    const KNOWN: [(u64, &str); 8] = [
         (0, "1970-01-01T00:00:00Z"),
         (951_782_400, "2000-02-29T00:00:00Z"),
         (951_868_799, "2000-02-29T23:59:59Z"),
         (1_700_000_000, "2023-11-14T22:13:20Z"),
+        (4_107_542_399, "2100-02-28T23:59:59Z"),
         (4_107_542_400, "2100-03-01T00:00:00Z"),
+        (13_574_606_400, "2400-02-29T12:00:00Z"),
         (253_402_300_799, "9999-12-31T23:59:59Z"),
     ];
+
+    /// Seconds before the epoch and the timestamp they must format as.
+    const BEFORE_EPOCH: [(u64, &str); 4] = [
+        (2_208_988_800, "1900-01-01T00:00:00Z"),
+        (2_203_891_201, "1900-02-28T23:59:59Z"),
+        (2_203_891_200, "1900-03-01T00:00:00Z"),
+        (11_670_998_400, "1600-02-29T00:00:00Z"),
+    ];
+
+    #[test]
+    fn century_leap_rules_hold_before_the_epoch() {
+        for (secs, want) in BEFORE_EPOCH {
+            let instant = UNIX_EPOCH - Duration::from_secs(secs);
+            assert_eq!(rfc3339(instant), want, "-{secs}s");
+        }
+    }
 
     #[test]
     fn known_instants_format_as_rfc3339_utc_seconds() {
@@ -117,8 +135,6 @@ mod tests {
             "1969-12-31T23:59:59Z",
             "floors before the epoch"
         );
-        let early = UNIX_EPOCH - Duration::from_secs(2_208_988_800);
-        assert_eq!(rfc3339(early), "1900-01-01T00:00:00Z");
         let now = rfc3339_now();
         assert_eq!(now.len(), "2026-10-14T00:00:00Z".len(), "{now}");
         assert!(now.ends_with('Z') && now.get(10..11) == Some("T"), "{now}");

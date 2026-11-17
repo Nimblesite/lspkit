@@ -163,7 +163,7 @@ pub fn has_endpoint(pid: u32) -> Option<bool> {
 }
 
 #[cfg(windows)]
-/// Search Windows named pipes for the target's CoreCLR diagnostics endpoint.
+/// Search Windows named pipes for the target's `CoreCLR` diagnostics endpoint.
 fn endpoint_exists(pid: u32) -> Option<bool> {
     let exact = format!("dotnet-diagnostic-{pid}");
     let prefixed = format!("{exact}-");

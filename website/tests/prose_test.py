@@ -17,7 +17,7 @@ class Document(HTMLParser):
     def __init__(self, path):
         super().__init__()
         self.elements = []
-        self.feed(path.read_text())
+        self.feed(path.read_text(encoding="utf-8"))
 
     def handle_starttag(self, tag, attrs):
         self.elements.append((tag, dict(attrs)))
@@ -30,7 +30,11 @@ class ProsePages(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         shutil.rmtree(OUTPUT, ignore_errors=True)
-        subprocess.run(["npm", "run", "build"], cwd=SITE, check=True)
+        # npm is npm.cmd on Windows, which CreateProcess only finds by its full name.
+        npm = shutil.which("npm")
+        if npm is None:
+            raise RuntimeError("npm is not on PATH")
+        subprocess.run([npm, "run", "build"], cwd=SITE, check=True)
 
     def check_page(self, path):
         page = Document(path)
@@ -109,7 +113,7 @@ class ProsePages(unittest.TestCase):
             self.assertEqual(image["src"], "/assets/images/engine.svg")
             self.assertEqual((image["width"], image["height"]), ("1440", "600"))
         css = OUTPUT / "assets/css/styles.css"
-        self.assertLessEqual(len(css.read_text().splitlines()), 2000)
+        self.assertLessEqual(len(css.read_text(encoding="utf-8").splitlines()), 2000)
 
     def test_journal_has_illustrated_posts_and_docs_journal_and_repo_navigation(self):
         for path in OUTPUT.rglob("*.html"):

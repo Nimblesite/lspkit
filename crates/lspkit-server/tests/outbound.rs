@@ -163,7 +163,8 @@ async fn server_requests_resolve_from_the_editors_wire_answers() {
 #[tokio::test]
 async fn abandoned_waits_unregister_and_unmatched_messages_are_rejected() {
     let (mut server, mut editor) = connection();
-    let outbound = Outbound::new();
+    let outbound = Outbound::default();
+    assert_eq!(outbound.pending_count(), 0, "a default handle starts empty");
     let late_params = json!({ "uri": "file:///late" });
     let (late_id, late_wait) = round_trip(
         &outbound,

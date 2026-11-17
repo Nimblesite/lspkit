@@ -148,7 +148,7 @@ This is the issue's row `file://localhost/tmp/a.rs` → `/localhost/tmp/a.rs`. G
      Summary [   0.015s] 1 test run: 1 passed, 0 skipped
 ```
 
-The Windows rows (UNC `file://server/share/a.rs` ↔ `\\server\share\a.rs`, `file://wsl.localhost/…`, and `\\?\C:\…` and `\\?\UNC\…` → URI) are unit tests in `uri_style_tests.rs`. They call the Windows conversion directly, so Linux and macOS CI run them on every PR.
+The Windows rows (UNC `file://server/share/a.rs` ↔ `\\server\share\a.rs`, `file://wsl.localhost/…`, and `\\?\C:\…` and `\\?\UNC\…` → URI) and a percent-encoded host (`file://build%2Dhost/share%20one/a.rs` ↔ `\\build-host\share one\a.rs`) are unit tests in `uri_style_tests.rs`. They call the Windows conversion directly, so Linux and macOS CI run them on every PR. CI has no Windows runner, so the `cfg(windows)` selection of that branch is not executed in CI.
 
 ## #48: the server can send its own requests to the editor
 
@@ -160,6 +160,10 @@ The Windows rows (UNC `file://server/share/a.rs` ↔ `\\server\share\a.rs`, `fil
 - Dropping a wait unregisters it at once (`pending_count` 1 → 0), and the late answer is `UnknownId`.
 - String, negative and never-allocated ids are `UnknownId`. Notifications, requests and `"id": null` errors are `NotAResponse`.
 - `outbound_heap_leak.rs` runs 32 rounds of answered, refused, abandoned and foreign lifetimes and asserts that allocated heap bytes equal freed bytes. Replacing `drop(abandoned)` with `std::mem::forget(abandoned)` makes it fail, which shows the test detects retention.
+- A parameterless request (`workspace/diagnostic/refresh`) omits `params` on the wire instead of sending `"params": null`, which JSON-RPC 2.0 forbids. `Message::request` and `Message::notification` both omit `null` params. Red before the fix: `outbound.rs` asserted `left: Some(Null) right: None` on `{"id":3,"jsonrpc":"2.0","method":"workspace/diagnostic/refresh","params":null}`.
+- A duplicate answer for an already answered id is `UnknownId`, and the first answer still reaches its caller.
+- Dropping the `Outbound` handle (server shutdown) ends every live wait with `RecvError` instead of hanging it.
+- A client that never answers keeps exactly one entry until the caller drops its wait. Dropping is how a server cancels its own request; sending `$/cancelRequest` to the editor stays the caller's choice.
 - `sidecar::RequestId::from(raw)` rebuilds an id from the raw wire number and resolves.
 
 Red: remove the fix and keep the tests.

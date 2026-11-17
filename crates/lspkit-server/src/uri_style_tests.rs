@@ -4,7 +4,7 @@
 use super::{native_to_uri, uri_to_native, Style, UriError};
 
 /// URIs, the Windows path each names, and the URI that path encodes back to.
-const WINDOWS_ROUND_TRIPS: [(&str, &str, &str); 5] = [
+const WINDOWS_ROUND_TRIPS: [(&str, &str, &str); 6] = [
     (
         "file:///C:/repo/a.rs",
         r"C:\repo\a.rs",
@@ -20,6 +20,11 @@ const WINDOWS_ROUND_TRIPS: [(&str, &str, &str); 5] = [
         "file://server/share/a.rs",
         r"\\server\share\a.rs",
         "file://server/share/a.rs",
+    ),
+    (
+        "file://build%2Dhost/share%20one/a.rs",
+        r"\\build-host\share one\a.rs",
+        "file://build-host/share%20one/a.rs",
     ),
     (
         "file://wsl.localhost/Ubuntu/home/a.rs",

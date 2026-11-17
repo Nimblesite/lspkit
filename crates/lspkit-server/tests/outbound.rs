@@ -112,6 +112,16 @@ async fn server_requests_resolve_from_the_editors_wire_answers() {
             .await
             .expect("request reaches the editor");
     assert_ne!(refresh_id, show_id, "ids are never reused");
+    // JSON-RPC 2.0: `params` is an object, an array, or omitted, never `null`.
+    let (refresh_frame, refresh_unsent) = outbound.request(refresh, Value::Null);
+    let wire = serde_json::to_value(&refresh_frame).expect("the frame serializes");
+    assert_eq!(
+        wire.get("params"),
+        None,
+        "a parameterless request omits params: {wire}"
+    );
+    assert_eq!(wire.get("method"), Some(&json!(refresh)));
+    drop(refresh_unsent);
     let null = Message::response(refresh_id, Value::Null);
     answer(&outbound, &mut server, &editor, &null)
         .await
@@ -244,4 +254,45 @@ async fn abandoned_waits_unregister_and_unmatched_messages_are_rejected() {
     assert!(matches!(request, OutboundError::NotAResponse));
     assert_eq!(request.to_string(), "message is not a response");
     assert_eq!(outbound.pending_count(), 0);
+
+    // The editor answers the same id twice: the duplicate is unmatched.
+    let (twice_id, twice_wait) = round_trip(
+        &outbound,
+        &server,
+        &mut editor,
+        "window/showDocument",
+        json!({}),
+    )
+    .await
+    .expect("request reaches the editor");
+    let reply = Message::response(twice_id.clone(), json!({ "success": true }));
+    answer(&outbound, &mut server, &editor, &reply)
+        .await
+        .expect("wire")
+        .expect("first answer");
+    let again = answer(&outbound, &mut server, &editor, &reply)
+        .await
+        .expect("wire")
+        .expect_err("duplicate");
+    assert!(
+        matches!(&again, OutboundError::UnknownId(id) if *id == twice_id),
+        "{again:?}"
+    );
+    assert!(twice_wait.await.expect("first delivered").is_ok());
+
+    // Shutdown: dropping the handle closes every live wait instead of hanging it.
+    let (_, orphaned) = round_trip(
+        &outbound,
+        &server,
+        &mut editor,
+        "window/showDocument",
+        json!({}),
+    )
+    .await
+    .expect("request reaches the editor");
+    drop(outbound);
+    assert!(
+        orphaned.await.is_err(),
+        "a wait outliving its handle ends with RecvError"
+    );
 }

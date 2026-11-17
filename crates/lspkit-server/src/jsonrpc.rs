@@ -77,27 +77,27 @@ impl JsonRpcError {
 }
 
 impl Message {
-    /// Construct a request with `id`, `method`, and `params`.
+    /// Construct a request with `id`, `method`, and `params` (omitted when `null`).
     #[must_use]
     pub fn request(id: RequestId, method: impl Into<String>, params: Value) -> Self {
         Self {
             jsonrpc: "2.0".to_owned(),
             id: Some(id),
             method: Some(method.into()),
-            params: Some(params),
+            params: wire_params(params),
             result: None,
             error: None,
         }
     }
 
-    /// Construct a notification with `method` and `params`.
+    /// Construct a notification with `method` and `params` (omitted when `null`).
     #[must_use]
     pub fn notification(method: impl Into<String>, params: Value) -> Self {
         Self {
             jsonrpc: "2.0".to_owned(),
             id: None,
             method: Some(method.into()),
-            params: Some(params),
+            params: wire_params(params),
             result: None,
             error: None,
         }
@@ -128,6 +128,11 @@ impl Message {
             error: Some(error),
         }
     }
+}
+
+/// JSON-RPC 2.0 `params` is an object, an array, or omitted, never `null`.
+fn wire_params(params: Value) -> Option<Value> {
+    (!params.is_null()).then_some(params)
 }
 
 /// Errors from reading or writing JSON-RPC messages.

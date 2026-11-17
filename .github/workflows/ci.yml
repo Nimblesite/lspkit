@@ -108,6 +108,20 @@ jobs:
       - name: Build
         run: make build
 
+      # release.yml runs this script only on a tag; packaging one runtime id
+      # here keeps a broken script from surfacing only at release time.
+      # [REL-CONSUMER-ASSETS]
+      - name: Release consumer assets (linux-x64)
+        run: |
+          set -eu
+          sh scripts/release-assets.sh ci "${RUNNER_TEMP}/assets" linux-x64
+          tar -tzf "${RUNNER_TEMP}/assets/lsp-profiler-dotnet-engine-ci-linux-x64.tar.gz" | grep -qx './lsp-profiler-dotnet-engine'
+          kit=$(tar -tzf "${RUNNER_TEMP}/assets/lspkit-consumer-kit-ci.tar.gz")
+          for want in dotnet/fixtures/HotLeakApp/Program.cs docs/specs/LSP-PROFILER-SPEC.md docs/specs/LSP-PULL-SPEC.md test-support/state.rs scripts/typediagram/run-cli.mjs; do
+            printf '%s\n' "$kit" | grep -qx "lspkit-consumer-kit-ci/$want"
+          done
+          if printf '%s\n' "$kit" | grep -q '/bin/\|/obj/'; then echo "kit ships build output"; exit 1; fi
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

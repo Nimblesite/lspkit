@@ -77,13 +77,24 @@ fn civil(days: i128) -> (i128, i128, i128) {
     let shifted = days + EPOCH_SHIFT;
     let era = shifted.div_euclid(ERA_DAYS);
     let day_of_era = shifted - era * ERA_DAYS;
-    let year_of_era = (day_of_era - day_of_era.div_euclid(LEAP_CYCLE_DAYS)
-        + day_of_era.div_euclid(CENTURY_DAYS)
-        - day_of_era.div_euclid(ERA_DAYS - 1))
-    .div_euclid(YEAR_DAYS);
+    let year_of_era = year_of_era(day_of_era);
     let day_of_year = day_of_era
         - (YEAR_DAYS * year_of_era + year_of_era.div_euclid(LEAP_YEAR_EVERY)
             - year_of_era.div_euclid(CENTURY_YEARS));
+    let (month, day) = month_day(day_of_year);
+    let year = year_of_era + era * ERA_YEARS + i128::from(month < MARCH);
+    (year, month, day)
+}
+
+/// The March-based year (0..=399) within its 400-year era.
+fn year_of_era(day_of_era: i128) -> i128 {
+    (day_of_era - day_of_era.div_euclid(LEAP_CYCLE_DAYS) + day_of_era.div_euclid(CENTURY_DAYS)
+        - day_of_era.div_euclid(ERA_DAYS - 1))
+    .div_euclid(YEAR_DAYS)
+}
+
+/// The calendar (month, day) of a March-based day of the year.
+fn month_day(day_of_year: i128) -> (i128, i128) {
     let (slope, offset, span) = MONTH_SLOPE;
     let march_month = (slope * day_of_year + offset).div_euclid(span);
     let day = day_of_year - (span * march_month + offset).div_euclid(slope) + 1;
@@ -92,11 +103,7 @@ fn civil(days: i128) -> (i128, i128, i128) {
     } else {
         march_month + MARCH - YEAR_MONTHS
     };
-    (
-        year_of_era + era * ERA_YEARS + i128::from(month < MARCH),
-        month,
-        day,
-    )
+    (month, day)
 }
 
 #[cfg(test)]

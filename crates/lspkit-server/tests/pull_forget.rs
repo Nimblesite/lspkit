@@ -33,6 +33,14 @@ fn counting_store() -> (PullStore, Calls) {
     (store, calls)
 }
 
+/// How many times the compiler ran, over every URI.
+fn total_calls(calls: &Calls) -> usize {
+    match calls.lock() {
+        Ok(counts) => counts.values().sum(),
+        Err(poisoned) => poisoned.into_inner().values().sum(),
+    }
+}
+
 /// How many times the compiler analyzed `uri`.
 fn calls_for(calls: &Calls, uri: &str) -> usize {
     let counts = match calls.lock() {
@@ -70,8 +78,15 @@ fn forgetting_one_document_keeps_every_other_memo_warm() {
         assert_eq!(calls_for(&calls, uri), 1, "{uri} is memoized");
     }
     let revision = store.revision();
+    let before = total_calls(&calls);
     store.forget(A).expect("forget a closed document");
     assert_eq!(store.revision(), revision, "forgetting supersedes nothing");
+    assert_eq!(
+        total_calls(&calls),
+        before,
+        "a close never runs the compiler"
+    );
+    assert_eq!(calls_for(&calls, ""), 0, "a retired slot is never analyzed");
     for (uri, id) in [(B, id_b), (C, id_c)] {
         assert_eq!(pull(&store, uri), id, "{uri} keeps its snapshot");
         assert_eq!(calls_for(&calls, uri), 1, "{uri} stays a cache hit");

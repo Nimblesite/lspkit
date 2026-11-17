@@ -295,3 +295,5 @@ retry write removed              → freed 2050592 of their 2097152 report bytes
 retire-on-close removed          → freed 1532 of their 2097152 report bytes
 post-query retire removed        → a close during a pull freed 160 of its 65536 report bytes
 ```
+
+`set_open(..).to(false)` removed → `forgetting_one_document_keeps_every_other_memo_warm` fails with "a close never runs the compiler: left 4, right 3" (SharpLsp1's mutant, now killed).

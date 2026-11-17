@@ -25,6 +25,9 @@ pub enum OutboundError {
     /// No waiting server request has this id: foreign, answered or abandoned.
     #[error("no pending server request for id {0:?}")]
     UnknownId(RequestId),
+    /// The correlator id no longer fits a JSON-RPC number on the wire.
+    #[error("server request id {0} exceeds the largest JSON-RPC number")]
+    IdsExhausted(u64),
 }
 
 /// Allocates server request ids and routes the editor's answers back.
@@ -47,12 +50,20 @@ impl Outbound {
     }
 
     /// Build the request frame to write and the wait for its answer.
-    #[must_use]
-    pub fn request(&self, method: impl Into<String>, params: Value) -> (Message, OutboundResponse) {
+    ///
+    /// # Errors
+    /// [`OutboundError::IdsExhausted`] once ids pass the largest JSON-RPC
+    /// number; the registration is released, never reused.
+    pub fn request(
+        &self,
+        method: impl Into<String>,
+        params: Value,
+    ) -> Result<(Message, OutboundResponse), OutboundError> {
         let (id, response) = self.correlator.register();
-        // Ids count up from 1; i64::MAX would take 2^63 requests to reach.
-        let wire = RequestId::Number(i64::try_from(id.get()).unwrap_or(i64::MAX));
-        (Message::request(wire, method, params), response)
+        Ok((
+            Message::request(wire_id(id.get())?, method, params),
+            response,
+        ))
     }
 
     /// Deliver an inbound response to the request that is waiting for it.
@@ -89,10 +100,47 @@ impl Default for Outbound {
     }
 }
 
+/// The wire id for correlator id `raw`; past `i64::MAX` it fails, never collides.
+fn wire_id(raw: u64) -> Result<RequestId, OutboundError> {
+    i64::try_from(raw)
+        .map(RequestId::Number)
+        .map_err(|_beyond_wire_numbers| OutboundError::IdsExhausted(raw))
+}
+
 /// The correlator number behind a wire id this handle could have allocated.
 fn correlated(id: &RequestId) -> Option<u64> {
     match id {
         RequestId::Number(raw) => u64::try_from(*raw).ok(),
         RequestId::String(_) => None,
+    }
+}
+
+// Reaching 2^63 real registrations is infeasible, so the boundary is isolated here.
+#[cfg(test)]
+mod tests {
+    use super::{correlated, wire_id, OutboundError, RequestId};
+
+    #[test]
+    fn ids_past_the_largest_json_rpc_number_fail_instead_of_colliding() {
+        let largest = u64::try_from(i64::MAX).expect("i64::MAX is non-negative");
+        let last = wire_id(largest).expect("the largest number is still a valid id");
+        assert_eq!(last, RequestId::Number(i64::MAX));
+        assert_eq!(
+            correlated(&last),
+            Some(largest),
+            "the last valid id round-trips"
+        );
+        for beyond in [largest + 1, largest + 2, u64::MAX] {
+            let error = wire_id(beyond).expect_err("no wire number left");
+            assert!(
+                matches!(error, OutboundError::IdsExhausted(raw) if raw == beyond),
+                "{error:?}"
+            );
+            assert_eq!(
+                error.to_string(),
+                format!("server request id {beyond} exceeds the largest JSON-RPC number")
+            );
+        }
+        assert_eq!(wire_id(1).expect("first id"), RequestId::Number(1));
     }
 }

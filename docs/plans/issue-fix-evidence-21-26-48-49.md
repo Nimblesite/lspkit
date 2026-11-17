@@ -166,7 +166,50 @@ The Windows rows (UNC `file://server/share/a.rs` ↔ `\\server\share\a.rs`, `fil
 - A client that never answers keeps exactly one entry until the caller drops its wait. Dropping is how a server cancels its own request; sending `$/cancelRequest` to the editor stays the caller's choice.
 - `sidecar::RequestId::from(raw)` rebuilds an id from the raw wire number and resolves.
 
-Red: remove the fix and keep the tests.
+### Behavioural red: an answer wakes only its own request
+
+`outbound.rs` `out_of_order_answers_wake_only_the_wait_with_their_id` sends three requests, and the editor answers them third, first, second. Each wait must receive the answer carrying its own id. Mutate `resolve` so it rotates ids, so that every answer wakes another pending request while every resolve still succeeds:
+
+```diff
+diff --git a/crates/lspkit-server/src/outbound.rs b/crates/lspkit-server/src/outbound.rs
+index 73cb512..9eeedd2 100644
+--- a/crates/lspkit-server/src/outbound.rs
++++ b/crates/lspkit-server/src/outbound.rs
+@@ -71,7 +71,7 @@ impl Outbound {
+         let Some(raw) = correlated(&id) else {
+             return Err(OutboundError::UnknownId(id));
+         };
+-        self.correlator.resolve(raw.into(), answer).map_err(
++        self.correlator.resolve(((raw % 3) + 1).into(), answer).map_err(
+             |_answered_or_abandoned: CorrelationError<OutboundResult>| OutboundError::UnknownId(id),
+         )
+     }
+```
+
+```text
+    thread 'out_of_order_answers_wake_only_the_wait_with_their_id' (1855494) panicked at crates/lspkit-server/tests/outbound.rs:333:9:
+    assertion `left == right` failed: wait for Number(1) got another request's answer
+      left: Object {"answered": String("third")}
+     right: Object {"answered": String("first")}
+     Summary [   0.010s] 1 test run: 0 passed, 1 failed, 2 skipped
+```
+
+Restored, all outbound tests pass.
+
+### Behavioural red: ids past `i64::MAX` fail instead of colliding
+
+The unit test `outbound::tests::ids_past_the_largest_json_rpc_number_fail_instead_of_colliding` (`crates/lspkit-server/src/outbound.rs`) checks the id boundary directly, because reaching 2^63 real registrations is not feasible. Before the fix `wire_id` saturated:
+
+```text
+panicked at crates/lspkit-server/src/outbound.rs:132:41:
+no wire number left: Number(9223372036854775807)
+```
+
+So id 2^63 went out as `9223372036854775807`, the same number as id 2^63 − 1. Now `request` returns `OutboundError::IdsExhausted(raw)` and drops the registration.
+
+### Compile red: the API did not exist
+
+Remove the fix and keep the tests.
 
 ```sh
 git diff main -- crates/lspkit-server/src crates/lspkit/src > fix-48.patch

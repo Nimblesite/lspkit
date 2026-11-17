@@ -57,7 +57,7 @@ async fn round_trip(
     method: &str,
     params: Value,
 ) -> StepResult<(RequestId, OutboundResponse)> {
-    let (message, pending) = outbound.request(method, params.clone());
+    let (message, pending) = outbound.request(method, params.clone())?;
     server.writer.write_message(&message).await?;
     let id = editor_receives(editor, method, &params).await?;
     assert_eq!(
@@ -113,7 +113,9 @@ async fn server_requests_resolve_from_the_editors_wire_answers() {
             .expect("request reaches the editor");
     assert_ne!(refresh_id, show_id, "ids are never reused");
     // JSON-RPC 2.0: `params` is an object, an array, or omitted, never `null`.
-    let (refresh_frame, refresh_unsent) = outbound.request(refresh, Value::Null);
+    let (refresh_frame, refresh_unsent) = outbound
+        .request(refresh, Value::Null)
+        .expect("an id is available");
     let wire = serde_json::to_value(&refresh_frame).expect("the frame serializes");
     assert_eq!(
         wire.get("params"),
@@ -295,4 +297,45 @@ async fn abandoned_waits_unregister_and_unmatched_messages_are_rejected() {
         orphaned.await.is_err(),
         "a wait outliving its handle ends with RecvError"
     );
+}
+
+/// [LSP-OUTBOUND] Three requests in flight, answered out of order on the wire:
+/// each editor answer wakes exactly the wait whose id it carries, never another.
+#[tokio::test]
+async fn out_of_order_answers_wake_only_the_wait_with_their_id() {
+    let (mut server, mut editor) = connection();
+    let outbound = Outbound::new();
+    let mut waits = Vec::new();
+    for name in ["first", "second", "third"] {
+        let params = json!({ "uri": format!("file:///{name}.rs") });
+        let (id, wait) = round_trip(
+            &outbound,
+            &server,
+            &mut editor,
+            "window/showDocument",
+            params,
+        )
+        .await
+        .expect("request reaches the editor");
+        waits.push((name, id, wait));
+    }
+    assert_eq!(outbound.pending_count(), 3);
+    // The editor answers third, then first, then second; each answer names its request.
+    for index in [2, 0, 1] {
+        let (name, id, _) = waits.get(index).expect("a sent request");
+        let reply = Message::response(id.clone(), json!({ "answered": name }));
+        answer(&outbound, &mut server, &editor, &reply)
+            .await
+            .expect("wire")
+            .expect("the answer's id is pending");
+    }
+    assert_eq!(outbound.pending_count(), 0);
+    for (name, id, wait) in waits {
+        let got = wait.await.expect("delivered").expect("success");
+        assert_eq!(
+            got,
+            json!({ "answered": name }),
+            "wait for {id:?} got another request's answer"
+        );
+    }
 }

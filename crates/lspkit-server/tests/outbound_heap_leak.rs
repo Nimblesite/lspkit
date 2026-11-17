@@ -39,14 +39,14 @@ fn sent_id(sent: &Message) -> Result<RequestId, Mismatch> {
 /// Answered, refused, abandoned and unmatched lifetimes, each fully released.
 fn lifetimes(outbound: &Outbound) -> Result<(), Mismatch> {
     for _ in 0..ROUNDS {
-        let (sent, mut answered) = outbound.request("window/showDocument", payload());
+        let (sent, mut answered) = outbound.request("window/showDocument", payload())?;
         outbound.resolve(Message::response(sent_id(&sent)?, payload()))?;
         ensure(matches!(answered.try_recv(), Ok(Ok(_))), "answered")?;
-        let (sent, mut refused) = outbound.request("window/showDocument", payload());
+        let (sent, mut refused) = outbound.request("window/showDocument", payload())?;
         let refusal = JsonRpcError::new(-32603, "refused").with_data(payload());
         outbound.resolve(Message::response_error(sent_id(&sent)?, refusal))?;
         ensure(matches!(refused.try_recv(), Ok(Err(_))), "refused")?;
-        let (sent, abandoned) = outbound.request("window/showDocument", payload());
+        let (sent, abandoned) = outbound.request("window/showDocument", payload())?;
         drop(abandoned);
         let late = outbound.resolve(Message::response(sent_id(&sent)?, payload()));
         ensure(

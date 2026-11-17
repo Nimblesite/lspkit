@@ -21,10 +21,10 @@ The obvious build is a language server with its own caches, then an MCP server b
 
 ## One engine, two surfaces
 
-lspkit puts analysis behind one Rust trait, `EngineApi`. The `lspkit-server` crate serves it over LSP to VS Code; its `mcp` feature serves the same engine over MCP to Claude Code, Cursor or Codex.
+lspkit puts analysis behind one Rust trait, `EngineApi`. The `lspkit-server` crate serves it over LSP to VS Code; its `mcp` module serves the same engine over MCP to Claude Code, Cursor or Codex.
 
 ```sh
-cargo add lspkit lspkit-server --features lspkit-server/mcp
+cargo add lspkit lspkit-server
 ```
 
 Every report carries a **generation** number, so the editor and the agent can both tell which state of the workspace produced an answer. Cancellation and progress live at the same boundary, so a slow query from the agent never blocks the editor.

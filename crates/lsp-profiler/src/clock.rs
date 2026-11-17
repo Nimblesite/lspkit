@@ -16,6 +16,26 @@ const DAY_SECS: i128 = 86_400;
 const ERA_DAYS: i128 = 146_097;
 /// Days from 0000-03-01 to 1970-01-01.
 const EPOCH_SHIFT: i128 = 719_468;
+/// Seconds in one hour.
+const HOUR_SECS: i128 = 3_600;
+/// Seconds in one minute.
+const MINUTE_SECS: i128 = 60;
+/// Days in a common year.
+const YEAR_DAYS: i128 = 365;
+/// Days in four years, one of them leap.
+const LEAP_CYCLE_DAYS: i128 = 1_460;
+/// Days in a century that skips its leap day.
+const CENTURY_DAYS: i128 = 36_524;
+/// Years in a Gregorian era.
+const ERA_YEARS: i128 = 400;
+/// Hinnant's month-from-day-of-year line: month = (5·doy + 2) / 153.
+const MONTH_SLOPE: (i128, i128, i128) = (5, 2, 153);
+/// March-based months before the year rolls into January.
+const MARCH_MONTHS_TO_YEAR_END: i128 = 10;
+/// Calendar months in a year.
+const YEAR_MONTHS: i128 = 12;
+/// March as a calendar month number.
+const MARCH: i128 = 3;
 
 /// `time` as RFC 3339 UTC, truncated (floored) to the second.
 #[must_use]
@@ -24,9 +44,9 @@ pub fn rfc3339(time: SystemTime) -> String {
     let (year, month, day) = civil(secs.div_euclid(DAY_SECS));
     let clock = secs.rem_euclid(DAY_SECS);
     let (hour, minute, second) = (
-        clock.div_euclid(3600),
-        clock.rem_euclid(3600).div_euclid(60),
-        clock.rem_euclid(60),
+        clock.div_euclid(HOUR_SECS),
+        clock.rem_euclid(HOUR_SECS).div_euclid(MINUTE_SECS),
+        clock.rem_euclid(MINUTE_SECS),
     );
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
 }
@@ -47,19 +67,25 @@ fn civil(days: i128) -> (i128, i128, i128) {
     let shifted = days + EPOCH_SHIFT;
     let era = shifted.div_euclid(ERA_DAYS);
     let day_of_era = shifted - era * ERA_DAYS;
-    let year_of_era = (day_of_era - day_of_era.div_euclid(1460) + day_of_era.div_euclid(36_524)
+    let year_of_era = (day_of_era - day_of_era.div_euclid(LEAP_CYCLE_DAYS)
+        + day_of_era.div_euclid(CENTURY_DAYS)
         - day_of_era.div_euclid(ERA_DAYS - 1))
-    .div_euclid(365);
-    let day_of_year =
-        day_of_era - (365 * year_of_era + year_of_era.div_euclid(4) - year_of_era.div_euclid(100));
-    let march_month = (5 * day_of_year + 2).div_euclid(153);
-    let day = day_of_year - (153 * march_month + 2).div_euclid(5) + 1;
-    let month = if march_month < 10 {
-        march_month + 3
+    .div_euclid(YEAR_DAYS);
+    let day_of_year = day_of_era
+        - (YEAR_DAYS * year_of_era + year_of_era.div_euclid(4) - year_of_era.div_euclid(100));
+    let (slope, offset, span) = MONTH_SLOPE;
+    let march_month = (slope * day_of_year + offset).div_euclid(span);
+    let day = day_of_year - (span * march_month + offset).div_euclid(slope) + 1;
+    let month = if march_month < MARCH_MONTHS_TO_YEAR_END {
+        march_month + MARCH
     } else {
-        march_month - 9
+        march_month + MARCH - YEAR_MONTHS
     };
-    (year_of_era + era * 400 + i128::from(month <= 2), month, day)
+    (
+        year_of_era + era * ERA_YEARS + i128::from(month < MARCH),
+        month,
+        day,
+    )
 }
 
 #[cfg(test)]

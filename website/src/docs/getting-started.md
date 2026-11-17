@@ -21,7 +21,7 @@ Turn on the features you need:
 
 ```sh
 cargo add lspkit --features treesitter
-cargo add lspkit-server --features mcp
+cargo add lspkit-server
 ```
 
 ## Implement the engine

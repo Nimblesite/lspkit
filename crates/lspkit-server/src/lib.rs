@@ -21,7 +21,6 @@ pub mod diagnostics;
 pub mod dispatch;
 pub mod jsonrpc;
 pub mod live;
-#[cfg(feature = "mcp")]
 pub mod mcp;
 pub mod outbound;
 pub mod progress;

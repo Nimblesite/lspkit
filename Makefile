@@ -26,8 +26,10 @@ endif
 # Git Bash; CI uses /bin/sh.
 ifeq ($(OS),Windows_NT)
   POSIX_SHELL ?= C:/Program Files/Git/bin/bash.exe
+  PYTHON ?= python
 else
   POSIX_SHELL ?= /bin/sh
+  PYTHON ?= python3
 endif
 
 # ---------------------------------------------------------------------------
@@ -65,6 +67,7 @@ endif
 # thresholds all have to fail closed). This regression cannot be dropped.
 	$(MAKE) _coverage_check_test
 	$(MAKE) _typediagram_test
+	$(MAKE) _python_scripts_test
 	npm run build --prefix packages/lsp-profiler-ui
 	npm run test:debug --prefix packages/lsp-profiler-ui
 
@@ -143,6 +146,11 @@ _profiler_codegen:
 ## and the .claude/skills links to .agents/skills.
 _typediagram_test:
 	node --test scripts/typediagram/generate.test.mjs scripts/typediagram/run-cli.test.mjs scripts/link-skills.test.mjs
+
+## The Python runtime's injected scripts, run in a real interpreter. The crate
+## is parked and does not build, so its scripts are tested here ([PROF-MEMORY-STOP]).
+_python_scripts_test:
+	$(PYTHON) -m unittest discover -s crates/lsp-profiler-python/tests/python -p "test_*.py"
 
 ## Every [PROF-*] citation in the profiler resolves to one spec heading.
 _profiler_spec_check:

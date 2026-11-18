@@ -33,6 +33,23 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
 
 let readPalette: () => ProfilerPalette = () => DEFAULT_PALETTE;
 
+/**
+ * Dispose and drop every keyed entry whose colour the current palette no
+ * longer paints with (`extra` lists fixed colours outside the palette). The
+ * palette is re-read on every render, so without this each palette change
+ * would leave the previous colours' decoration types allocated.
+ * [PROF-UI-LIFETIME]
+ */
+export function pruneToPalette(types: Map<string, { dispose: () => void }>, extra: readonly string[] = []): void {
+  const live = new Set<string>([...extra, ...Object.values(profilerPalette()).filter((value) => typeof value === "string")]);
+  for (const [colour, type] of types) {
+    if (!live.has(colour)) {
+      type.dispose();
+      types.delete(colour);
+    }
+  }
+}
+
 /** Bind host configuration; each render reads the current palette. */
 export function configurePalette(read: () => ProfilerPalette): void { readPalette = read; }
 export function profilerPalette(): ProfilerPalette { return readPalette(); }

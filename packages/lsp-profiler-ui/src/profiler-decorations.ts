@@ -12,7 +12,7 @@
  *   Cool (1-5%):     #4a5468  — muted slate, in every host
  */
 
-import { profilerPalette } from "./palette";
+import { profilerPalette, pruneToPalette } from "./palette";
 import type { SampledView } from "./sampled-view";
 import * as vscode from "vscode";
 import { configSection } from "./ids";
@@ -90,11 +90,14 @@ const BAR_LEN_WARM = 6;
 /** Max bar length for cool heat level. */
 const BAR_LEN_COOL = 4;
 
+/** The cool level's fixed colour, outside the configurable palette. */
+const COOL_HEAT_COLOR = "#4a5468";
+
 const heatLevels = (): HeatLevel[] => [
   { minPct: HEAT_CRITICAL_PCT, color: profilerPalette().critical, barChar: "\u2588", barMaxLen: BAR_LEN_CRITICAL },
   { minPct: HEAT_HOT_PCT, color: profilerPalette().hot, barChar: "\u2588", barMaxLen: BAR_LEN_HOT },
   { minPct: HEAT_WARM_PCT, color: profilerPalette().warm, barChar: "\u2588", barMaxLen: BAR_LEN_WARM },
-  { minPct: 1, color: "#4a5468", barChar: "\u2588", barMaxLen: BAR_LEN_COOL },
+  { minPct: 1, color: COOL_HEAT_COLOR, barChar: "\u2588", barMaxLen: BAR_LEN_COOL },
 ];
 
 function heatLevelFor(pct: number): HeatLevel | undefined {
@@ -149,6 +152,7 @@ const decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
 function getDecorationTypeForColor(color: string): vscode.TextEditorDecorationType {
   let existing = decorationTypes.get(color);
   if (existing !== undefined) { return existing; }
+  pruneToPalette(decorationTypes, [COOL_HEAT_COLOR]);
 
   existing = vscode.window.createTextEditorDecorationType({
     overviewRulerColor: color,
@@ -163,6 +167,11 @@ function getDecorationTypeForColor(color: string): vscode.TextEditorDecorationTy
   });
   decorationTypes.set(color, existing);
   return existing;
+}
+
+/** Decoration types currently allocated (e2e seam for [PROF-UI-LIFETIME]). */
+export function profileDecorationTypeCount(): number {
+  return decorationTypes.size;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────

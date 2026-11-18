@@ -84,7 +84,7 @@ pub fn build(snapshot: &HeapSnapshot) -> Value {
 pub fn export(snapshot: &HeapSnapshot, output_dir: &Path) -> Result<std::path::PathBuf, String> {
     let json = serde_json::to_string(&build(snapshot))
         .map_err(|err| format!("Failed to serialize heapprofile: {err}"))?;
-    let path = output_dir.join(format!("lsp-profiler-{}.heapprofile", snapshot.snapshot_id));
+    let path = crate::export::artifact_path(output_dir, &snapshot.snapshot_id, "heapprofile");
     crate::export::write_artifact(&path, json.as_bytes())
 }
 

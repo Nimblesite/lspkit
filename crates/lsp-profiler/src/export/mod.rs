@@ -11,9 +11,14 @@ pub mod flamegraph;
 pub mod speedscope;
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use crate::aggregate::{FrameKey, ProfileData};
 use crate::wire::ProfileArtifacts;
+
+/// Artifacts of one kind (extension) kept in the output directory; older ones
+/// are removed as new ones are written. [MEM-060-ARTIFACTS]
+pub const MAX_ARTIFACTS_PER_KIND: usize = 32;
 
 /// Identity of the profile being exported.
 #[derive(Debug, Clone, PartialEq)]
@@ -59,21 +64,58 @@ pub fn export_artifacts(
     }
 }
 
+/// File-name prefix of every artifact the profiler writes.
+pub const ARTIFACT_PREFIX: &str = "lsp-profiler-";
+
 /// Path of one artifact: `lsp-profiler-<session>.<extension>`.
 #[must_use]
 pub fn artifact_path(output_dir: &Path, session_id: &str, extension: &str) -> PathBuf {
-    output_dir.join(format!("lsp-profiler-{session_id}.{extension}"))
+    output_dir.join(format!("{ARTIFACT_PREFIX}{session_id}.{extension}"))
 }
 
-/// Write `contents` to `path`, naming the path in any error.
+/// Write `contents` to `path`, naming the path in any error, then remove the
+/// oldest artifacts of its kind beyond [`MAX_ARTIFACTS_PER_KIND`].
 ///
 /// # Errors
 ///
 /// Returns a message when the write fails.
 pub fn write_artifact(path: &Path, contents: &[u8]) -> Result<PathBuf, String> {
     std::fs::write(path, contents)
-        .map(|()| path.to_path_buf())
-        .map_err(|err| format!("Failed to write {}: {err}", path.display()))
+        .map_err(|err| format!("Failed to write {}: {err}", path.display()))?;
+    prune_kind(path);
+    Ok(path.to_path_buf())
+}
+
+/// Remove the oldest profiler artifacts sharing `written`'s extension beyond
+/// [`MAX_ARTIFACTS_PER_KIND`]; files the profiler did not write stay.
+/// [MEM-060-ARTIFACTS]
+fn prune_kind(written: &Path) {
+    let (Some(dir), Some(kind)) = (written.parent(), written.extension()) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut artifacts: Vec<(SystemTime, PathBuf)> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension() == Some(kind) && is_artifact(path))
+        .filter_map(|path| Some((std::fs::metadata(&path).ok()?.modified().ok()?, path)))
+        .collect();
+    artifacts.sort();
+    let excess = artifacts.len().saturating_sub(MAX_ARTIFACTS_PER_KIND);
+    for (_, stale) in artifacts.into_iter().take(excess) {
+        if let Err(error) = std::fs::remove_file(&stale) {
+            tracing::debug!(%error, "cannot remove an old profiler artifact");
+        }
+    }
+}
+
+/// Whether `path` names a file the profiler wrote.
+fn is_artifact(path: &Path) -> bool {
+    path.file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|name| name.starts_with(ARTIFACT_PREFIX))
 }
 
 /// Human-readable label of a frame: `name (file:line)` when located.
@@ -182,6 +224,10 @@ pub(crate) mod test_data {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "artifact_retention_tests.rs"]
+mod artifact_retention_tests;
 
 #[cfg(test)]
 mod tests {

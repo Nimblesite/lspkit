@@ -4,8 +4,8 @@ use super::{document_query, initialize, work_report, Server};
 use crate::analysis::{self, Sources};
 use crate::wire::Outbox;
 use lspkit_server::pull::PullStore;
-use lspkit_server::{HandlerResult, Message};
-use serde_json::{json, Value};
+use lspkit_server::HandlerResult;
+use serde_json::Value;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinHandle;
@@ -29,8 +29,7 @@ impl HandlerState {
         let watcher = analysis::watch_root(&self.sources, root, move || {
             if let Some(state) = owner.upgrade() {
                 state.pull.invalidate();
-                let event = Message::notification("$/referenceWorkspaceChanged", json!({}));
-                if let Err(error) = state.outbox.send(event) {
+                if let Err(error) = state.outbox.send_workspace_changed() {
                     tracing::warn!(%error, "reference watcher notification failed");
                 }
             }

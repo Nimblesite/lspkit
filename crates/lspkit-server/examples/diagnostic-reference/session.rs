@@ -32,6 +32,8 @@ mod admit_retention;
 #[cfg(test)]
 mod memory_retention;
 #[cfg(test)]
+mod outbox_retention;
+#[cfg(test)]
 mod pull_memory_retention;
 #[cfg(test)]
 mod task_retention;

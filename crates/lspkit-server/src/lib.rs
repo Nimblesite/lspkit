@@ -32,7 +32,7 @@ pub mod workspace;
 
 pub use crate::capabilities::{Capabilities, Feature, TextSync};
 pub use crate::diagnostics::{
-    Diagnostic, DiagnosticsBatch, DiagnosticsBus, DiagnosticsSink, Severity,
+    Diagnostic, DiagnosticsBatch, DiagnosticsBus, DiagnosticsSink, Severity, SinkRegistration,
 };
 pub use crate::dispatch::{
     CancellationHandle, DispatchError, Dispatcher, HandlerResult, QueuedRequest, RequestInterest,

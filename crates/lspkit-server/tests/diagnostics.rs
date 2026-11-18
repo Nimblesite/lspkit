@@ -10,6 +10,9 @@ use lspkit_server::{
     DiagnosticsSink, Severity,
 };
 
+/// Per-connection consumers one long-lived bus sees attach and leave.
+const CONNECTIONS: usize = 32;
+
 /// Captures every batch a bus publishes, for whole-history assertions.
 struct Recorder {
     batches: Mutex<Vec<DiagnosticsBatch>>,
@@ -180,4 +183,29 @@ fn batch_new_preserves_fields() {
     assert_eq!(b.uri.as_str(), "file:///z");
     assert_eq!(b.generation, Generation::new(9));
     assert_eq!(b.diagnostics.len(), 2);
+}
+
+/// [MEM-060-DIAGNOSTICS-SINK] A consumer that attaches per connection must not
+/// stay attached, with everything it owns, after its connection ends.
+#[tokio::test]
+async fn owned_sinks_detach_when_their_registration_drops() {
+    let bus = DiagnosticsBus::new();
+    let mut released = Vec::with_capacity(CONNECTIONS);
+    for _ in 0..CONNECTIONS {
+        let recorder = Arc::new(Recorder {
+            batches: Mutex::new(Vec::new()),
+        });
+        released.push(Arc::downgrade(&recorder));
+        let registration = bus.attach_owned(sink(recorder));
+        bus.publish(make_batch("file:///a.rs", 1, 1)).await;
+        drop(registration);
+    }
+    let held = released
+        .iter()
+        .filter(|recorder| recorder.strong_count() > 0)
+        .count();
+    assert_eq!(
+        held, 0,
+        "{held} ended connections' sinks are still attached to the bus"
+    );
 }

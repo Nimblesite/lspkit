@@ -196,7 +196,7 @@ fn edited_versions_leave_the_cache_so_it_never_grows_per_keystroke() {
     }
 
     assert!(
-        cache.len() < EDITED_VERSIONS / 2,
+        cache.len() * 2 < EDITED_VERSIONS,
         "{} trees kept for {EDITED_VERSIONS} edits",
         cache.len()
     );

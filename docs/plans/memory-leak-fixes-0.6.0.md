@@ -28,6 +28,7 @@ Fix every leak in the v0.6.0 static review (four pi agents on GLM 5.3 plus a man
 | [PROF-UI-LIFETIME] | LOW decoration-type maps keyed by colour grew on every palette change: the palette is re-read per render | `pruneToPalette` disposes types whose colour the current palette no longer paints | `lsp-profiler-ui/src/test/suite/decoration-palette.test.ts` (9 types after 8 changes before the fix) |
 | [PROF-CPU-COOPERATIVE] | LOW cooperative tail thread: a header that arrived after `tail` gave up left the in-process sampler writing into a file nobody read | The thread writes the stop sentinel, allows the drain grace, then removes both files | `cooperative.rs::a_header_after_attach_gave_up_stops_the_writer_and_removes_the_file` |
 | [PROF-MEMORY-STOP] | LOW Python `stop_tracemalloc` left `gc.garbage`, the baseline snapshot, the `atexit` hook and the signal handlers in the debuggee | The stop script (now `src/memory/scripts/stop_tracemalloc.py`) releases all four | `lsp-profiler-python/tests/python/test_stop_tracemalloc.py`, run by `make test` in a real interpreter |
+| [PROF-DOTNET-MEMORY] | Follow-up review on 6957145: every .NET `snapshot` and `diff` kept a new numbered heap graph (about 16 MB each) until `stop`, though only the latest is read | `capture` deletes the graph it supersedes | `lsp-profiler-dotnet/tests/dotnet_e2e/graph_retention.rs` (two graphs after one diff before the fix) |
 
 ## [MEM-060-NOT-LEAKS] Checked and left as they are
 

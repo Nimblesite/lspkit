@@ -812,7 +812,7 @@ Only methods with visible sequence points are searched, so the generated factori
 | `gcCollect` | `gc` | `Gc`; `collected` is 1 when a collection was observed, `freed_bytes` is the drop against the last known heap size |
 | `stop` | none | `Ack`; deletes the session's graphs |
 
-Graphs live under `<output_dir>/heap-<session>/snapshot-<n>.heapgraph.json`. A graph of half a million objects is about 16 MB.
+Graphs live under `<output_dir>/heap-<session>/snapshot-<n>.heapgraph.json`. A graph of half a million objects is about 16 MB. Only the latest graph is ever read, so each `snapshot` or `diff` deletes the graph it supersedes once the new one is kept: a session polled for days holds one graph on disk.
 
 ### [PROF-DOTNET-GC] Induced collection
 

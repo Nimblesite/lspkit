@@ -18,6 +18,8 @@
 
 #[path = "dotnet_e2e/availability.rs"]
 mod availability;
+#[path = "dotnet_e2e/graph_retention.rs"]
+mod graph_retention;
 mod support;
 
 use std::path::PathBuf;

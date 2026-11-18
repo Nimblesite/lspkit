@@ -85,14 +85,14 @@ impl ParseCache {
         };
         let arc = Arc::new(tree);
         let mut order = self.order.lock().unwrap_or_else(PoisonError::into_inner);
-        // Racing parsers may replace an equivalent tree; either tree remains valid.
-        if self.entries.insert(key.clone(), Arc::clone(&arc)).is_none() {
-            order.push_back(key);
-        }
-        while order.len() > MAX_TREES {
-            if let Some(oldest) = order.pop_front() {
-                let _evicted = self.entries.remove(&oldest);
-            }
+        // Racing parsers may replace an equivalent tree; either tree remains
+        // valid, and the key moves to the newest end of the order.
+        let _replaced = self.entries.insert(key.clone(), Arc::clone(&arc));
+        order.retain(|queued| queued != &key);
+        order.push_back(key);
+        let excess = order.len().saturating_sub(MAX_TREES);
+        for oldest in order.drain(..excess) {
+            let _evicted = self.entries.remove(&oldest);
         }
         Ok(arc)
     }

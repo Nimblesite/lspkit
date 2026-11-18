@@ -392,9 +392,10 @@ impl ProfilerService {
         Ok(started)
     }
 
-    /// Stop every CPU session. Call on shutdown.
+    /// Stop every CPU and memory session. Call on shutdown.
     pub async fn shutdown(&self) {
         self.inner.cpu.stop_all().await;
+        self.inner.memory.stop_all().await;
     }
 
     /// Publish periodic live CPU progress until the session leaves the manager.

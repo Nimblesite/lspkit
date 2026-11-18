@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `vscode-languageclient` 11 is a supported peer (`^9.0.1 || ^10.1.0 || ^11.0.0`); the package builds and tests against 11.0.0.
+
 - Changing the profiler palette no longer leaves the previous colours' decoration types allocated.
 - `ProfilerUi.dispose()` now disposes the processes tree view and its provider, including the provider's poll and effects.
 - DAP output, stop-state and pending resumes for a debug session are dropped when the session terminates.

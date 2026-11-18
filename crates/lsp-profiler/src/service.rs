@@ -32,10 +32,10 @@ use crate::wire::{
 };
 use crate::{cooperative, process};
 
+#[cfg(test)]
+mod lifetime_tests;
 mod memory_steps;
-
-/// How often live progress is pushed while a CPU session runs.
-const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
+mod progress;
 
 /// Delivers server-to-client notifications for the host's transport.
 #[async_trait]
@@ -399,26 +399,7 @@ impl ProfilerService {
 
     /// Publish periodic live CPU progress until the session leaves the manager.
     fn spawn_progress(&self, session_id: String) {
-        let inner = Arc::clone(&self.inner);
-        let _task = tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(PROGRESS_INTERVAL);
-            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            loop {
-                let _tick = ticker.tick().await;
-                let Some(progress) = inner
-                    .cpu
-                    .progress(&session_id, &inner.config.hotspots)
-                    .await
-                else {
-                    debug!(%session_id, "progress notifier finished");
-                    return;
-                };
-                match serde_json::to_value(&progress) {
-                    Ok(params) => inner.events.notify(methods::CPU_PROGRESS, params).await,
-                    Err(error) => warn!(%error, "cannot encode progress"),
-                }
-            }
-        });
+        progress::spawn(Arc::downgrade(&self.inner), session_id);
     }
 
     /// Resolve an explicitly requested runtime or report an unknown plugin ID.

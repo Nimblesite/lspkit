@@ -8,16 +8,14 @@ import { bindPanel } from "./process-bind-panel";
 import type { ProfilerStore as Store } from "./store";
 
 /**
- * Register the Processes panel. Returns command disposables for
- * `singletonDisposables`; the tree view and provider go to subscriptions.
+ * Register the Processes panel. The disposables own everything it created:
+ * the commands, the tree view and the provider with its poll and effects, so
+ * disposing the UI releases the panel. [MEM-060-UI-DISPOSE]
  */
-export function registerProcessesView(
-  context: vscode.ExtensionContext,
-  store: Store,
-): { provider: ProcessesProvider; disposables: vscode.Disposable[] } {
+export function registerProcessesView(store: Store): { provider: ProcessesProvider; disposables: vscode.Disposable[] } {
   const provider = new ProcessesProvider(store);
   const treeView = vscode.window.createTreeView(viewId(), { treeDataProvider: provider });
-  context.subscriptions.push(treeView, provider);
   bindPanel(store, treeView, provider);
-  return { provider, disposables: [...registerLaunchCommands(store, treeView), ...registerViewCommands(store, provider)] };
+  const commands = [...registerLaunchCommands(store, treeView), ...registerViewCommands(store, provider)];
+  return { provider, disposables: [...commands, treeView, provider] };
 }

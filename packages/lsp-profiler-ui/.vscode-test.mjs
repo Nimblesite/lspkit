@@ -16,5 +16,12 @@ export default defineConfig({
     workspaceFolder: path.join(here, 'src', 'test', 'fixtures'),
     launchArgs: ['--disable-extensions', '--user-data-dir', userDataDir],
     mocha: { ui: "tdd", timeout: 60_000, bail: false },
+  }, {
+    label: 'ui-teardown',
+    files: 'out/src/test/teardown/**/*.test.js',
+    extensionDevelopmentPath: path.join(here, 'src', 'test', 'host'),
+    workspaceFolder: path.join(here, 'src', 'test', 'fixtures'),
+    launchArgs: ['--disable-extensions', '--user-data-dir', userDataDir],
+    mocha: { ui: "tdd", timeout: 60_000, bail: false },
   }],
 });

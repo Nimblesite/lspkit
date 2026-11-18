@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Changing the profiler palette no longer leaves the previous colours' decoration types allocated.
 - `ProfilerUi.dispose()` now disposes the processes tree view and its provider, including the provider's poll and effects.
 - DAP output, stop-state and pending resumes for a debug session are dropped when the session terminates.
 - The memory timeline and the autopilot capture ledger keep their newest 120 entries.

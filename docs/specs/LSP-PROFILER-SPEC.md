@@ -553,6 +553,7 @@ An editor session runs for days, so nothing the library keeps grows without a bo
 - `ProfilerUi.dispose()` disposes everything `registerProfilerUi` created, the processes tree view and its provider (with the provider's poll and effects) included.
 - A debug session's output buffer, stop-state and pending resume requests are dropped when the session terminates.
 - The memory timeline and the autopilot's capture ledger keep their newest 120 entries, matching the core timeline.
+- Heat and memory decoration types are keyed by colour. When the palette changes, the types for colours it no longer uses are disposed.
 - `FileLogSink` is capped: past its byte limit it continues in `<path>.1`, so at most two capped files stay on disk. `dispose()` closes it.
 
 ### [PROF-UI-STATE] Reactive state

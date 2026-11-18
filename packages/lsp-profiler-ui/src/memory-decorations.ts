@@ -8,7 +8,7 @@
  * palette's leak, warm or memory colour by confidence ([PROF-UI-PALETTE]).
  */
 
-import { profilerPalette } from "./palette";
+import { profilerPalette, pruneToPalette } from "./palette";
 import * as vscode from "vscode";
 import { Logger } from "./logger";
 import { recordApplied } from "./profiler-decorations";
@@ -146,6 +146,7 @@ class MemoryLayer {
   private typeFor(color: string): vscode.TextEditorDecorationType {
     const existing = this.types.get(color);
     if (existing !== undefined) { return existing; }
+    pruneToPalette(this.types);
     const created = vscode.window.createTextEditorDecorationType({
       overviewRulerColor: color,
       overviewRulerLane: vscode.OverviewRulerLane.Right,

@@ -129,6 +129,7 @@ fn tail_thread(
         return;
     };
     if ready_tx.send(header).is_err() {
+        abandon(sample_file);
         return;
     }
     let Ok((sink, done)) = sink_rx.blocking_recv() else {
@@ -232,6 +233,16 @@ fn to_samples(ticks: Vec<TickThread>) -> Vec<ThreadSample> {
         .collect()
 }
 
+/// The caller gave up before the header arrived: tell the in-process sampler
+/// to stop, give it the drain grace to see the sentinel, then remove both
+/// files, so an abandoned attach never leaves a writer sampling into a file
+/// nobody reads. [PROF-CPU-COOPERATIVE]
+fn abandon(sample_file: &Path) {
+    let _ = std::fs::write(stop_sentinel(sample_file), b"stop");
+    std::thread::sleep(STOP_DRAIN_GRACE);
+    cleanup(sample_file);
+}
+
 /// Remove the sample file and its sentinel.
 fn cleanup(sample_file: &Path) {
     let _ = std::fs::remove_file(sample_file);
@@ -329,6 +340,31 @@ mod tests {
         assert!(
             matches!(&result, Ok(Err(SamplerError::AttachFailed(message))) if message.contains("never reported its header")),
             "got {result:?}"
+        );
+    }
+
+    // [PROF-CPU-COOPERATIVE] A header that arrives after `tail` gave up has
+    // no reader: the in-process sampler must be told to stop, and its file
+    // must not stay behind growing for the life of the debuggee.
+    #[test]
+    fn a_header_after_attach_gave_up_stops_the_writer_and_removes_the_file() {
+        let path = mint_sample_file();
+        write_lines(
+            &path,
+            &[r#"{"header":{"runtime_version":"9.9.9","pid":4321}}"#],
+        )
+        .expect("write a late cooperative sampler header");
+        let (ready_tx, ready_rx) = oneshot::channel::<Header>();
+        drop(ready_rx);
+        let (_sink_tx, sink_rx) = oneshot::channel();
+        tail_thread(&path, ready_tx, sink_rx);
+        assert!(
+            !path.exists(),
+            "the abandoned sample file stays on disk while its writer keeps sampling"
+        );
+        assert!(
+            !stop_sentinel(&path).exists(),
+            "the stop sentinel is removed"
         );
     }
 }

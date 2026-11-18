@@ -3,7 +3,8 @@
 //! A direct backend: every step runs one engine command and answers with the
 //! neutral payload. A snapshot keeps its heap graph in the output directory
 //! so `references` and `objects` re-open it instead of touching the target
-//! again; the session's graphs are removed when it stops.
+//! again. Each snapshot deletes the graph it supersedes, and the session's
+//! directory is removed when it stops.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -100,13 +101,15 @@ impl DotNetMemory {
             ));
         };
         let mut peak_bytes = heap_bytes;
+        let mut superseded = None;
         self.remember(&context.session_id, |state| {
-            state.graph = Some(graph.clone());
+            superseded = state.graph.replace(graph.clone());
             state.heap_bytes = Some(heap_bytes);
             state.peak_bytes = state.peak_bytes.max(heap_bytes).max(live_bytes);
             peak_bytes = state.peak_bytes;
         })
         .await;
+        discard(superseded).await;
         Ok(HeapSnapshot {
             snapshot_id: String::new(),
             current_bytes: live_bytes,
@@ -118,7 +121,7 @@ impl DotNetMemory {
         })
     }
 
-    /// Allocate a fresh numbered graph path without overwriting earlier snapshots.
+    /// Allocate a fresh numbered graph path, so a query on the previous graph never reads a half-written file.
     async fn next_graph_path(&self, session_id: &str) -> Result<PathBuf, MemoryError> {
         let dir = self.output_dir.join(format!("heap-{session_id}"));
         tokio::fs::create_dir_all(&dir).await.map_err(|error| {
@@ -279,6 +282,15 @@ impl MemoryBackend for DotNetMemory {
         Err(MemoryError::Unsupported(
             "the .NET backend captures directly and evaluates nothing".to_owned(),
         ))
+    }
+}
+
+/// Delete a graph a newer snapshot replaced: only the latest is ever read.
+async fn discard(superseded: Option<PathBuf>) {
+    if let Some(graph) = superseded {
+        if let Err(error) = tokio::fs::remove_file(&graph).await {
+            warn!(%error, "cannot remove a superseded heap graph");
+        }
     }
 }
 

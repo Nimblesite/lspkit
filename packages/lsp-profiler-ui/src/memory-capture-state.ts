@@ -1,8 +1,11 @@
 // Implements [PROF-UI-MEMORY] + [PROF-UI-AUTOPILOT]. See docs/specs/LSP-PROFILER-SPEC.md
+import { appendBounded } from "./bounded-ledger";
 import type { MemoryDashboardSnapshot, MemoryTimelinePoint } from "./memory-dashboard";
 
 /** Milliseconds per second (timeline x-axis is in seconds). */
 const MS_PER_SECOND = 1000;
+/** Timeline points kept; the core's [PROF-MEMORY-TIMELINE] bound. */
+const MAX_TIMELINE_POINTS = 120;
 
 // ── In-flight guard ─────────────────────────────────────────────────────────
 //
@@ -38,7 +41,7 @@ export function lastMemorySnapshot(): MemoryDashboardSnapshot | undefined {
 }
 
 /**
- * Rolling timeline of every snapshot captured this session. The dashboard chart
+ * Rolling timeline of the newest snapshots captured this session. The dashboard chart
  * comes alive across repeated (especially autopilot) captures — "watch the leak
  * grow" — instead of always reading "take multiple snapshots". Reset on stop.
  */
@@ -86,10 +89,11 @@ export function currentTimeline(): MemoryTimelinePoint[] {
 
 /** Append a timeline point for a snapshot (seconds-epoch x-axis the chart reads). */
 export function recordTimelinePoint(snapshot: MemoryDashboardSnapshot): void {
-  captureTimeline.push({
+  const point = {
     timestamp: Date.now() / MS_PER_SECOND,
     currentMemory: snapshot.currentMemory,
     peakMemory: snapshot.peakMemory,
     gcObjects: snapshot.gcObjects,
-  });
+  };
+  appendBounded(captureTimeline, point, MAX_TIMELINE_POINTS);
 }

@@ -132,6 +132,8 @@ pub struct SamplerHandle {
     finish_timeout: Duration,
     /// Optional barrier for backends that buffer unfinished recording segments.
     snapshots: Option<mpsc::UnboundedSender<oneshot::Sender<()>>>,
+    /// The backend's producer task, aborted when the handle drops.
+    producer: Option<tokio::task::AbortHandle>,
 }
 
 /// Everything a backend needs to start producing samples.
@@ -189,6 +191,7 @@ impl SamplerHandle {
             completion: Some(completion),
             finish_timeout,
             snapshots: None,
+            producer: None,
         }
     }
 
@@ -203,6 +206,13 @@ impl SamplerHandle {
         SamplerStop {
             flag: Arc::clone(&self.stop_flag),
         }
+    }
+
+    /// Own the producer task: dropping the handle aborts it, so a session
+    /// dropped without `stop` never leaves its producer running.
+    /// [PROF-CPU-SESSIONS]
+    pub fn own_producer(&mut self, task: &tokio::task::JoinHandle<()>) {
+        self.producer = Some(task.abort_handle());
     }
 
     /// Enable backend snapshot barriers. Acknowledge only after delivering the
@@ -266,7 +276,15 @@ impl SamplerHandle {
 
 impl Drop for SamplerHandle {
     fn drop(&mut self) {
-        // Never block in Drop — the producer sees the flag and exits.
+        // Never block in Drop — the producer sees the flag and exits; an owned
+        // producer task ends now.
         self.signal_stop();
+        if let Some(producer) = self.producer.take() {
+            producer.abort();
+        }
     }
 }
+
+#[cfg(test)]
+#[path = "sampler_lifetime_tests.rs"]
+mod lifetime_tests;

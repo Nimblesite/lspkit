@@ -66,13 +66,14 @@ impl CpuBackend for DotNetCpu {
         info!(pid = config.pid, "attached to .NET process");
         let mut parts = SamplerHandle::channel(config.pid, version, FINISH_TIMEOUT);
         let snapshots = parts.handle.snapshot_requests();
-        drop(tokio::spawn(forward(
+        let forwarder = tokio::spawn(forward(
             running,
             parts.sink,
             config.duration,
             parts.done,
             snapshots,
-        )));
+        ));
+        parts.handle.own_producer(&forwarder);
         Ok(parts.handle)
     }
 }

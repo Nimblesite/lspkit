@@ -1,4 +1,4 @@
-// Tests [MEM-060-DAP-OUTPUT]: per-session DAP state leaves with its session.
+// Tests [PROF-UI-LIFETIME]: per-session DAP state leaves with its session.
 // Plain mocha: `dap-output` imports no `vscode`; the debug API is a fake.
 import * as assert from "node:assert";
 import type { DebugSessionEnds } from "../../dap-output";

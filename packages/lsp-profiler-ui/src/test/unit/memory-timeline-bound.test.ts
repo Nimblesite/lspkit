@@ -1,4 +1,4 @@
-// Tests [MEM-060-UI-LEDGERS]: per-capture state stays bounded within one long
+// Tests [PROF-UI-LIFETIME]: per-capture state stays bounded within one long
 // tracking session. Plain mocha: the module under test imports no `vscode`.
 import * as assert from "node:assert";
 import { currentTimeline, recordTimelinePoint, resetCaptureState } from "../../memory-capture-state";

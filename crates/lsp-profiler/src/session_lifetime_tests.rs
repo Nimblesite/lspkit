@@ -1,4 +1,4 @@
-//! Lifetime regressions for the CPU session registry. [MEM-060-CPU-SESSIONS]
+//! Lifetime regressions for the CPU session registry. [PROF-CPU-SESSIONS]
 //!
 //! Every recording holds a clone of its runtime, so the runtime's strong
 //! count is the number of recordings the registry still retains.

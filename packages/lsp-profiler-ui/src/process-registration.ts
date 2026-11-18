@@ -10,7 +10,7 @@ import type { ProfilerStore as Store } from "./store";
 /**
  * Register the Processes panel. The disposables own everything it created:
  * the commands, the tree view and the provider with its poll and effects, so
- * disposing the UI releases the panel. [MEM-060-UI-DISPOSE]
+ * disposing the UI releases the panel. [PROF-UI-LIFETIME]
  */
 export function registerProcessesView(store: Store): { provider: ProcessesProvider; disposables: vscode.Disposable[] } {
   const provider = new ProcessesProvider(store);

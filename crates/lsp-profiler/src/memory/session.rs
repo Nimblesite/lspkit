@@ -325,7 +325,7 @@ fn evict_oldest(sessions: &mut HashMap<String, MemorySession>) -> Vec<MemorySess
 }
 
 /// Stop sessions that left the manager without a `memory/stop`, so their
-/// backends release per-session state ([MEM-060-MEMORY-SESSIONS]).
+/// backends release per-session state ([PROF-MEMORY-SESSION]).
 async fn release(sessions: Vec<MemorySession>) {
     for session in sessions {
         let id = &session.context.session_id;

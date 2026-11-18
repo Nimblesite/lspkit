@@ -264,7 +264,7 @@ Named presets fill unset parameters: sample rate, native frames and duration. Ex
 
 `cpu.list` returns every active session with its ID, PID, runtime, version, start time, sample count and duration. A `duration` on start ends the session automatically. Its report is kept for the next `stop` or `list`.
 
-A session has ended when its duration elapsed or its producer finished, for example because the target exited. Ended sessions nobody stops are bounded: when a new session starts, all but the newest eight ended sessions leave the manager, so neither their profile data nor a dead PID's "already profiling" entry outlives them ([MEM-060-CPU-SESSIONS]). The live-progress notifier holds only a weak reference to the service, so it never keeps a dropped service alive ([MEM-060-PROGRESS-TASK]).
+A session has ended when its duration elapsed or its producer finished, for example because the target exited. Ended sessions nobody stops are bounded: when a new session starts, all but the newest eight ended sessions leave the manager, so neither their profile data nor a dead PID's "already profiling" entry outlives them. The live-progress notifier holds only a weak reference to the service, so it never keeps a dropped service alive.
 
 Recording operations serialize per session. A snapshot barrier releases the session registry before waiting, so another session's controls and progress remain available. A stop control does not wait for the recording lock before signalling its producer; stopping retires the recording exactly once, and a previously cloned request cannot resurrect it.
 
@@ -344,7 +344,7 @@ On stop, the service writes three files to the output directory:
 
 An export failure fills `export_error` and never fails the report. The `openArtifact` command opens a file through `window/showDocument`.
 
-Every artifact is named `lsp-profiler-<id>.<extension>`. After each write, the output directory keeps only the newest 32 profiler artifacts of that extension (`.speedscope.json`, `.svg`, `.cpuprofile`, `.heapprofile`); files it did not write stay ([MEM-060-ARTIFACTS]).
+Every artifact is named `lsp-profiler-<id>.<extension>`. After each write, the output directory keeps only the newest 32 profiler artifacts of that extension (`.speedscope.json`, `.svg`, `.cpuprofile`, `.heapprofile`); files it did not write stay.
 
 ### [PROF-EXPORT-VALIDATE] Validation
 
@@ -419,7 +419,7 @@ Runtimes use one of two modes:
 
 `MemorySessionManager` owns per-session state: the runtime, the PID, the baseline snapshot, leak history and the timeline. Sessions are independent of CPU sessions.
 
-A session leaves the manager through `memory.stop`, through eviction once more than 32 are open, or at service shutdown. Every path calls the backend's `stop`, so backend state such as the .NET heap graphs on disk goes with the session ([MEM-060-MEMORY-SESSIONS]).
+A session leaves the manager through `memory.stop`, through eviction once more than 32 are open, or at service shutdown. Every path calls the backend's `stop`, so backend state such as the .NET heap graphs on disk goes with the session.
 
 ### [PROF-MEMORY-START] Start
 
@@ -545,6 +545,15 @@ The library imports no editor API statically. The host passes in:
 - the debug types it may courier through.
 
 The same code then runs in any VS Code-family editor and under test fakes.
+
+### [PROF-UI-LIFETIME] Lifetimes
+
+An editor session runs for days, so nothing the library keeps grows without a bound or outlives its owner ([plan](../plans/memory-leak-fixes-0.6.0.md)):
+
+- `ProfilerUi.dispose()` disposes everything `registerProfilerUi` created, the processes tree view and its provider (with the provider's poll and effects) included.
+- A debug session's output buffer, stop-state and pending resume requests are dropped when the session terminates.
+- The memory timeline and the autopilot's capture ledger keep their newest 120 entries, matching the core timeline.
+- `FileLogSink` is capped: past its byte limit it continues in `<path>.1`, so at most two capped files stay on disk. `dispose()` closes it.
 
 ### [PROF-UI-STATE] Reactive state
 

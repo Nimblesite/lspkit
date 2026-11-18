@@ -7,7 +7,7 @@
  * because the log can contain workspace paths (defense-in-depth for
  * js/insecure-temporary-file).
  *
- * [MEM-060-LOG-SINK] A language server runs for days, so the log is capped:
+ * [PROF-UI-LIFETIME] A language server runs for days, so the log is capped:
  * past `maxBytes` it continues in the other of two files (`<path>`,
  * `<path>.1`), truncating it, so the newest output is always on disk and the
  * total stays under twice the cap. Writes run in order through one queue, so a

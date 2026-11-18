@@ -1,4 +1,4 @@
-//! Lifetime regressions for memory sessions. [MEM-060-MEMORY-SESSIONS]
+//! Lifetime regressions for memory sessions. [PROF-MEMORY-SESSION]
 //!
 //! A backend keeps per-session state (the .NET backend: a map entry and the
 //! `heap-<id>` graph directory) until its `stop` runs. Every way a session

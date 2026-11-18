@@ -178,7 +178,7 @@ export interface DebugSessionEnds {
 
 /**
  * Evict a session's output, stop-state and pending resumes when it ends, so
- * the per-session maps never outlive their sessions. [MEM-060-DAP-OUTPUT]
+ * the per-session maps never outlive their sessions. [PROF-UI-LIFETIME]
  */
 export function registerDebugOutputEviction(debug: DebugSessionEnds): { dispose: () => void } {
   return debug.onDidTerminateDebugSession((session) => { clearDebugOutput(session.id); });

@@ -1,4 +1,4 @@
-// Tests [MEM-060-UI-DISPOSE]. Runs in its own editor instance (the
+// Tests [PROF-UI-LIFETIME]. Runs in its own editor instance (the
 // `ui-teardown` entry in .vscode-test.mjs): it disposes the host UI, as a host
 // does before registering again, which would break every suite after it.
 import * as assert from "node:assert";

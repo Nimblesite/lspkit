@@ -373,7 +373,7 @@ mod tests {
     /// Virtual time a dropped session may take to release its engine.
     const ABANDON_BOUND: Duration = Duration::from_secs(60);
 
-    /// [MEM-060-DOTNET-FORWARDER] The forwarder is spawned unowned, so it must
+    /// [PROF-DOTNET-CPU] The forwarder is spawned unowned, so it must
     /// end with its consumer: a session dropped without `stop` (a dropped
     /// service, an aborted request) signals stop from `SamplerHandle::drop`.
     #[tokio::test(start_paused = true)]

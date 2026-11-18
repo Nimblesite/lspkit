@@ -44,7 +44,7 @@ const MIN_INTERVAL_SECS = 1;
 const DEFAULT_INTERVAL_SECS = 30;
 /** Milliseconds per second (interval setting is in seconds). */
 const MS_PER_SECOND = 1000;
-/** Automatic captures the e2e ledger keeps per session ([MEM-060-UI-LEDGERS]). */
+/** Automatic captures the e2e ledger keeps per session ([PROF-UI-LIFETIME]). */
 const MAX_RECORDED_CAPTURES = 120;
 
 // ── E2e ledgers ─────────────────────────────────────────────────────────────

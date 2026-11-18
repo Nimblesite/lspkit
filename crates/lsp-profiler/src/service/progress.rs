@@ -1,6 +1,6 @@
 //! Live CPU progress notifications ([PROF-CPU-PROGRESS]).
 //!
-//! [MEM-060-PROGRESS-TASK] The task holds only a weak back-reference, upgraded
+//! [PROF-CPU-PROGRESS] The task holds only a weak back-reference, upgraded
 //! per tick, so it never keeps a dropped service (and its transport) alive.
 
 use std::sync::Weak;

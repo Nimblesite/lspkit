@@ -1,4 +1,4 @@
-//! [MEM-060-ARTIFACTS]: a server that profiles for days writes a heap profile
+//! [PROF-EXPORT]: a server that profiles for days writes a heap profile
 //! per snapshot and three CPU artifacts per recording. The output directory
 //! must keep only the newest of each kind.
 

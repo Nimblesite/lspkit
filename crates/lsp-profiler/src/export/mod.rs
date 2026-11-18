@@ -17,7 +17,7 @@ use crate::aggregate::{FrameKey, ProfileData};
 use crate::wire::ProfileArtifacts;
 
 /// Artifacts of one kind (extension) kept in the output directory; older ones
-/// are removed as new ones are written. [MEM-060-ARTIFACTS]
+/// are removed as new ones are written. [PROF-EXPORT]
 pub const MAX_ARTIFACTS_PER_KIND: usize = 32;
 
 /// Identity of the profile being exported.
@@ -88,7 +88,7 @@ pub fn write_artifact(path: &Path, contents: &[u8]) -> Result<PathBuf, String> {
 
 /// Remove the oldest profiler artifacts sharing `written`'s extension beyond
 /// [`MAX_ARTIFACTS_PER_KIND`]; files the profiler did not write stay.
-/// [MEM-060-ARTIFACTS]
+/// [PROF-EXPORT]
 fn prune_kind(written: &Path) {
     let (Some(dir), Some(kind)) = (written.parent(), written.extension()) else {
         return;

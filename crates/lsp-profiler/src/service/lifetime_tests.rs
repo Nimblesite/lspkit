@@ -1,4 +1,4 @@
-//! Lifetime regressions for the service's background tasks. [MEM-060-PROGRESS-TASK]
+//! Lifetime regressions for the service's background tasks. [PROF-CPU-PROGRESS]
 //!
 //! The service is the only owner of its events transport, so once the service
 //! is dropped the test's handle must be the last strong reference.

@@ -21,7 +21,7 @@ export { ingestOutput, readFinalSnapshot, snapshotCurrentMemory } from "./memory
 export { endServerSession } from "./memory-capture-roundtrip";
 export { captureSnapshotAndDiff, presentDiff, presentSnapshot } from "./memory-capture-present";
 export type { CaptureResult } from "./memory-capture-present";
-// Per-capture ledgers keep only their newest entries ([MEM-060-UI-LEDGERS]).
+// Per-capture ledgers keep only their newest entries ([PROF-UI-LIFETIME]).
 export { appendBounded } from "./bounded-ledger";
 
 /**

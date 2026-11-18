@@ -19,7 +19,7 @@ use crate::sampler::{SampleBatch, SamplerHandle, SamplerStop};
 use crate::wire::{HotFunction, ProfileProgress, ProfileSessionInfo, StartProfileResult};
 
 /// Most recordings kept for sessions that ended but were never stopped; the
-/// oldest is dropped beyond this. [MEM-060-CPU-SESSIONS]
+/// oldest is dropped beyond this. [PROF-CPU-SESSIONS]
 pub const MAX_ENDED_SESSIONS: usize = 8;
 
 /// One active CPU session.
@@ -369,7 +369,7 @@ impl CpuSessionManager {
 /// Drop the oldest ended recordings beyond [`MAX_ENDED_SESSIONS`], so a
 /// client that never stops its sessions cannot grow the registry.
 /// A recording that is busy (locked by a snapshot or stop) is never evicted.
-/// [MEM-060-CPU-SESSIONS]
+/// [PROF-CPU-SESSIONS]
 fn evict_ended(sessions: &mut HashMap<String, Arc<SessionEntry>>) {
     let mut ended: Vec<(Instant, String)> = sessions
         .iter()

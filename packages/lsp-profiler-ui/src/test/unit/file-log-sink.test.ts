@@ -1,4 +1,4 @@
-// Tests [MEM-060-LOG-SINK]: the file log stays bounded on disk and its stream
+// Tests [PROF-UI-LIFETIME]: the file log stays bounded on disk and its stream
 // closes on dispose. Plain mocha: the sink imports only `node:fs`.
 import * as assert from "node:assert";
 import * as fs from "node:fs/promises";

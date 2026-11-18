@@ -608,7 +608,6 @@ name = "lspkit-server"
 version = "0.0.0-dev"
 dependencies = [
  "async-trait",
- "futures-core",
  "futures-util",
  "lsp-types",
  "lspkit",

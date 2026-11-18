@@ -90,6 +90,27 @@ fn register_metadata(server: &Server, state: Arc<HandlerState>) {
         .register("shutdown", |_, _| async { HandlerResult::Ok(Value::Null) });
 }
 
+/// Release `uri`'s Salsa input and memo unless the session still tracks it:
+/// nothing else would ever close it. [MEM-060-PULL-ADMIT]
+pub(crate) fn release_untracked(sources: &Sources, pull: &PullStore, uri: &str) {
+    if analysis::tracked(sources, uri) {
+        return;
+    }
+    if let Err(error) = pull.forget(uri) {
+        tracing::warn!(%error, "untracked document memo release failed");
+    }
+}
+
+/// Release every changed file that left the workspace, e.g. a deletion.
+pub(super) fn release_changed(server: &Server, params: &Value) {
+    let changes = params.get("changes").and_then(Value::as_array);
+    changes
+        .into_iter()
+        .flatten()
+        .filter_map(|change| change.get("uri").and_then(Value::as_str))
+        .for_each(|uri| release_untracked(&server.sources, &server.pull, uri));
+}
+
 /// Release the editor-owned buffer at the actual close notification boundary.
 pub(super) fn close_document(server: &Server, params: Value) {
     let Ok(params) = serde_json::from_value::<lsp_types::DidCloseTextDocumentParams>(params) else {

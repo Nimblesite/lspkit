@@ -75,6 +75,28 @@ fn document_text(sources: &Sources, uri: &str) -> Result<String, AnalysisError> 
         .map_err(|error| AnalysisError(format!("document read failed: {error}")))
 }
 
+/// Whether the session still tracks `uri`: an open document, or a JSON file
+/// in the watched root, as the workspace scan lists them. [MEM-060-PULL-ADMIT]
+pub(super) fn tracked(sources: &Sources, uri: &str) -> bool {
+    let open = sources
+        .documents
+        .lock()
+        .is_ok_and(|documents| documents.contains_key(uri));
+    open || in_root(sources, uri)
+}
+
+/// Whether `uri` names an existing JSON file directly inside the watched root.
+fn in_root(sources: &Sources, uri: &str) -> bool {
+    let Some(root) = sources.root.lock().ok().and_then(|root| root.clone()) else {
+        return false;
+    };
+    uri_to_path(uri).is_ok_and(|path| {
+        path.parent() == Some(root.as_path())
+            && path.extension().is_some_and(|ext| ext == "json")
+            && path.is_file()
+    })
+}
+
 /// The synchronized version of `uri`, or 0 for unopened documents.
 pub(super) fn document_version(sources: &Sources, uri: &str) -> i32 {
     sources

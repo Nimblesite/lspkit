@@ -23,9 +23,12 @@ use crate::{ingress, scan};
 
 mod handlers;
 mod tasks;
+pub(super) use handlers::release_untracked;
 use handlers::{register_handlers, HandlerState};
 use tasks::Tasks;
 
+#[cfg(test)]
+mod admit_retention;
 #[cfg(test)]
 mod memory_retention;
 #[cfg(test)]
@@ -142,6 +145,7 @@ fn handle_notification(server: &Server, message: &Message) -> bool {
         "workspace/didChangeWatchedFiles" => {
             ingress::changed(&server.dispatcher.cancellation_handle(), &params);
             server.pull.invalidate();
+            handlers::release_changed(server, &params);
         }
         _ => {}
     }
@@ -419,10 +423,10 @@ fn document_pull(
     version: i32,
     cancel: &CancellationToken,
 ) -> HandlerResult {
-    match server
-        .pull
-        .diagnostics_cancellable(&params.text_document.uri, version, cancel)
-    {
+    let uri = &params.text_document.uri;
+    let pulled = server.pull.diagnostics_cancellable(uri, version, cancel);
+    handlers::release_untracked(&server.sources, &server.pull, uri);
+    match pulled {
         Ok(report) => match document_report(&report, params.previous_result_id.as_deref()) {
             Ok(value) => HandlerResult::Ok(value),
             Err(error) => HandlerResult::Err(error),

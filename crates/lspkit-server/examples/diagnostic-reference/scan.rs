@@ -167,7 +167,9 @@ fn scan_document(
 ) -> Result<(), ScanError> {
     let version = analysis::document_version(&server.sources, uri);
     let previous = previous_identity(params, uri);
-    let report = server.pull.diagnostics(uri, version).map_err(scan_error)?;
+    let report = server.pull.diagnostics(uri, version);
+    crate::session::release_untracked(&server.sources, &server.pull, uri);
+    let report = report.map_err(scan_error)?;
     let mut item = document_report(&report, previous).map_err(ScanError::Request)?;
     stamp_document(&mut item, uri, version).map_err(ScanError::Request)?;
     if let Some(token) = &params.partial_result_token {

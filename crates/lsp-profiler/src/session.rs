@@ -18,6 +18,10 @@ use crate::runtime::Runtime;
 use crate::sampler::{SampleBatch, SamplerHandle, SamplerStop};
 use crate::wire::{HotFunction, ProfileProgress, ProfileSessionInfo, StartProfileResult};
 
+/// Most recordings kept for sessions that ended but were never stopped; the
+/// oldest is dropped beyond this. [MEM-060-CPU-SESSIONS]
+pub const MAX_ENDED_SESSIONS: usize = 8;
+
 /// One active CPU session.
 struct CpuSession {
     /// Public identifier used by progress, snapshot, listing, and stop requests.
@@ -82,11 +86,14 @@ impl CpuSession {
             .as_secs_f64()
     }
 
-    /// True once a requested duration has elapsed: the session ended by itself
-    /// and only its recording remains, kept for the next `stop` ([PROF-CPU-SESSIONS]).
+    /// True once a requested duration has elapsed or the producer is gone (its
+    /// target exited): the session ended by itself and only its recording
+    /// remains, kept for the next `stop` ([PROF-CPU-SESSIONS]).
     fn ended(&self) -> bool {
-        self.limit
-            .is_some_and(|limit| self.started_at.elapsed() >= limit)
+        self.sampler.receiver.is_closed()
+            || self
+                .limit
+                .is_some_and(|limit| self.started_at.elapsed() >= limit)
     }
 
     /// Seconds one batch represents when the backend gives no weight.
@@ -252,7 +259,9 @@ impl CpuSessionManager {
             stop: session.sampler.stop_control(),
             state: Mutex::new(Some(session)),
         });
-        let _ = self.sessions.lock().await.insert(session_id, entry);
+        let mut sessions = self.sessions.lock().await;
+        let _ = sessions.insert(session_id, entry);
+        evict_ended(&mut sessions);
     }
 
     /// Stop a session, wait for its producer's last batch, and return the recording.
@@ -357,6 +366,34 @@ impl CpuSessionManager {
     }
 }
 
+/// Drop the oldest ended recordings beyond [`MAX_ENDED_SESSIONS`], so a
+/// client that never stops its sessions cannot grow the registry.
+/// A recording that is busy (locked by a snapshot or stop) is never evicted.
+/// [MEM-060-CPU-SESSIONS]
+fn evict_ended(sessions: &mut HashMap<String, Arc<SessionEntry>>) {
+    let mut ended: Vec<(Instant, String)> = sessions
+        .iter()
+        .filter_map(|(id, entry)| ended_at(entry).map(|started| (started, id.clone())))
+        .collect();
+    ended.sort_unstable();
+    let excess = ended.len().saturating_sub(MAX_ENDED_SESSIONS);
+    for (_, id) in ended.into_iter().take(excess) {
+        if let Some(entry) = sessions.remove(&id) {
+            entry.stop.request();
+            debug!(session_id = %id, "dropped an ended recording that was never stopped");
+        }
+    }
+}
+
+/// When an idle, ended session started; `None` while it records or is busy.
+fn ended_at(entry: &SessionEntry) -> Option<Instant> {
+    let state = entry.state.try_lock().ok()?;
+    state
+        .as_ref()
+        .filter(|session| session.ended())
+        .map(|session| session.started_at)
+}
+
 /// A unique identifier: `<prefix>-<8 hex>-<sequence hex>`.
 #[must_use]
 pub fn mint_id(prefix: &str, sequence: u64) -> String {
@@ -390,6 +427,10 @@ fn hottest_by_self(functions: &[HotFunction]) -> Option<String> {
         })
         .map(|hot| hot.name.clone())
 }
+
+#[cfg(test)]
+#[path = "session_lifetime_tests.rs"]
+mod lifetime_tests;
 
 #[cfg(test)]
 mod tests {

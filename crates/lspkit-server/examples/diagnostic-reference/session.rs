@@ -297,10 +297,12 @@ fn sync_kind(kind: TextSync) -> u8 {
 
 /// Schedule a request; the workspace scan streams through a reply gate.
 fn schedule(server: &Server, id: RequestId, method: &str, params: Value, tasks: &mut Tasks) {
-    if let Err(error) = ingress::register(&server.dispatcher, id.clone(), method, &params) {
-        respond_error(server, id, JsonRpcError::new(-32603, error.to_string()));
-        return;
-    }
+    let _queued = match ingress::register(&server.dispatcher, id.clone(), method, &params) {
+        Ok(queued) => queued,
+        Err(error) => {
+            return respond_error(server, id, JsonRpcError::new(-32603, error.to_string()));
+        }
+    };
     if method == WORKSPACE_DIAGNOSTIC {
         schedule_scan(server, id, params, tasks);
     } else {

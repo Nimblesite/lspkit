@@ -1,14 +1,18 @@
 //! Consumer-owned input identities share the one registry. [LSP-PULL-CANCELLATION]
-use lspkit_server::{CancellationHandle, DispatchError, Dispatcher, RequestId, RequestInterest};
+use lspkit_server::{
+    CancellationHandle, DispatchError, Dispatcher, QueuedRequest, RequestId, RequestInterest,
+};
 use serde_json::Value;
 
-/// Register before preparation; the returned future adopts this queued control.
+/// Register before preparation; the prepared future adopts this queued
+/// control. Hold the guard until then: dropping it releases a request that
+/// was never prepared. [MEM-060-QUEUED-REQUEST]
 pub(super) fn register(
     dispatcher: &Dispatcher,
     id: RequestId,
     method: &str,
     params: &Value,
-) -> Result<(), DispatchError> {
+) -> Result<Option<QueuedRequest>, DispatchError> {
     let handle = dispatcher.cancellation_handle();
     if method == "initialize" {
         handle.supersede_all();
@@ -21,9 +25,9 @@ pub(super) fn register(
             | "textDocument/diagnostic"
             | "workspace/diagnostic"
     ) {
-        handle.register(id, interest(method, params))?;
+        return handle.queue(id, interest(method, params)).map(Some);
     }
-    Ok(())
+    Ok(None)
 }
 
 /// Opaque previous identities describe interest; they never become another result cache.

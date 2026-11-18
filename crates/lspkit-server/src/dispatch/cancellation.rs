@@ -3,7 +3,9 @@ use std::sync::{Arc, Weak};
 
 use serde_json::Value;
 
-use super::{Cancellations, DispatchError, RequestControl, RequestId, RequestInterest};
+use super::{
+    Cancellations, DispatchError, QueuedRequest, RequestControl, RequestId, RequestInterest,
+};
 
 /// Weak access to the dispatcher's sole registry; does not retain the server or its handlers.
 #[derive(Clone, Debug)]
@@ -40,6 +42,30 @@ impl CancellationHandle {
         };
         register(&mut guard, id, interest);
         Ok(())
+    }
+
+    /// [`register`](Self::register) `id` and own the queued control: dropping
+    /// the guard releases it unless a prepared request adopted it.
+    /// [MEM-060-QUEUED-REQUEST]
+    ///
+    /// # Errors
+    /// Returns a registration error if the registry is unavailable.
+    pub fn queue(
+        &self,
+        id: RequestId,
+        interest: Option<RequestInterest>,
+    ) -> Result<QueuedRequest, DispatchError> {
+        let control = match self.registry.upgrade() {
+            Some(registry) => {
+                let Ok(mut guard) = registry.write() else {
+                    return Err(DispatchError::RegistrationPoisoned(id));
+                };
+                register(&mut guard, id.clone(), interest);
+                guard.get(&id).map_or_else(Weak::new, Arc::downgrade)
+            }
+            None => Weak::new(),
+        };
+        Ok(QueuedRequest::new(id, control, Weak::clone(&self.registry)))
     }
 
     /// Cancel an already registered request from a protocol-reader thread.

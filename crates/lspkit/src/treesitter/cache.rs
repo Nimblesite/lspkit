@@ -1,12 +1,14 @@
 //! Content-hash-keyed parse cache.
 //!
 //! Parse trees are cached by `(language_name, content_hash)`. Repeated parses
-//! of identical source bytes return the cached tree directly. Cache eviction
-//! is the caller's responsibility — pass `clear()` between sessions.
+//! of identical source bytes return the cached tree directly. The cache keeps
+//! at most [`MAX_TREES`] trees and evicts the oldest first, so editing a
+//! document never leaves one tree per version behind. [MEM-060-PARSE-CACHE]
 
 use std::collections::hash_map::DefaultHasher;
+use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use dashmap::DashMap;
 use tree_sitter::{Language, Parser, Tree};
@@ -33,11 +35,19 @@ impl ContentHash {
     }
 }
 
+/// Most trees one cache keeps; older trees are evicted first.
+pub const MAX_TREES: usize = 128;
+
+/// Cache key: language identity and exact source-content hash.
+type Key = (String, ContentHash);
+
 /// Concurrent parse cache.
 #[derive(Default, Clone)]
 pub struct ParseCache {
     /// Trees shared by language identity and exact source-content hash.
-    entries: Arc<DashMap<(String, ContentHash), Arc<Tree>>>,
+    entries: Arc<DashMap<Key, Arc<Tree>>>,
+    /// Keys in insertion order, oldest first; the eviction boundary.
+    order: Arc<Mutex<VecDeque<Key>>>,
 }
 
 impl ParseCache {
@@ -69,22 +79,28 @@ impl ParseCache {
     }
 
     /// A native parse without a tree must never populate the shared cache.
-    fn store(
-        &self,
-        key: (String, ContentHash),
-        tree: Option<Tree>,
-    ) -> Result<Arc<Tree>, ParserError> {
+    fn store(&self, key: Key, tree: Option<Tree>) -> Result<Arc<Tree>, ParserError> {
         let Some(tree) = tree else {
             return Err(ParserError::NoTree(key.0));
         };
         let arc = Arc::new(tree);
+        let mut order = self.order.lock().unwrap_or_else(PoisonError::into_inner);
         // Racing parsers may replace an equivalent tree; either tree remains valid.
-        let _ = self.entries.insert(key, Arc::clone(&arc));
+        if self.entries.insert(key.clone(), Arc::clone(&arc)).is_none() {
+            order.push_back(key);
+        }
+        while order.len() > MAX_TREES {
+            if let Some(oldest) = order.pop_front() {
+                let _evicted = self.entries.remove(&oldest);
+            }
+        }
         Ok(arc)
     }
 
     /// Drop all cached trees.
     pub fn clear(&self) {
+        let mut order = self.order.lock().unwrap_or_else(PoisonError::into_inner);
+        order.clear();
         self.entries.clear();
     }
 

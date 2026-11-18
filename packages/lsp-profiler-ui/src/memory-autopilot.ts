@@ -25,7 +25,7 @@ import { effect } from "@preact/signals-core";
 import { Logger } from "./logger";
 import type { ProfilerStore as Store } from "./store";
 import { withUserProgress } from "./progress-ops";
-import { captureSnapshotAndDiff, isDirectMemorySession, isMemoryOperationInFlight } from "./memory-capture";
+import { appendBounded, captureSnapshotAndDiff, isDirectMemorySession, isMemoryOperationInFlight } from "./memory-capture";
 import { isDebuggeePaused, onDebuggeePaused } from "./debuggee-pause";
 import type { LeakConfidence, MemoryDiffResult, SuspectedLeak } from "./memory-decorations";
 import { confidenceRank } from "./memory-decorations";
@@ -44,6 +44,8 @@ const MIN_INTERVAL_SECS = 1;
 const DEFAULT_INTERVAL_SECS = 30;
 /** Milliseconds per second (interval setting is in seconds). */
 const MS_PER_SECOND = 1000;
+/** Automatic captures the e2e ledger keeps per session ([PROF-UI-LIFETIME]). */
+const MAX_RECORDED_CAPTURES = 120;
 
 // ── E2e ledgers ─────────────────────────────────────────────────────────────
 // Same observability pattern as recordedOperations()/appliedMemoryDecorations():
@@ -245,12 +247,13 @@ async function runAutoCapture(store: Store, trigger: "pause" | "interval"): Prom
 function recordCapture(trigger: "pause" | "interval", diff: MemoryDiffResult | null): void {
   const leaks = diff?.suspectedLeaks ?? [];
   const worst = leakToOffer(leaks);
-  autopilotCaptures.push({
+  const capture: AutopilotCapture = {
     trigger,
     suspectedLeakCount: leaks.length,
     maxConfidence: worst?.confidence ?? "none",
     leakLines: leaks.map((leak) => leak.line),
-  });
+  };
+  appendBounded(autopilotCaptures, capture, MAX_RECORDED_CAPTURES);
   Logger.info(
     `[Memory] autopilot capture (${trigger}): ${String(leaks.length)} suspected leak(s), ` +
     `max confidence ${worst?.confidence ?? "none"}`,

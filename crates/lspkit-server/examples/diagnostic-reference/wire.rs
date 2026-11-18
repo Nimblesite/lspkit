@@ -1,6 +1,6 @@
 //! Serialized message egress for the LSP session. [LSP-PULL-CANCELLATION]
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,6 +8,9 @@ use lspkit_server::{Message, MessageWriter};
 use tokio::io::Stdout;
 use tokio::sync::mpsc;
 use tokio::sync::Notify;
+
+/// The watcher's unsolicited notification.
+pub(super) const WORKSPACE_CHANGED: &str = "$/referenceWorkspaceChanged";
 
 /// Egress failed because the writer pump has stopped.
 #[derive(Debug, thiserror::Error)]
@@ -28,6 +31,8 @@ pub(super) struct Outbox {
     pending: Arc<AtomicUsize>,
     /// Wake-up signal for `quiesce` and `flush` waiters.
     idle: Arc<Notify>,
+    /// A workspace-change notification is queued and not yet dequeued.
+    change_queued: Arc<AtomicBool>,
 }
 
 impl Outbox {
@@ -39,6 +44,7 @@ impl Outbox {
             written: Arc::new(AtomicUsize::new(0)),
             pending: Arc::new(AtomicUsize::new(0)),
             idle: Arc::new(Notify::new()),
+            change_queued: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -46,6 +52,26 @@ impl Outbox {
     pub(super) fn send(&self, message: Message) -> Result<(), EgressClosed> {
         let _ = self.sent.fetch_add(1, Ordering::AcqRel);
         self.inbox.send(message).map_err(|_message| EgressClosed)
+    }
+
+    /// Tell the editor the workspace changed. One queued notification covers
+    /// every change until the pump dequeues it, so a stalled editor never
+    /// accumulates them. [MEM-060-EXAMPLE-OUTBOX]
+    pub(super) fn send_workspace_changed(&self) -> Result<(), EgressClosed> {
+        if self.change_queued.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        self.send(Message::notification(
+            WORKSPACE_CHANGED,
+            serde_json::json!({}),
+        ))
+    }
+
+    /// Note a dequeued frame: a change after a dequeued notification needs a new one.
+    fn record_dequeue(&self, message: &Message) {
+        if message.method.as_deref() == Some(WORKSPACE_CHANGED) {
+            self.change_queued.store(false, Ordering::Release);
+        }
     }
 
     /// Mark one spawned request as awaiting its terminal reply.
@@ -100,6 +126,7 @@ pub(super) async fn pump(
     outbox: Outbox,
 ) {
     while let Some(message) = inbox.recv().await {
+        outbox.record_dequeue(&message);
         if writer.write_message(&message).await.is_err() {
             tracing::error!("reference stdout closed");
             return;

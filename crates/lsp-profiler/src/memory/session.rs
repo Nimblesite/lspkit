@@ -24,6 +24,10 @@ use crate::diagnostics::DiagnosticStyle;
 use crate::runtime::{MemoryContext, Runtime};
 use crate::wire::{FileDiagnostics, HeapDiff, HeapSnapshot, MemoryOutcome, MemoryResult};
 
+#[cfg(test)]
+#[path = "session_lifetime_tests.rs"]
+mod lifetime_tests;
+
 /// Sessions kept at once; the oldest is evicted beyond this.
 const MAX_SESSIONS: usize = 32;
 /// Allocation sites per snapshot when the request does not say.
@@ -115,9 +119,12 @@ impl MemorySessionManager {
             snapshot_count: 0,
             gate: StepGate::new(),
         };
-        let mut sessions = self.sessions.lock().await;
-        let _ = sessions.insert(context.session_id.clone(), session);
-        evict_oldest(&mut sessions);
+        let evicted = {
+            let mut sessions = self.sessions.lock().await;
+            let _ = sessions.insert(context.session_id.clone(), session);
+            evict_oldest(&mut sessions)
+        };
+        release(evicted).await;
         context
     }
 
@@ -179,6 +186,13 @@ impl MemorySessionManager {
     /// Close a session.
     pub async fn close(&self, session_id: &str) {
         let _ = self.sessions.lock().await.remove(session_id);
+    }
+
+    /// Close every session and stop each in its backend. Call on shutdown.
+    pub async fn stop_all(&self) {
+        let drained: Vec<MemorySession> =
+            self.sessions.lock().await.drain().map(|(_, s)| s).collect();
+        release(drained).await;
     }
 
     /// Parse evaluated courier output with the session's runtime, then score it.
@@ -293,18 +307,33 @@ impl MemorySession {
     }
 }
 
-/// Evict the oldest sessions beyond [`MAX_SESSIONS`].
-fn evict_oldest(sessions: &mut HashMap<String, MemorySession>) {
+/// Remove the oldest sessions beyond [`MAX_SESSIONS`]; returns them so their
+/// backends can be stopped once the map lock is released.
+fn evict_oldest(sessions: &mut HashMap<String, MemorySession>) -> Vec<MemorySession> {
+    let mut evicted = Vec::new();
     while sessions.len() > MAX_SESSIONS {
         let oldest = sessions
             .values()
             .min_by_key(|s| s.started_at)
             .map(|s| s.context.session_id.clone());
-        match oldest {
-            Some(id) => {
-                let _ = sessions.remove(&id);
-            }
-            None => return,
+        match oldest.and_then(|id| sessions.remove(&id)) {
+            Some(session) => evicted.push(session),
+            None => break,
+        }
+    }
+    evicted
+}
+
+/// Stop sessions that left the manager without a `memory/stop`, so their
+/// backends release per-session state ([PROF-MEMORY-SESSION]).
+async fn release(sessions: Vec<MemorySession>) {
+    for session in sessions {
+        let id = &session.context.session_id;
+        let Some(backend) = session.runtime.memory() else {
+            continue;
+        };
+        if let Err(error) = backend.stop(&session.context).await {
+            tracing::warn!(session_id = %id, %error, "cannot stop an evicted memory session");
         }
     }
 }

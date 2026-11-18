@@ -3,7 +3,8 @@
 //! assertion observes retained registry entries, not transient RSS or errors.
 
 use lspkit_server::{
-    CancellationHandle, DispatchError, Dispatcher, HandlerResult, RequestId, RequestInterest,
+    CancellationHandle, DispatchError, Dispatcher, HandlerResult, QueuedRequest, RequestId,
+    RequestInterest,
 };
 use serde_json::Value;
 
@@ -82,4 +83,57 @@ fn dropped_futures_release_pre_registered_interest() {
         drop(future);
     }
     assert_released(&dispatcher, &known_dispatcher());
+}
+
+/// Queue owned heap strings through the public protocol handle.
+fn queue(handle: &CancellationHandle) -> Result<Vec<QueuedRequest>, DispatchError> {
+    (0..REQUESTS)
+        .map(|id| {
+            let interest = RequestInterest {
+                method: KNOWN_METHOD.to_owned(),
+                resource: format!("file:///memory-audit/{id}"),
+                input: Some("x".repeat(INPUT_BYTES)),
+            };
+            handle.queue(RequestId::Number(id), Some(interest))
+        })
+        .collect()
+}
+
+/// [MEM-060-QUEUED-REQUEST] A consumer that rejects a queued request itself.
+#[test]
+fn queued_requests_abandoned_before_prepare_release_their_interest() {
+    let dispatcher = known_dispatcher();
+    let queued = queue(&dispatcher.cancellation_handle()).expect("queue the requests");
+    assert_eq!(i64::try_from(queued.len()).ok(), Some(REQUESTS));
+    assert!(format!("{dispatcher:?}").contains(&format!("in_flight: {REQUESTS}")));
+    drop(queued);
+    assert_released(&dispatcher, &known_dispatcher());
+}
+
+/// [MEM-060-QUEUED-REQUEST] A held guard keeps a queued cancellation for the
+/// prepared request, which then releases it on completion.
+#[tokio::test]
+async fn a_held_queue_guard_keeps_queued_cancellation_until_prepared() {
+    let dispatcher = Dispatcher::new();
+    dispatcher.register(KNOWN_METHOD, |_params, cancel| async move {
+        HandlerResult::Ok(Value::Bool(cancel.is_cancelled()))
+    });
+    let handle = dispatcher.cancellation_handle();
+    for guard in queue(&handle).expect("queue the requests") {
+        handle.cancel(guard.id());
+        let future = dispatcher
+            .prepare(guard.id().clone(), KNOWN_METHOD, Value::Null)
+            .expect("known method prepares");
+        drop(guard);
+        let result = future.await;
+        assert!(
+            matches!(&result, HandlerResult::Ok(Value::Bool(true))),
+            "the queued cancellation reached the prepared request: {result:?}"
+        );
+    }
+    assert_eq!(
+        format!("{dispatcher:?}"),
+        "Dispatcher { handlers: 1, in_flight: 0 }",
+        "completed requests released their queued controls"
+    );
 }

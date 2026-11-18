@@ -5,6 +5,7 @@
 
 import * as vscode from "vscode";
 import { debugType } from "./ids";
+import { registerDebugOutputEviction } from "./dap-output";
 import { isRecord } from "./unknown-shape";
 
 type SessionListener = (sessionId: string) => void;
@@ -24,6 +25,7 @@ export function registerDebuggeePauseTracking(): vscode.Disposable[] {
         onWillStopSession: () => { paused.delete(session.id); },
       }),
     }),
+    registerDebugOutputEviction(vscode.debug),
     { dispose: disposeDebuggeePauseTracking },
   ];
 }

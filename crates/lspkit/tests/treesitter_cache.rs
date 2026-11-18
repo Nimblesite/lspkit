@@ -168,3 +168,49 @@ fn content_hash_is_hashable() {
     assert!(!set.insert(ContentHash::of(b"one")));
     assert_eq!(set.len(), 2);
 }
+
+/// Edits a document this many times; every edit is new content.
+const EDITED_VERSIONS: usize = 512;
+
+/// [MEM-060-PARSE-CACHE] A long session parses every edited version of every
+/// document. Old versions must leave the cache, or it keeps one tree per
+/// keystroke for the life of the server.
+#[test]
+fn edited_versions_leave_the_cache_so_it_never_grows_per_keystroke() {
+    let cache = ParseCache::new();
+    let language = rust_language();
+    let first = cache
+        .parse("rust", &language, b"fn version_0() {}")
+        .expect("first version parses");
+    let first_tree = Arc::downgrade(&first);
+    drop(first);
+
+    let mut newest = None;
+    for version in 1..EDITED_VERSIONS {
+        let source = format!("fn version_{version}() {{}}");
+        newest = Some(
+            cache
+                .parse("rust", &language, source.as_bytes())
+                .expect("edit parses"),
+        );
+    }
+
+    assert!(
+        cache.len() * 2 < EDITED_VERSIONS,
+        "{} trees kept for {EDITED_VERSIONS} edits",
+        cache.len()
+    );
+    assert!(
+        first_tree.upgrade().is_none(),
+        "the first version's tree outlives every edit after it"
+    );
+    let newest = newest.expect("at least one edit");
+    let last = format!("fn version_{}() {{}}", EDITED_VERSIONS - 1);
+    let again = cache
+        .parse("rust", &language, last.as_bytes())
+        .expect("newest version parses");
+    assert!(
+        Arc::ptr_eq(&newest, &again),
+        "the newest version stays cached"
+    );
+}

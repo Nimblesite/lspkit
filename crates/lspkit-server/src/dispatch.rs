@@ -15,9 +15,11 @@ use crate::jsonrpc::{JsonRpcError, RequestId};
 
 mod cancellation;
 mod interest;
+mod queued;
 pub use cancellation::CancellationHandle;
 use interest::RequestControl;
 pub use interest::RequestInterest;
+pub use queued::QueuedRequest;
 
 /// Sole registry connecting protocol cancellation to queued and executing work.
 type Cancellations = RwLock<HashMap<RequestId, Arc<RequestControl>>>;

@@ -369,4 +369,21 @@ mod tests {
         );
         assert_eq!(other, SamplerError::AttachFailed("boom".to_owned()));
     }
+
+    /// Virtual time a dropped session may take to release its engine.
+    const ABANDON_BOUND: Duration = Duration::from_secs(60);
+
+    /// [PROF-DOTNET-CPU] The forwarder is spawned unowned, so it must
+    /// end with its consumer: a session dropped without `stop` (a dropped
+    /// service, an aborted request) signals stop from `SamplerHandle::drop`.
+    #[tokio::test(start_paused = true)]
+    async fn a_dropped_session_ends_the_wait_for_stop() -> Result<(), String> {
+        let parts = SamplerHandle::channel(42, String::new(), FINISH_TIMEOUT);
+        drop(parts.handle);
+        tokio::time::timeout(ABANDON_BOUND, wait_for_stop(&parts.sink, None))
+            .await
+            .map_err(|_elapsed| {
+                "the forwarder keeps the engine sampling for a session that was dropped".to_owned()
+            })
+    }
 }

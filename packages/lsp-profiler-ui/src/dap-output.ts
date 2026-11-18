@@ -170,3 +170,21 @@ export function clearDebugOutput(sessionId: string): void {
   stoppedThreads.delete(sessionId);
   pendingResumes.delete(sessionId);
 }
+
+/** The slice of `vscode.debug` that reports a session ending. */
+export interface DebugSessionEnds {
+  onDidTerminateDebugSession: (listener: (session: { readonly id: string }) => void) => { dispose: () => void };
+}
+
+/**
+ * Evict a session's output, stop-state and pending resumes when it ends, so
+ * the per-session maps never outlive their sessions. [PROF-UI-LIFETIME]
+ */
+export function registerDebugOutputEviction(debug: DebugSessionEnds): { dispose: () => void } {
+  return debug.onDidTerminateDebugSession((session) => { clearDebugOutput(session.id); });
+}
+
+/** Sessions with any retained output, stop-state or pending resume (test seam). */
+export function debugSessionStateCount(): number {
+  return new Set([...buffers.keys(), ...stoppedThreads.keys(), ...pendingResumes.keys()]).size;
+}

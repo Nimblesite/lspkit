@@ -22,12 +22,21 @@ use crate::wire::{pump, Outbox};
 use crate::{ingress, scan};
 
 mod handlers;
+mod tasks;
+pub(super) use handlers::release_untracked;
 use handlers::{register_handlers, HandlerState};
+use tasks::Tasks;
 
+#[cfg(test)]
+mod admit_retention;
 #[cfg(test)]
 mod memory_retention;
 #[cfg(test)]
+mod outbox_retention;
+#[cfg(test)]
 mod pull_memory_retention;
+#[cfg(test)]
+mod task_retention;
 #[cfg(test)]
 mod watch_memory_retention;
 
@@ -82,8 +91,10 @@ pub(super) async fn serve() -> std::process::ExitCode {
         lspkit_server::MessageWriter::new(tokio::io::stdout()),
         outbox.clone(),
     ));
-    let outcome = read_loop(&server).await;
+    let mut tasks = Tasks::default();
+    let outcome = read_loop(&server, &mut tasks).await;
     outbox.quiesce().await;
+    drop(tasks);
     match outcome {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
@@ -94,7 +105,7 @@ pub(super) async fn serve() -> std::process::ExitCode {
 }
 
 /// Read framed messages until `exit` or EOF. EOF is a clean shutdown.
-async fn read_loop(server: &Server) -> Result<(), FramingError> {
+async fn read_loop(server: &Server, tasks: &mut Tasks) -> Result<(), FramingError> {
     let mut stdin = BufReader::new(tokio::io::stdin());
     loop {
         let message = match read_message(&mut stdin).await {
@@ -107,7 +118,13 @@ async fn read_loop(server: &Server) -> Result<(), FramingError> {
         }
         if let (Some(id), Some(method)) = (message.id.clone(), message.method.clone()) {
             // Dispatcher preparation registers cancellation before spawning work.
-            schedule(server, id, &method, message.params.unwrap_or(Value::Null));
+            schedule(
+                server,
+                id,
+                &method,
+                message.params.unwrap_or(Value::Null),
+                tasks,
+            );
         }
     }
 }
@@ -130,6 +147,7 @@ fn handle_notification(server: &Server, message: &Message) -> bool {
         "workspace/didChangeWatchedFiles" => {
             ingress::changed(&server.dispatcher.cancellation_handle(), &params);
             server.pull.invalidate();
+            handlers::release_changed(server, &params);
         }
         _ => {}
     }
@@ -280,24 +298,32 @@ fn sync_kind(kind: TextSync) -> u8 {
 }
 
 /// Schedule a request; the workspace scan streams through a reply gate.
-fn schedule(server: &Server, id: RequestId, method: &str, params: Value) {
-    if let Err(error) = ingress::register(&server.dispatcher, id.clone(), method, &params) {
-        respond_error(server, id, JsonRpcError::new(-32603, error.to_string()));
-        return;
-    }
+fn schedule(server: &Server, id: RequestId, method: &str, params: Value, tasks: &mut Tasks) {
+    let _queued = match ingress::register(&server.dispatcher, id.clone(), method, &params) {
+        Ok(queued) => queued,
+        Err(error) => {
+            return respond_error(server, id, JsonRpcError::new(-32603, error.to_string()));
+        }
+    };
     if method == WORKSPACE_DIAGNOSTIC {
-        schedule_scan(server, id, params);
+        schedule_scan(server, id, params, tasks);
     } else {
-        schedule_request(server, id, method, params);
+        schedule_request(server, id, method, params, tasks);
     }
 }
 
 /// Schedule an ordinary handler-backed request.
-fn schedule_request(server: &Server, id: RequestId, method: &str, params: Value) {
+fn schedule_request(
+    server: &Server,
+    id: RequestId,
+    method: &str,
+    params: Value,
+    tasks: &mut Tasks,
+) {
     match server.dispatcher.prepare(id.clone(), method, params) {
         Ok(future) => {
             server.outbox.begin_request();
-            drop(tokio::spawn(respond(server.clone(), id, future)));
+            tasks.spawn(respond(server.clone(), id, future));
         }
         Err(DispatchError::UnknownMethod(unknown)) => respond_error(
             server,
@@ -309,7 +335,7 @@ fn schedule_request(server: &Server, id: RequestId, method: &str, params: Value)
 }
 
 /// Schedule the workspace scan behind a per-request reply gate.
-fn schedule_scan(server: &Server, id: RequestId, params: Value) {
+fn schedule_scan(server: &Server, id: RequestId, params: Value, tasks: &mut Tasks) {
     let gate = ReplyGate::default();
     let scan_server = server.clone();
     let scan_gate = gate.clone();
@@ -322,7 +348,7 @@ fn schedule_scan(server: &Server, id: RequestId, params: Value) {
         Ok(future) => {
             remember_gate(server, &id, gate);
             server.outbox.begin_request();
-            drop(tokio::spawn(respond(server.clone(), id, future)));
+            tasks.spawn(respond(server.clone(), id, future));
         }
         Err(error) => respond_error(server, id, JsonRpcError::new(-32603, error.to_string())),
     }
@@ -401,10 +427,10 @@ fn document_pull(
     version: i32,
     cancel: &CancellationToken,
 ) -> HandlerResult {
-    match server
-        .pull
-        .diagnostics_cancellable(&params.text_document.uri, version, cancel)
-    {
+    let uri = &params.text_document.uri;
+    let pulled = server.pull.diagnostics_cancellable(uri, version, cancel);
+    handlers::release_untracked(&server.sources, &server.pull, uri);
+    match pulled {
         Ok(report) => match document_report(&report, params.previous_result_id.as_deref()) {
             Ok(value) => HandlerResult::Ok(value),
             Err(error) => HandlerResult::Err(error),

@@ -4,7 +4,7 @@
 //! atomically per generation. The LSP sink calls `publishDiagnostics`; the
 //! MCP sink emits resource-update notifications.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use async_trait::async_trait;
 use lspkit::vfs::DocumentUri;
@@ -129,6 +129,18 @@ impl DiagnosticsBus {
         }
     }
 
+    /// Attach a sink for as long as the returned guard lives: dropping it
+    /// detaches the sink, so a per-connection consumer never accumulates on
+    /// a long-lived bus. [MEM-060-DIAGNOSTICS-SINK]
+    pub fn attach_owned(&self, sink: Arc<dyn DiagnosticsSink>) -> SinkRegistration {
+        let registered = Arc::downgrade(&sink);
+        let _count = self.attach(sink);
+        SinkRegistration {
+            sinks: Arc::downgrade(&self.sinks),
+            sink: registered,
+        }
+    }
+
     /// Publish a batch to every attached sink concurrently.
     pub async fn publish(&self, batch: DiagnosticsBatch) {
         let snapshot: Vec<Arc<dyn DiagnosticsSink>> = self
@@ -140,6 +152,33 @@ impl DiagnosticsBus {
             let sink_batch = batch.clone();
             sink.publish(sink_batch).await;
         }
+    }
+}
+
+/// Keeps a sink attached to a [`DiagnosticsBus`]; dropping it detaches the sink.
+#[must_use = "dropping the registration detaches the sink"]
+pub struct SinkRegistration {
+    /// The bus's registry; weak, so the guard never keeps the bus alive.
+    sinks: Weak<Mutex<Vec<Arc<dyn DiagnosticsSink>>>>,
+    /// The attached sink, matched by address on detach.
+    sink: Weak<dyn DiagnosticsSink>,
+}
+
+impl Drop for SinkRegistration {
+    fn drop(&mut self) {
+        let Some(sinks) = self.sinks.upgrade() else {
+            return;
+        };
+        let Ok(mut guard) = sinks.lock() else {
+            return;
+        };
+        guard.retain(|sink| !std::ptr::addr_eq(Arc::as_ptr(sink), self.sink.as_ptr()));
+    }
+}
+
+impl std::fmt::Debug for SinkRegistration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SinkRegistration").finish_non_exhaustive()
     }
 }
 

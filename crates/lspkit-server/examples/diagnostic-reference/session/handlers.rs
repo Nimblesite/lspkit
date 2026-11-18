@@ -4,8 +4,8 @@ use super::{document_query, initialize, work_report, Server};
 use crate::analysis::{self, Sources};
 use crate::wire::Outbox;
 use lspkit_server::pull::PullStore;
-use lspkit_server::{HandlerResult, Message};
-use serde_json::{json, Value};
+use lspkit_server::HandlerResult;
+use serde_json::Value;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinHandle;
@@ -29,8 +29,7 @@ impl HandlerState {
         let watcher = analysis::watch_root(&self.sources, root, move || {
             if let Some(state) = owner.upgrade() {
                 state.pull.invalidate();
-                let event = Message::notification("$/referenceWorkspaceChanged", json!({}));
-                if let Err(error) = state.outbox.send(event) {
+                if let Err(error) = state.outbox.send_workspace_changed() {
                     tracing::warn!(%error, "reference watcher notification failed");
                 }
             }
@@ -88,6 +87,27 @@ fn register_metadata(server: &Server, state: Arc<HandlerState>) {
     server
         .dispatcher
         .register("shutdown", |_, _| async { HandlerResult::Ok(Value::Null) });
+}
+
+/// Release `uri`'s Salsa input and memo unless the session still tracks it:
+/// nothing else would ever close it. [MEM-060-PULL-ADMIT]
+pub(crate) fn release_untracked(sources: &Sources, pull: &PullStore, uri: &str) {
+    if analysis::tracked(sources, uri) {
+        return;
+    }
+    if let Err(error) = pull.forget(uri) {
+        tracing::warn!(%error, "untracked document memo release failed");
+    }
+}
+
+/// Release every changed file that left the workspace, e.g. a deletion.
+pub(super) fn release_changed(server: &Server, params: &Value) {
+    let changes = params.get("changes").and_then(Value::as_array);
+    changes
+        .into_iter()
+        .flatten()
+        .filter_map(|change| change.get("uri").and_then(Value::as_str))
+        .for_each(|uri| release_untracked(&server.sources, &server.pull, uri));
 }
 
 /// Release the editor-owned buffer at the actual close notification boundary.

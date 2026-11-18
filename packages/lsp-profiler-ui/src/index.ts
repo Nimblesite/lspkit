@@ -37,7 +37,7 @@ export interface ProfilerUi {
 /** Register the complete profiler UI for `host`. */
 export function registerProfilerUi(context: vscode.ExtensionContext, host: ProfilerHost): ProfilerUi {
   const store = createProfilerStore(host);
-  const view = registerProcessesView(context, store);
+  const view = registerProcessesView(store);
   const disposables: vscode.Disposable[] = [
     ...registerDebuggeePauseTracking(),
     ...registerDebugProfilerSetup(store, host.debugType),

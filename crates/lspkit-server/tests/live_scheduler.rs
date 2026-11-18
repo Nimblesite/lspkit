@@ -196,3 +196,19 @@ async fn second_burst_after_first_fire_yields_second_trigger() {
     // Sanity: the cap bound is non-zero.
     assert!(CAP > QUIET);
 }
+
+/// [MEM-060-SCHEDULER-TASK] The scheduler task belongs to its consumer: once
+/// the trigger receiver is dropped it must exit, releasing the event
+/// receiver, even while no event ever arrives.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn the_scheduler_exits_when_its_consumer_drops_the_triggers() {
+    let (tx, triggers) = build();
+    settle().await;
+    assert!(!tx.is_closed(), "the scheduler is running");
+    drop(triggers);
+    settle().await;
+    assert!(
+        tx.is_closed(),
+        "the scheduler task outlived its consumer and still holds the event receiver"
+    );
+}

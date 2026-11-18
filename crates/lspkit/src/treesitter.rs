@@ -6,5 +6,5 @@
 pub mod cache;
 pub mod parser;
 
-pub use crate::treesitter::cache::{ContentHash, ParseCache};
+pub use crate::treesitter::cache::{ContentHash, ParseCache, MAX_TREES};
 pub use crate::treesitter::parser::{LanguageParser, ParserError};

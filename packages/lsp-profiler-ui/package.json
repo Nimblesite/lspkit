@@ -24,7 +24,7 @@
     "pretest": "node scripts/write-test-host-manifest.mjs",
     "test": "vscode-test && npm run test:debug",
     "test:paths": "mocha --ui tdd out/src/test/suite/editor-path-key.test.js",
-    "test:debug": "c8 mocha --ui tdd --timeout 10000 \"out/src/debug/test/**/*.test.js\""
+    "test:debug": "c8 mocha --ui tdd --timeout 10000 \"out/src/debug/test/**/*.test.js\" \"out/src/test/unit/**/*.test.js\""
   },
   "dependencies": {
     "@preact/signals-core": "^1.14.4"

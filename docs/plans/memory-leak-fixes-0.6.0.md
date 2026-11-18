@@ -30,8 +30,8 @@ Fix every leak in the v0.6.0 static review (four pi agents on GLM 5.3 plus a man
 ## [MEM-060-NOT-LEAKS] Checked and left as they are
 
 - **M9 `Symbolizer` `_ids`:** each CPU session runs its own engine process, and the interner is that recording's frame dictionary, mirrored by the Rust relay. It goes when the session's engine exits.
-- **Other unowned handles (`live/scheduler.rs`, `live/watcher.rs`, `cooperative.rs`):** each ends with its consumer. The scheduler task selects on its consumer's `closed()` (tested); the watcher thread exits when its receiver or native watcher drops; the cooperative tail thread exits at its header deadline or when its sink is dropped.
-- **`forgotten` close queue:** a `HashSet` of URIs, bounded by distinct closed documents and drained by the query that holds the state once it finishes.
+- **Other unowned handles (`live/scheduler.rs`, `live/watcher.rs`, `cooperative.rs`):** each ends with its consumer. The scheduler task selects on its consumer's `closed()` (tested); the watcher thread (pinned by `dropping_the_native_watcher_ends_the_forwarder_thread`) exits when its receiver or native watcher drops; the cooperative tail thread exits at its header deadline or when its sink is dropped.
+- **`forgotten` close queue:** a `HashSet` of URIs, bounded by distinct closed documents and drained by the query that holds the state once it finishes (`pull_forget.rs::forget_returns_while_a_compiler_query_runs_and_the_next_pull_applies_it`).
 - **Decoration-type maps:** keyed by palette colours (a handful of heat and confidence levels) and disposed on deactivate.
 - **Sidecar responses and the example's response frames:** bounded by the requests in flight. Dropping a response would break the protocol.
 - **One analysis per trigger:** `Session::run` keeps its tested contract (`run_advances_generation_on_each_success`). The scheduler adds no memory: each event lands in exactly one trigger.

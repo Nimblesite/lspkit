@@ -242,4 +242,21 @@ mod tests {
         assert!(output.is_closed());
         assert!(source.send(Ok(Event::new(EventKind::Other))).is_err());
     }
+
+    /// The forwarder thread is spawned unowned, so it must end with its
+    /// owner: dropping the native watcher closes its event channel, the thread
+    /// exits and releases the sender, and the stream ends.
+    #[tokio::test]
+    async fn dropping_the_native_watcher_ends_the_forwarder_thread() {
+        let root = tempfile::tempdir().expect("watched root");
+        let super::FileWatcher {
+            _inner: native,
+            mut rx,
+        } = super::FileWatcher::new(root.path()).expect("watch the root");
+        drop(native);
+        assert!(
+            rx.recv().await.is_none(),
+            "the forwarder thread outlived the native watcher"
+        );
+    }
 }

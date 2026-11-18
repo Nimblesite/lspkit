@@ -39,7 +39,6 @@ pull = ["dep:salsa"]
 [dev-dependencies]
 stats_alloc.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "io-util", "time", "io-std", "process", "test-util"] }
-futures-core.workspace = true
 futures-util.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

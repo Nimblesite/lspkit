@@ -13,7 +13,7 @@ use tokio::task::JoinHandle;
 use crate::sidecar::transport::read_frame;
 
 /// Notifications buffered for a consumer that is not reading them; later ones
-/// are dropped and counted. [MEM-060-SIDECAR-NOTIFICATIONS]
+/// are dropped, counted and logged. [MEM-060-SIDECAR-NOTIFICATIONS]
 pub const NOTIFICATION_CAPACITY: usize = 1024;
 
 /// A single reader task with distinct notification and response channels.
@@ -123,12 +123,21 @@ impl<E> Channels<E> {
 impl<E> Channels<E> {
     /// Deliver a notification without blocking the reader: a reader blocked on
     /// a consumer that waits only for responses would deadlock. A full buffer
-    /// drops the notification. [MEM-060-SIDECAR-NOTIFICATIONS]
+    /// drops the notification, counts it, and warns each time the total
+    /// reaches a power of two, so the log stays bounded under a flood.
+    /// [MEM-060-SIDECAR-NOTIFICATIONS]
     fn notify(&self, envelope: E) {
         if let Err(mpsc::error::TrySendError::Full(_dropped)) =
             self.notifications.try_send(envelope)
         {
-            let _ = self.dropped.fetch_add(1, Ordering::Relaxed);
+            let dropped = self.dropped.fetch_add(1, Ordering::Relaxed) + 1;
+            if dropped.is_power_of_two() {
+                tracing::warn!(
+                    dropped,
+                    capacity = NOTIFICATION_CAPACITY,
+                    "sidecar notifications dropped: the consumer is not reading them"
+                );
+            }
         }
     }
 }

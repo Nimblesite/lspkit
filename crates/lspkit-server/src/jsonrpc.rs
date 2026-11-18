@@ -152,6 +152,8 @@ pub enum FramingError {
     #[error("peer closed the stream")]
     Closed,
     /// The peer claimed a body larger than the cap ([JSONRPC-FRAME-LIMIT]).
+    /// The body was discarded, so the connection stays usable: the next read
+    /// starts at the following frame.
     #[error("frame of {claimed} bytes exceeds the {max}-byte limit")]
     FrameTooLarge {
         /// The `Content-Length` the peer sent.
@@ -160,7 +162,8 @@ pub enum FramingError {
         max: usize,
     },
     /// The header block ran past [`MAX_HEADER_BYTES`] without its blank line
-    /// ([JSONRPC-FRAME-LIMIT]).
+    /// ([JSONRPC-FRAME-LIMIT]). No frame boundary is known, so the connection
+    /// cannot continue.
     #[error("header block exceeds the {MAX_HEADER_BYTES}-byte limit")]
     HeaderTooLarge,
 }
@@ -197,13 +200,12 @@ where
     R: AsyncReadExt + Unpin,
 {
     let claimed = content_length(reader).await?;
-    let length = usize::try_from(claimed)
+    let Some(length) = usize::try_from(claimed)
         .ok()
         .filter(|length| *length <= max_bytes)
-        .ok_or(FramingError::FrameTooLarge {
-            claimed,
-            max: max_bytes,
-        })?;
+    else {
+        return Err(refuse(reader, claimed, max_bytes).await);
+    };
     // Memory follows the bytes that arrive, never the length the peer claims.
     let mut body = Vec::new();
     let read = (&mut *reader).take(claimed).read_to_end(&mut body).await?;
@@ -211,6 +213,18 @@ where
         return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
     }
     Ok(serde_json::from_slice(&body)?)
+}
+
+/// Discard the `claimed` body bytes of a refused frame through a fixed-size
+/// buffer, so the next read starts at the following frame.
+async fn refuse<R>(reader: &mut BufReader<R>, claimed: u64, max: usize) -> FramingError
+where
+    R: AsyncReadExt + Unpin,
+{
+    match tokio::io::copy(&mut (&mut *reader).take(claimed), &mut tokio::io::sink()).await {
+        Ok(_) => FramingError::FrameTooLarge { claimed, max },
+        Err(error) => FramingError::Io(error),
+    }
 }
 
 /// Read headers up to the blank line; the `Content-Length` they declare.

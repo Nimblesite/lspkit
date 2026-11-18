@@ -322,7 +322,7 @@ async fn decode_within(raw: Vec<u8>, max: usize) -> Result<Message, FramingError
 /// [JSONRPC-FRAME-LIMIT] A hostile or garbled `Content-Length` is an error,
 /// never a panic and never an allocation of the claimed size.
 #[tokio::test]
-async fn oversized_content_length_is_rejected_before_any_body_is_read() {
+async fn oversized_content_length_is_rejected_without_allocating_the_claim() {
     let over_default = u64::try_from(MAX_FRAME_BYTES).expect("the cap fits u64") + 1;
     for claimed in [u64::MAX, over_default] {
         let err = decode_err(framed(claimed, b"{}"))
@@ -429,4 +429,49 @@ async fn header_blocks_past_the_cap_are_rejected_and_one_at_the_cap_decodes() {
         .await
         .expect_err("one byte over the header cap");
     assert!(matches!(err, FramingError::HeaderTooLarge), "{err:?}");
+}
+
+/// [JSONRPC-FRAME-LIMIT] A refused frame's body is discarded, so the next read
+/// starts at the following frame and the connection carries on.
+#[tokio::test]
+async fn a_refused_frame_leaves_the_stream_at_the_next_frame() {
+    const CAP: usize = 4;
+    let mut raw = framed(8, b"{\"a\":1}\n");
+    raw.extend(framed(2, b"{}"));
+    raw.extend(framed(CAP + 1, b"12345"));
+    raw.extend(framed(44, &body_of_exactly(44)));
+    let mut reader = BufReader::new(std::io::Cursor::new(raw));
+    let first = read_message_within(&mut reader, CAP).await;
+    assert!(
+        matches!(
+            first,
+            Err(FramingError::FrameTooLarge {
+                claimed: 8,
+                max: CAP
+            })
+        ),
+        "{first:?}"
+    );
+    let second = read_message_within(&mut reader, CAP).await;
+    assert!(
+        matches!(&second, Err(FramingError::BadJson(_))),
+        "the 2-byte frame is read whole, then fails only as JSON: {second:?}"
+    );
+    let third = read_message_within(&mut reader, CAP).await;
+    assert!(
+        matches!(
+            third,
+            Err(FramingError::FrameTooLarge {
+                claimed: 5,
+                max: CAP
+            })
+        ),
+        "{third:?}"
+    );
+    let fourth = read_message_within(&mut reader, MAX_FRAME_BYTES)
+        .await
+        .expect("the frame after two refusals decodes");
+    assert_eq!(fourth.method.as_deref(), Some("x"));
+    let end = read_message_within(&mut reader, CAP).await;
+    assert!(matches!(end, Err(FramingError::Closed)), "{end:?}");
 }

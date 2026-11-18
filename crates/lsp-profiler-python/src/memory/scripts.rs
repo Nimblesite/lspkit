@@ -102,12 +102,7 @@ print('__LSPPROF_MEM_OK__')
 /// Script to stop tracemalloc and release resources.
 #[must_use]
 pub fn stop_tracemalloc() -> &'static str {
-    r"
-import tracemalloc, gc
-tracemalloc.stop()
-gc.set_debug(0)
-print('__LSPPROF_MEM_OK__')
-"
+    include_str!("scripts/stop_tracemalloc.py")
 }
 
 /// Python helper that ferries a marker payload back to the editor through a

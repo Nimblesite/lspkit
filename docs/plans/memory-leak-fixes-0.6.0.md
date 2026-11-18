@@ -24,24 +24,25 @@ Fix every leak in the v0.6.0 static review (four pi agents on GLM 5.3 plus a man
 | [MEM-060-DIAGNOSTICS-SINK] | LOW `DiagnosticsBus::attach` had no detach | `attach_owned` returns a `SinkRegistration` guard | `lspkit-server/tests/diagnostics.rs` |
 | [PROF-EXPORT] | LOW profiler artifacts on disk were never pruned | Keep the newest 32 per extension after each write | `lsp-profiler/src/export/artifact_retention_tests.rs` |
 | [PROF-UI-LIFETIME] | LOW `FileLogSink` had no dispose and no size cap | `dispose()` closes it; two alternating capped files (8 MiB each) | `lsp-profiler-ui/src/test/unit/file-log-sink.test.ts` |
-| [PROF-DOTNET-CPU] | LOW `cpu.rs` forwarder is spawned unowned | Already ends with its consumer: `SamplerHandle::drop` signals stop. The test pins it | `lsp-profiler-dotnet/src/cpu.rs` tests |
+| [PROF-DOTNET-CPU] | LOW `cpu.rs` spawned its forwarder with `drop(tokio::spawn(..))` | `SamplerHandle::own_producer` keeps the task's abort handle; dropping the handle aborts it | `lsp-profiler/src/sampler_lifetime_tests.rs`, plus the forwarder pin in `lsp-profiler-dotnet/src/cpu.rs` |
+| [PROF-MEMORY-STOP] | LOW Python `stop_tracemalloc` left `gc.garbage`, the baseline snapshot, the `atexit` hook and the signal handlers in the debuggee | The stop script (now `src/memory/scripts/stop_tracemalloc.py`) releases all four | `lsp-profiler-python/tests/python/test_stop_tracemalloc.py`, run by `make test` in a real interpreter |
 
 ## [MEM-060-NOT-LEAKS] Checked and left as they are
 
 - **M9 `Symbolizer` `_ids`:** each CPU session runs its own engine process, and the interner is that recording's frame dictionary, mirrored by the Rust relay. It goes when the session's engine exits.
-- **Other unowned handles (`live/watcher.rs`, `cooperative.rs`):** each ends with its consumer. The watcher thread exits when its receiver or native watcher drops; the cooperative tail thread exits at its header deadline or when its sink is dropped.
+- **Other unowned handles (`live/scheduler.rs`, `live/watcher.rs`, `cooperative.rs`):** each ends with its consumer. The scheduler task selects on its consumer's `closed()` (tested); the watcher thread exits when its receiver or native watcher drops; the cooperative tail thread exits at its header deadline or when its sink is dropped.
 - **`forgotten` close queue:** a `HashSet` of URIs, bounded by distinct closed documents and drained by the query that holds the state once it finishes.
 - **Decoration-type maps:** keyed by palette colours (a handful of heat and confidence levels) and disposed on deactivate.
 - **Sidecar responses and the example's response frames:** bounded by the requests in flight. Dropping a response would break the protocol.
 - **One analysis per trigger:** `Session::run` keeps its tested contract (`run_advances_generation_on_each_success`). The scheduler adds no memory: each event lands in exactly one trigger.
 
-## [MEM-060-UNTESTABLE] Not fixed
+## [MEM-060-PARKED] The parked Python crate
 
-`lsp-profiler-python` is parked: it is excluded from the workspace, depends on `basilisk-common`, which is not in this repository, and does not build. No test can compile against `stop_tracemalloc` (`gc.garbage` from `DEBUG_SAVEALL`, the baseline snapshot, the signal and `atexit` hooks), `pyspy.rs` or the helper's `main.rs`, so per fix-bug they are not changed. They need fixing when the port lands.
+`lsp-profiler-python` is excluded from the workspace and does not build: it depends on `basilisk-common`, which is not in this repository. Its stop script is plain Python, so it is tested directly: `make _python_scripts_test` runs it against real interpreter state, and every assertion failed on the old script. The crate's two remaining unowned handles end with their owners. The `pyspy.rs` sampler thread exits when the handle's `Drop` sets the stop flag or its receiver closes, and the helper's stop listener ends with the helper process. Neither is a leak, and no Rust test can compile against them until the port lands, so they are unchanged.
 
 ## [MEM-060-CONTRACT] API changes
 
 - `lspkit::sidecar::inbound::Inbound::notifications` is a bounded `mpsc::Receiver`. `Inbound` gains `dropped_notifications`.
 - `lspkit-server` adds `CancellationHandle::queue`, `QueuedRequest`, `DiagnosticsBus::attach_owned` and `SinkRegistration`.
-- `lsp-profiler` adds `MemorySessionManager::stop_all`, `export::MAX_ARTIFACTS_PER_KIND` and `export::ARTIFACT_PREFIX`. `ProfilerService::shutdown` now also stops memory sessions.
+- `lsp-profiler` adds `SamplerHandle::own_producer`, `MemorySessionManager::stop_all`, `export::MAX_ARTIFACTS_PER_KIND` and `export::ARTIFACT_PREFIX`. `ProfilerService::shutdown` now also stops memory sessions.
 - `@nimblesite/lsp-profiler-ui`: `FileLogSink` takes an optional byte cap and gains `dispose(): Promise<void>`.

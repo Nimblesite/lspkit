@@ -8,7 +8,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use lspkit_server::live::{spawn_scheduler, ChangeEvent, ScheduleConfig, Trigger, MAX_PENDING_EVENTS};
+use lspkit_server::live::{
+    spawn_scheduler, ChangeEvent, ScheduleConfig, Trigger, MAX_PENDING_EVENTS,
+};
 use tokio::sync::mpsc;
 use tokio::time;
 
@@ -16,10 +18,7 @@ const QUIET: Duration = Duration::from_millis(100);
 const CAP: Duration = Duration::from_millis(500);
 
 /// Build a fresh scheduler with default config.
-fn build() -> (
-    mpsc::UnboundedSender<ChangeEvent>,
-    mpsc::Receiver<Trigger>,
-) {
+fn build() -> (mpsc::UnboundedSender<ChangeEvent>, mpsc::Receiver<Trigger>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let triggers = spawn_scheduler(rx, ScheduleConfig::default());
     (tx, triggers)
@@ -260,8 +259,12 @@ async fn bursts_behind_a_busy_consumer_merge_into_one_waiting_trigger() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn a_backlog_past_the_bound_collapses_to_one_rescan() {
     let (tx, mut triggers) = build();
-    send_and_quiet(&tx, touched("first.rs")).await.expect("send");
-    send_and_quiet(&tx, touched("waiting.rs")).await.expect("send");
+    send_and_quiet(&tx, touched("first.rs"))
+        .await
+        .expect("send");
+    send_and_quiet(&tx, touched("waiting.rs"))
+        .await
+        .expect("send");
     for index in 0..MAX_PENDING_EVENTS + 10 {
         tx.send(touched(&format!("churn{index}.rs"))).expect("send");
     }
@@ -277,7 +280,9 @@ async fn a_backlog_past_the_bound_collapses_to_one_rescan() {
     );
     settle().await;
     assert!(triggers.try_recv().is_err(), "nothing else may be queued");
-    send_and_quiet(&tx, touched("fresh.rs")).await.expect("send");
+    send_and_quiet(&tx, touched("fresh.rs"))
+        .await
+        .expect("send");
     let fresh = triggers.recv().await.expect("trigger after the rescan");
     assert_eq!(paths_of(&fresh), vec![PathBuf::from("fresh.rs")]);
 }

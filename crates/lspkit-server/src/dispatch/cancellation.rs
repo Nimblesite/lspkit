@@ -22,31 +22,12 @@ impl CancellationHandle {
         }
     }
 
-    /// Register protocol interest before forwarding to a possibly occupied foreground loop.
-    /// `Dispatcher::prepare_call` adopts this same control rather than replacing it.
-    /// Completed controls are released by the prepared future; queued controls live with
-    /// the dispatcher. An exited owner is harmless. [LSP-PULL-CANCELLATION]
-    ///
-    /// # Errors
-    /// Returns a registration error if the registry is unavailable.
-    pub fn register(
-        &self,
-        id: RequestId,
-        interest: Option<RequestInterest>,
-    ) -> Result<(), DispatchError> {
-        let Some(registry) = self.registry.upgrade() else {
-            return Ok(());
-        };
-        let Ok(mut guard) = registry.write() else {
-            return Err(DispatchError::RegistrationPoisoned(id));
-        };
-        register(&mut guard, id, interest);
-        Ok(())
-    }
-
-    /// [`register`](Self::register) `id` and own the queued control: dropping
-    /// the guard releases it unless a prepared request adopted it.
-    /// [MEM-LIFETIME-QUEUED-REQUEST]
+    /// Register protocol interest before forwarding to a possibly occupied foreground
+    /// loop, and own the queued control. `Dispatcher::prepare_call` adopts this same
+    /// control rather than replacing it, and the prepared future releases it. Dropping
+    /// the guard first releases it, so a request rejected or abandoned before
+    /// preparation leaves nothing behind. An exited owner is harmless.
+    /// [LSP-PULL-CANCELLATION] [MEM-LIFETIME-QUEUED-REQUEST]
     ///
     /// # Errors
     /// Returns a registration error if the registry is unavailable.

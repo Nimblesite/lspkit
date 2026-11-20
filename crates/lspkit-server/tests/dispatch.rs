@@ -230,12 +230,13 @@ async fn unknown_method_with_inflight_duplicate_id_keeps_inflight_cancellable() 
     );
     assert!(format!("{dispatcher:?}").contains("in_flight: 0"));
     let ingress_only = RequestId::Number(8);
-    dispatcher
+    let queued = dispatcher
         .cancellation_handle()
-        .register(ingress_only.clone(), None)
+        .queue(ingress_only.clone(), None)
         .expect("ingress registration");
     assert!(format!("{dispatcher:?}").contains("in_flight: 1"));
     let rejected = dispatcher.prepare(ingress_only, "missing", Value::Null);
     assert!(matches!(rejected, Err(DispatchError::UnknownMethod(_))));
     assert!(format!("{dispatcher:?}").contains("in_flight: 0"));
+    drop(queued);
 }

@@ -17,20 +17,6 @@ const UNKNOWN_METHOD: &str = "textDocument/neverRegistered";
 /// Real handler used by both successful lifetime controls.
 const KNOWN_METHOD: &str = "textDocument/known";
 
-/// Register owned heap strings through the public protocol handle.
-fn pre_register(handle: &CancellationHandle) {
-    for id in 0..REQUESTS {
-        let interest = RequestInterest {
-            method: UNKNOWN_METHOD.to_owned(),
-            resource: format!("file:///memory-audit/{id}"),
-            input: Some("x".repeat(INPUT_BYTES)),
-        };
-        assert!(handle
-            .register(RequestId::Number(id), Some(interest))
-            .is_ok());
-    }
-}
-
 /// A real registered handler without any captured dispatcher or test allocations.
 fn known_dispatcher() -> Dispatcher {
     let dispatcher = Dispatcher::new();
@@ -49,19 +35,20 @@ fn assert_released(actual: &Dispatcher, empty: &Dispatcher) {
 #[test]
 fn unknown_method_releases_pre_registered_interest() {
     let dispatcher = Dispatcher::new();
-    pre_register(&dispatcher.cancellation_handle());
+    let queued = queue(&dispatcher.cancellation_handle()).expect("queue the requests");
     for id in 0..REQUESTS {
         let result = dispatcher.prepare(RequestId::Number(id), UNKNOWN_METHOD, Value::Null);
         assert!(matches!(result, Err(DispatchError::UnknownMethod(_))));
     }
     dispatcher.cancel_all();
     assert_released(&dispatcher, &Dispatcher::new());
+    drop(queued);
 }
 
 #[tokio::test]
 async fn completed_requests_release_pre_registered_interest() {
     let dispatcher = known_dispatcher();
-    pre_register(&dispatcher.cancellation_handle());
+    let queued = queue(&dispatcher.cancellation_handle()).expect("queue the requests");
     for id in 0..REQUESTS {
         let result = dispatcher
             .prepare(RequestId::Number(id), KNOWN_METHOD, Value::Null)
@@ -70,12 +57,13 @@ async fn completed_requests_release_pre_registered_interest() {
         assert!(matches!(result, HandlerResult::Ok(Value::Null)));
     }
     assert_released(&dispatcher, &known_dispatcher());
+    drop(queued);
 }
 
 #[test]
 fn dropped_futures_release_pre_registered_interest() {
     let dispatcher = known_dispatcher();
-    pre_register(&dispatcher.cancellation_handle());
+    let queued = queue(&dispatcher.cancellation_handle()).expect("queue the requests");
     for id in 0..REQUESTS {
         let future = dispatcher
             .prepare(RequestId::Number(id), KNOWN_METHOD, Value::Null)
@@ -83,6 +71,7 @@ fn dropped_futures_release_pre_registered_interest() {
         drop(future);
     }
     assert_released(&dispatcher, &known_dispatcher());
+    drop(queued);
 }
 
 /// Queue owned heap strings through the public protocol handle.

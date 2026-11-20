@@ -1,8 +1,8 @@
 //! Filesystem watcher that emits coarse change events.
 //!
 //! Wraps [`notify`] and forwards events to a tokio channel so consumers can
-//! await them with the usual async machinery. Exclusion rules let callers
-//! ignore noisy directories (`target/`, `.git/`, vendor caches, etc.).
+//! await them with the usual async machinery. Every change under the watched
+//! root is reported; callers filter the paths they do not care about.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc as std_mpsc;

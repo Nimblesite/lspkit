@@ -218,7 +218,7 @@ pub async fn cpu_samples_exceed(service: &ProfilerService, session_id: &str, thr
         }
     })
     .await
-    .unwrap_or_else(|_| panic!("session {session_id} never exceeded {threshold} samples"));
+    .unwrap_or_else(|_| panic!("the CPU session never exceeded {threshold} samples"));
 }
 
 /// Poll `memory.snapshot` until `type_name` holds more than `threshold`
@@ -281,5 +281,5 @@ pub async fn cpu_session_ended(service: &ProfilerService, session_id: &str) {
         }
     })
     .await
-    .unwrap_or_else(|_| panic!("session {session_id} never ended"));
+    .unwrap_or_else(|_| panic!("the CPU session never ended"));
 }

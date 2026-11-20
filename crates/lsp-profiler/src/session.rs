@@ -55,7 +55,7 @@ impl CpuSession {
         Self {
             session_id: mint_id("prof", 0),
             runtime,
-            started_at: Instant::now(),
+            started_at: sampler.started_at(),
             started_at_iso: rfc3339_now(),
             data: ProfileData::default(),
             sampler,

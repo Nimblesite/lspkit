@@ -16,6 +16,9 @@ import path from "node:path";
 import { disposeProfileServer, serveProfileForBrowser } from "../../profile-server";
 import { removeTestDir } from './test-helpers';
 
+/** First registrations racing to start the loopback server. */
+const CONCURRENT_REGISTRATIONS = 4;
+
 /** GET a URL and resolve status, headers, and body. */
 async function fetchUrl(
   url: string,
@@ -80,6 +83,44 @@ suite("Profile loopback server — speedscope deep links load automatically", ()
     await delay(10);
     const response = await fetchUrl(url);
     assert.strictEqual(response.status, 404, "expired registrations must 404, not serve stale data");
+  });
+
+  test("concurrent first registrations share one server, and dispose closes it ([PROF-UI-LIFETIME])", async () => {
+    disposeProfileServer();
+    const urls = await Promise.all(
+      Array.from({ length: CONCURRENT_REGISTRATIONS }, async () => serveProfileForBrowser(profilePath)),
+    );
+    const ports = new Set(urls.map((url) => new URL(url).port));
+    assert.strictEqual(
+      ports.size,
+      1,
+      `every concurrent caller must get the one server; ports ${[...ports].join(", ")} mean ` +
+        "the extra servers were orphaned and never closed",
+    );
+    const responses = await Promise.all(urls.map(async (url) => fetchUrl(url)));
+    for (const [index, response] of responses.entries()) {
+      assert.strictEqual(response.status, 200, `each concurrent registration must be served: ${urls[index] ?? ""}`);
+      assert.strictEqual(response.body, profileJson, "each must serve the exact exported JSON");
+    }
+    disposeProfileServer();
+    await Promise.all(
+      urls.map(async (url) =>
+        assert.rejects(fetchUrl(url), `after dispose no server may still listen behind ${url}`),
+      ),
+    );
+  });
+
+  test("a dispose while the server is still binding closes it; the next registration starts afresh", async () => {
+    disposeProfileServer();
+    const pending = serveProfileForBrowser(profilePath);
+    disposeProfileServer();
+    await assert.rejects(pending, /disposed while starting/u, "a start superseded by dispose must not be adopted");
+    const url = await serveProfileForBrowser(profilePath);
+    const response = await fetchUrl(url);
+    assert.strictEqual(response.status, 200, "a registration after dispose must start a working server");
+    assert.strictEqual(response.body, profileJson);
+    disposeProfileServer();
+    await assert.rejects(fetchUrl(url), "dispose must close the fresh server too");
   });
 
   test("dispose tears the server down — nothing stays reachable after deactivate", async () => {

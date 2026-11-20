@@ -634,7 +634,9 @@ The retention graph is a layered layout of a `RefGraph`: a node's row is its `de
 - targets, roots and cycles are distinct;
 - a root is named by its label above its type, so a static field or an F# module value reads as written (`static sessions`);
 - edge labels name the field;
-- a row too tight to label each node names its type once, with a count (`40 × App.Session`).
+- a row too tight to label each node names its type once, with a count (`40 × App.Session`);
+- labels are fitted to their node's share of the row, ending in an ellipsis, so no two labels overlap;
+- the canvas backing store is scaled by `devicePixelRatio` (one helper shared with the memory timeline and the flame graph), so it is sharp on Retina screens.
 
 The type picker offers the server's ranked type names (the latest snapshot's top types) plus free text, so it is language-neutral. It never offers names taken from source text or from one language's builtins.
 

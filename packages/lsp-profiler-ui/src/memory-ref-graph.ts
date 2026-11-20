@@ -13,6 +13,32 @@
  */
 
 import { cmd } from "./ids";
+import { sizeCanvasToDevicePixels } from "./canvas-hidpi";
+import { fitLabelText } from "./flame-script-helpers";
+import {
+  REF_MIN_WIDTH,
+  belowLabels,
+  collectLayer,
+  crowdedLayerLabel,
+  deepestDepth,
+  fittedLabel,
+  groupByDepth,
+  layoutLayer,
+  nodeLabels,
+  nodeRadius,
+  placeNode,
+  refBottomMargin,
+  refCrowdedGap,
+  refGraphLayout,
+  refLabelColor,
+  refLabelFont,
+  refLabelPadding,
+  refLayerHeight,
+  refMinHeight,
+  refTopMargin,
+  rootLabel,
+  rowGeometry,
+} from "./ref-graph-layout";
 import {
   PROFILER_CSS_RESET,
   PROFILER_CSS_VARS,
@@ -177,7 +203,7 @@ function refGraphDataScript(nodesJson: string, edgesJson: string, cyclesJson: st
 `;
 }
 
-/** An honest empty state, or each node laid out in a layer by its distance from the targets. */
+/** The graph canvas: sized for its screen, then laid out by pure, tested code. */
 const REF_GRAPH_LAYOUT_SCRIPT = `
     if (nodes.length === 0) {
       document.getElementById('graph').style.display = 'none';
@@ -189,27 +215,12 @@ const REF_GRAPH_LAYOUT_SCRIPT = `
       const canvas = document.getElementById('graph');
       const ctx = canvas.getContext('2d');
       // Fill the panel width so the graph is not letterboxed into 800px.
-      const W = canvas.width = Math.max(800, canvas.parentElement ? canvas.clientWidth : 800);
-      // Layers by distance from the targets: roots on top, targets along the bottom.
-      const LAYER = 120;
-      const top = Math.max(...nodes.map((n) => n.depth));
-      const H = canvas.height = Math.max(360, (top + 1) * LAYER + 40);
-      const cycleNodeIds = new Set(cycles.flat());
-      const layers = new Map();
-      nodes.forEach((n) => layers.set(n.depth, [...(layers.get(n.depth) || []), n]));
-      const nodeMap = new Map();
-      for (const [depth, members] of layers) {
-        const gap = W / (members.length + 1);
-        // A row too tight to label each node names its type once, with a count.
-        const crowded = gap < 160;
-        members.forEach((n, i) => nodeMap.set(n.id, {
-          ...n,
-          x: gap * (i + 1),
-          y: 60 + (top - depth) * LAYER,
-          crowded,
-          radius: Math.min(crowded ? gap / 2.5 : 30, Math.max(8, Math.log2(Math.max(n.size, 1)) * 2)),
-        }));
-      }`;
+      const cssWidth = Math.max(${REF_MIN_WIDTH}, canvas.parentElement ? canvas.clientWidth : ${REF_MIN_WIDTH});
+      const sized = nodes.map((n) => ({ ...n, sizeLabel: formatBytes(n.size) }));
+      const layout = refGraphLayout(sized, cssWidth, fitLabelText);
+      sizeCanvasToDevicePixels({ canvas: canvas, ctx: ctx, cssWidth: cssWidth, cssHeight: layout.height, devicePixelRatio: window.devicePixelRatio || 1 });
+      const nodeMap = layout.nodes;
+      const cycleNodeIds = new Set(cycles.flat());`;
 
 /** Edges, a cycle's in the leak colour. */
 const REF_GRAPH_EDGES_SCRIPT = `
@@ -231,7 +242,7 @@ const REF_GRAPH_EDGES_SCRIPT = `
         }
       }`;
 
-/** Nodes: targets, roots and cycles in the legend's colours; a root named by its label above its type. */
+/** Nodes: targets, roots and cycles in the legend's colours; every label fitted by the layout. */
 const REF_GRAPH_NODES_SCRIPT = `
       for (const n of nodeMap.values()) {
         const color = cssVar(n.isTarget ? '--prof-mem-critical' : n.isRoot ? '--prof-info' : cycleNodeIds.has(n.id) ? '--prof-mem-leak' : '--prof-text-secondary');
@@ -245,30 +256,20 @@ const REF_GRAPH_NODES_SCRIPT = `
         ctx.lineWidth = n.isTarget || n.isRoot ? 3 : 1.5;
         ctx.stroke();
         ctx.textAlign = 'center';
-        if (n.isRoot) {
-          ctx.fillStyle = color;
-          ctx.font = 'bold 13px monospace';
-          ctx.fillText(n.repr, n.x, n.y - n.radius - 10);
+        for (const label of n.labels) {
+          ctx.font = refLabelFont(label.kind);
+          ctx.fillStyle = cssVar(refLabelColor(label.kind));
+          ctx.fillText(label.text, label.x, label.y);
         }
-        if (n.crowded) continue;
-        ctx.fillStyle = cssVar('--prof-text');
-        ctx.font = '10px monospace';
-        ctx.fillText(n.type, n.x, n.y + n.radius + 14);
-        ctx.fillStyle = cssVar('--prof-text-secondary');
-        ctx.font = '9px monospace';
-        ctx.fillText(formatBytes(n.size), n.x, n.y + n.radius + 26);
       }`;
 
-/** A crowded layer names its type once, with a count, and the drawing branch closes. */
+/** A crowded layer names its type once, with a count; the drawing branch closes. */
 const REF_GRAPH_LAYER_LABELS_SCRIPT = `
-      for (const [depth, members] of layers) {
-        const first = nodeMap.get(members[0].id);
-        if (!first.crowded) continue;
-        const types = new Set(members.map((n) => n.type));
-        ctx.fillStyle = cssVar('--prof-text');
-        ctx.font = '11px monospace';
+      for (const label of layout.layerLabels) {
+        ctx.font = refLabelFont(label.kind);
+        ctx.fillStyle = cssVar(refLabelColor(label.kind));
         ctx.textAlign = 'center';
-        ctx.fillText(members.length + ' × ' + (types.size === 1 ? members[0].type : 'objects'), W / 2, first.y + first.radius + 18);
+        ctx.fillText(label.text, label.x, label.y);
       }
     }`;
 
@@ -298,10 +299,23 @@ export function buildRefGraphHtml(result: ReferenceGraphResult): string {
 /**
  * The drawing script. Node types/reprs and edge labels are profiled-program
  * data, embedded so they can never close the inline <script> ([PROF-UI-WEBVIEW]).
+ * Layout and device-pixel sizing are the compiled source of the pure,
+ * unit-tested functions in ref-graph-layout.ts and canvas-hidpi.ts.
  */
 function buildRefGraphScript(result: ReferenceGraphResult): string {
   const { graph } = result;
   return PROFILER_JS_UTILS +
+    refGraphHelpersScript() +
     refGraphDataScript(embedJson(graph?.nodes ?? []), embedJson(graph?.edges ?? []), embedJson(graph?.cycles ?? [])) +
     REF_GRAPH_LAYOUT_SCRIPT + REF_GRAPH_EDGES_SCRIPT + REF_GRAPH_NODES_SCRIPT + REF_GRAPH_LAYER_LABELS_SCRIPT;
+}
+
+/** Every pure function the drawing script calls, as compiled source. */
+function refGraphHelpersScript(): string {
+  return [
+    sizeCanvasToDevicePixels, fitLabelText, refBottomMargin, refCrowdedGap, refLabelPadding,
+    refLayerHeight, refMinHeight, refTopMargin, groupByDepth, deepestDepth, collectLayer,
+    rowGeometry, nodeRadius, placeNode, fittedLabel, refLabelFont, refLabelColor, belowLabels,
+    rootLabel, nodeLabels, crowdedLayerLabel, layoutLayer, refGraphLayout,
+  ].map((fn) => fn.toString()).join("\n");
 }

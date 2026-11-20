@@ -133,6 +133,7 @@ lsp-types = "0.97"
 # Document / state
 dashmap = "6"
 ropey = "1"
+unicode-ident = "1.0.24"
 
 # Filesystem
 notify = "8"

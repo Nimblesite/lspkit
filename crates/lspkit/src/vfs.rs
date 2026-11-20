@@ -8,7 +8,9 @@
 pub mod document;
 pub mod edit;
 pub mod encoding;
+pub mod text;
 
 pub use crate::vfs::document::{DocumentUri, DocumentVersion, Vfs, VfsError};
 pub use crate::vfs::edit::{EditError, Position, Range, TextEdit};
 pub use crate::vfs::encoding::{negotiate, PositionEncoding, UnknownEncoding};
+pub use crate::vfs::text::{char_width, measure, occurrences, prefix_to, word_at, WordSpan};

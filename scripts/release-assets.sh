@@ -8,7 +8,8 @@
 #       LSP_PROFILER_DOTNET_ENGINE at the extracted executable, or place it
 #       beside the language server.
 #   lspkit-consumer-kit-<version>.tar.gz
-#       The profiler fixtures (dotnet/fixtures), the specs consumers cite
+#       The profiler fixtures (dotnet/fixtures) with the dotnet/Directory.Build.props
+#       they build with, so they build from the kit alone; the specs consumers cite
 #       (LSP-PROFILER-SPEC.md, LSP-PULL-SPEC.md), test-support/ and
 #       scripts/typediagram/run-cli.mjs.
 #
@@ -53,6 +54,7 @@ kit="$work/lspkit-consumer-kit-$version"
 mkdir -p "$kit/dotnet" "$kit/docs/specs" "$kit/scripts/typediagram"
 # Fixtures ship as source; their build output never does.
 tar -cf - -C "$root/dotnet" --exclude=bin --exclude=obj fixtures | tar -xf - -C "$kit/dotnet"
+cp "$root/dotnet/Directory.Build.props" "$kit/dotnet/"
 cp "$root/docs/specs/LSP-PROFILER-SPEC.md" "$root/docs/specs/LSP-PULL-SPEC.md" "$kit/docs/specs/"
 cp -R "$root/test-support" "$kit/test-support"
 cp "$root/scripts/typediagram/run-cli.mjs" "$kit/scripts/typediagram/"

@@ -8,7 +8,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use lspkit_server::live::{spawn_scheduler, ChangeEvent, ScheduleConfig, Trigger};
+use lspkit_server::live::{
+    spawn_scheduler, ChangeEvent, ScheduleConfig, Trigger, MAX_PENDING_EVENTS,
+};
 use tokio::sync::mpsc;
 use tokio::time;
 
@@ -16,10 +18,7 @@ const QUIET: Duration = Duration::from_millis(100);
 const CAP: Duration = Duration::from_millis(500);
 
 /// Build a fresh scheduler with default config.
-fn build() -> (
-    mpsc::UnboundedSender<ChangeEvent>,
-    mpsc::UnboundedReceiver<Trigger>,
-) {
+fn build() -> (mpsc::UnboundedSender<ChangeEvent>, mpsc::Receiver<Trigger>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let triggers = spawn_scheduler(rx, ScheduleConfig::default());
     (tx, triggers)
@@ -197,7 +196,7 @@ async fn second_burst_after_first_fire_yields_second_trigger() {
     assert!(CAP > QUIET);
 }
 
-/// [MEM-060-SCHEDULER-TASK] The scheduler task belongs to its consumer: once
+/// [MEM-LIFETIME-SCHEDULER-TASK] The scheduler task belongs to its consumer: once
 /// the trigger receiver is dropped it must exit, releasing the event
 /// receiver, even while no event ever arrives.
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -211,4 +210,79 @@ async fn the_scheduler_exits_when_its_consumer_drops_the_triggers() {
         tx.is_closed(),
         "the scheduler task outlived its consumer and still holds the event receiver"
     );
+}
+
+/// Paths of every path-carrying event in `trigger`, in order.
+fn paths_of(trigger: &Trigger) -> Vec<PathBuf> {
+    trigger
+        .events
+        .iter()
+        .flat_map(|event| match event {
+            ChangeEvent::Touched(paths) | ChangeEvent::Removed(paths) => paths.clone(),
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+/// [MEM-LIFETIME-SCHEDULER-BACKLOG] While the consumer is still analysing, later
+/// bursts merge into one waiting trigger instead of queueing one trigger each,
+/// and the waiting trigger is delivered as soon as the consumer reads again.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn bursts_behind_a_busy_consumer_merge_into_one_waiting_trigger() {
+    let (tx, mut triggers) = build();
+    for name in ["a.rs", "b.rs", "c.rs", "d.rs"] {
+        send_and_quiet(&tx, touched(name)).await.expect("send");
+    }
+    let first = triggers.recv().await.expect("first trigger");
+    assert_eq!(paths_of(&first), vec![PathBuf::from("a.rs")]);
+    settle().await;
+    let merged = triggers.recv().await.expect("merged trigger");
+    assert_eq!(
+        paths_of(&merged),
+        ["b.rs", "c.rs", "d.rs"].map(PathBuf::from).to_vec(),
+        "every change made while the consumer was busy arrives, in order, in one trigger"
+    );
+    settle().await;
+    assert!(
+        triggers.try_recv().is_err(),
+        "a busy consumer must never have more than one trigger waiting"
+    );
+    send_and_quiet(&tx, removed("e.rs")).await.expect("send");
+    let after = triggers.recv().await.expect("trigger after catching up");
+    assert_eq!(paths_of(&after), vec![PathBuf::from("e.rs")]);
+    assert!(matches!(after.events.as_slice(), [ChangeEvent::Removed(_)]));
+}
+
+/// [MEM-LIFETIME-SCHEDULER-BACKLOG] A consumer that stays busy through endless churn
+/// holds at most `MAX_PENDING_EVENTS` waiting events: past that the waiting
+/// trigger becomes one `Rescan`, which covers every change it replaced.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn a_backlog_past_the_bound_collapses_to_one_rescan() {
+    let (tx, mut triggers) = build();
+    send_and_quiet(&tx, touched("first.rs"))
+        .await
+        .expect("send");
+    send_and_quiet(&tx, touched("waiting.rs"))
+        .await
+        .expect("send");
+    for index in 0..MAX_PENDING_EVENTS + 10 {
+        tx.send(touched(&format!("churn{index}.rs"))).expect("send");
+    }
+    settle().await;
+    let first = triggers.recv().await.expect("first trigger");
+    assert_eq!(paths_of(&first), vec![PathBuf::from("first.rs")]);
+    settle().await;
+    let collapsed = triggers.recv().await.expect("collapsed trigger");
+    assert!(
+        matches!(collapsed.events.as_slice(), [ChangeEvent::Rescan]),
+        "an overflowing backlog is exactly one Rescan, got {} events",
+        collapsed.events.len()
+    );
+    settle().await;
+    assert!(triggers.try_recv().is_err(), "nothing else may be queued");
+    send_and_quiet(&tx, touched("fresh.rs"))
+        .await
+        .expect("send");
+    let fresh = triggers.recv().await.expect("trigger after the rescan");
+    assert_eq!(paths_of(&fresh), vec![PathBuf::from("fresh.rs")]);
 }

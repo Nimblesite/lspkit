@@ -1,4 +1,4 @@
-//! The session's request tasks. [MEM-060-EXAMPLE-TASKS]
+//! The session's request tasks. [MEM-LIFETIME-EXAMPLE-TASKS]
 //!
 //! Every request task is owned: finished tasks are reaped as new ones start,
 //! and dropping the owner at session end aborts any still in flight, so a

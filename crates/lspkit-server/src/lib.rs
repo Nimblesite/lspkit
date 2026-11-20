@@ -19,6 +19,7 @@
 pub mod capabilities;
 pub mod diagnostics;
 pub mod dispatch;
+pub mod hover;
 pub mod jsonrpc;
 pub mod live;
 pub mod mcp;
@@ -37,6 +38,7 @@ pub use crate::diagnostics::{
 pub use crate::dispatch::{
     CancellationHandle, DispatchError, Dispatcher, HandlerResult, QueuedRequest, RequestInterest,
 };
+pub use crate::hover::hover_markdown;
 pub use crate::jsonrpc::{FramingError, JsonRpcError, Message, MessageWriter, RequestId};
 pub use crate::outbound::{Outbound, OutboundError, OutboundResponse, OutboundResult};
 pub use crate::progress::{NoopReporter, ProgressReporter, ProgressSink, ProgressUpdate};

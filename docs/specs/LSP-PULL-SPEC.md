@@ -66,8 +66,10 @@ Completion, cancellation and dropped work release that registration. Shutdown
 cancels all outstanding requests. A workspace scan checks cancellation and its
 snapshot revision between documents and before emitting partial or final results.
 
-An ingress reader can register replaceable request interest before forwarding a
-request to the foreground loop. Preparation adopts that same registration, so
+An ingress reader can queue replaceable request interest before forwarding a
+request to the foreground loop (`CancellationHandle::queue`, which returns a
+`QueuedRequest` guard; dropping it before preparation releases the registration,
+[MEM-LIFETIME-QUEUED-REQUEST]). Preparation adopts that same registration, so
 cancellation received while queued remains effective. A changed input identity
 supersedes older work only for the same method and canonical resource. The first
 interruption wins: client cancellation remains `-32800`; supersession returns

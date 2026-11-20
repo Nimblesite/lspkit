@@ -144,3 +144,28 @@ async fn the_newest_ended_recording_is_still_returned_by_stop() -> Result<(), St
     }
     Ok(())
 }
+
+/// [PROF-CPU-SESSIONS] A recording that ended (its time limit passed or its
+/// target exited) is kept only so `stop` can still return it; it must not
+/// block a new session on the same process.
+#[tokio::test]
+async fn an_ended_recording_does_not_block_a_new_session_on_its_pid() -> Result<(), String> {
+    const PID: u32 = 7;
+    let manager = CpuSessionManager::default();
+    let runtime: Arc<dyn Runtime> = Arc::new(Recorded);
+    let first = finished_session(&manager, &runtime, PID, Some(Duration::ZERO)).await?;
+    let second = finished_session(&manager, &runtime, PID, None).await?;
+    if first == second {
+        return Err("the second session reused the first session's id".to_owned());
+    }
+    for id in [first, second] {
+        let recorded = manager.stop(&id).await.map_err(|error| error.to_string())?;
+        if recorded.data.total_samples != 1 {
+            return Err(format!(
+                "{id} returned {} samples",
+                recorded.data.total_samples
+            ));
+        }
+    }
+    Ok(())
+}

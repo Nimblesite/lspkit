@@ -1,4 +1,4 @@
-//! [LSP-PULL-FORGET] [MEM-FIX-SCOPE] Open/forget cycles of distinct URIs leave
+//! [LSP-PULL-FORGET] [MEM-LIFETIME] Open/forget cycles of distinct URIs leave
 //! no heap behind. Single-test binary: the instrumented allocator sees no
 //! sibling tests.
 #![cfg(feature = "pull")]

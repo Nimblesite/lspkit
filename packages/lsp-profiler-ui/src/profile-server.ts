@@ -40,11 +40,14 @@ interface Registration {
 }
 
 interface LoopbackServerState {
+  /** The one start in flight or done; concurrent callers share it, so no server is orphaned. */
+  starting: Promise<number> | undefined;
   server: http.Server | undefined;
-  serverPort: number | undefined;
+  /** Bumped by dispose, so a start still binding when it ran closes its server. */
+  epoch: number;
 }
 
-const serverState: LoopbackServerState = { server: undefined, serverPort: undefined };
+const serverState: LoopbackServerState = { starting: undefined, server: undefined, epoch: 0 };
 const registrations = new Map<string, Registration>();
 
 /**
@@ -70,36 +73,46 @@ export async function serveProfileForBrowser(
 export function disposeProfileServer(): void {
   serverState.server?.close();
   serverState.server = undefined;
-  serverState.serverPort = undefined;
+  serverState.starting = undefined;
+  serverState.epoch += 1;
   registrations.clear();
 }
 
-/** Start the loopback server if needed and resolve its port. */
+/** Start the loopback server once and resolve its port; concurrent callers share the start. */
 async function ensureServer(): Promise<number> {
-  if (serverState.server !== undefined && serverState.serverPort !== undefined) {
-    return serverState.serverPort;
+  serverState.starting ??= startServer(serverState.epoch);
+  return serverState.starting;
+}
+
+/** Bind a new loopback server and adopt it; a failed start may be retried. */
+async function startServer(epoch: number): Promise<number> {
+  try {
+    const created = http.createServer((req, res) => {
+      void handleRequest(req, res);
+    });
+    created.on("error", (error: Error) => {
+      Logger.warn(`Profile loopback server error: ${error.message}`);
+    });
+    // Port 0 = ephemeral; loopback only — never reachable off-machine.
+    created.listen(0, "127.0.0.1");
+    await once(created, "listening");
+    return adoptListening(created, epoch);
+  } catch (error) {
+    if (epoch === serverState.epoch) {
+      serverState.starting = undefined;
+    }
+    throw error;
   }
-  const created = http.createServer((req, res) => {
-    void handleRequest(req, res);
-  });
-  created.on("error", (error: Error) => {
-    Logger.warn(`Profile loopback server error: ${error.message}`);
-  });
-  // Port 0 = ephemeral; loopback only — never reachable off-machine.
-  created.listen(0, "127.0.0.1");
-  await once(created, "listening");
-  return adoptListening(created);
 }
 
 /** Keep the server once it is listening on a port; one bound without a port is closed. */
-function adoptListening(created: http.Server): number {
+function adoptListening(created: http.Server, epoch: number): number {
   const address = created.address();
-  if (address === null || typeof address === "string") {
+  if (address === null || typeof address === "string" || epoch !== serverState.epoch) {
     created.close();
-    throw new Error("profile loopback server bound without a port");
+    throw new Error("profile loopback server bound without a port, or disposed while starting");
   }
   serverState.server = created;
-  serverState.serverPort = address.port;
   return address.port;
 }
 

@@ -145,7 +145,9 @@ fn utf16_to_utf8_offset(line: &str, utf16_units: usize) -> Result<usize, EditErr
 }
 
 /// Locate a UTF-32 code-point boundary and return its UTF-8 byte offset.
-fn utf32_to_utf8_offset(line: &str, code_points: usize) -> Result<usize, EditError> {
+///
+/// Shared with [`crate::vfs::text`] for char-index to byte-offset conversion.
+pub(crate) fn utf32_to_utf8_offset(line: &str, code_points: usize) -> Result<usize, EditError> {
     line.char_indices().nth(code_points).map_or_else(
         || {
             if line.chars().count() == code_points {

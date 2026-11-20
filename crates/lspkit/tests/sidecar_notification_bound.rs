@@ -1,4 +1,4 @@
-//! [MEM-060-SIDECAR-NOTIFICATIONS]: a consumer that only reads responses keeps
+//! [MEM-LIFETIME-SIDECAR-NOTIFICATIONS]: a consumer that only reads responses keeps
 //! the notification receiver alive inside `Inbound`. Unsolicited backend
 //! events must not queue up behind it for the life of the server, and every
 //! drop is counted and logged, never silent.

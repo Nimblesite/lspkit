@@ -1,4 +1,4 @@
-//! [MEM-060-EXAMPLE-OUTBOX]: while the editor is not reading stdout, every
+//! [MEM-LIFETIME-EXAMPLE-OUTBOX]: while the editor is not reading stdout, every
 //! workspace change must not queue another notification behind the pump.
 
 use crate::wire::Outbox;

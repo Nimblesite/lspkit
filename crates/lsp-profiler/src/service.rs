@@ -34,6 +34,8 @@ use crate::{cooperative, process};
 
 #[cfg(test)]
 mod lifetime_tests;
+#[cfg(test)]
+mod memory_start_lifetime_tests;
 mod memory_steps;
 mod progress;
 

@@ -15,10 +15,16 @@ import { embedJson } from '../profiler-webview';
 import { stringField } from '../unknown-shape';
 import { HOSTILE, dashboardSnapshot, profileResult } from './webview-contract-helpers';
 
+/** A transform the script applied to its context, as its six numbers. */
+type CanvasTransform = readonly number[];
+
 interface DrawnText {
     readonly text: string;
+    readonly x: number;
     readonly y: number;
     readonly fill: string;
+    readonly font: string;
+    readonly align: string;
 }
 
 /** A no-op for canvas methods the recording mock does not implement. */
@@ -34,17 +40,20 @@ const mockGetComputedStyle = (): { getPropertyValue: (name: string) => string } 
 /** The recording canvas context's pen, typed for the proxy reads below. */
 interface RecordingPen {
     fillStyle: string;
+    font: string;
+    textAlign: string;
     fillText: (text: string, x: number, y: number) => void;
+    setTransform: (...matrix: readonly [number, number, number, number, number, number]) => void;
     readonly [key: string]: unknown;
 }
 
-/** The minimal canvas surface the inline graph script reads and draws on. */
+/** The minimal canvas surface the inline graph script reads, sizes and draws on. */
 interface RecordingCanvas {
-    readonly width: number;
-    readonly height: number;
+    width: number;
+    height: number;
     readonly clientWidth: number;
     readonly parentElement: Record<string, never>;
-    readonly style: Record<string, never>;
+    style: Record<string, string>;
     readonly getContext: () => RecordingPen;
 }
 
@@ -56,24 +65,49 @@ interface RecordingDocument {
     readonly body: { appendChild: (child: unknown) => void };
 }
 
+/** One run of a retention graph's inline script against a recording canvas. */
+interface GraphScriptRun {
+    readonly texts: readonly DrawnText[];
+    readonly canvas: RecordingCanvas;
+    readonly transforms: readonly CanvasTransform[];
+}
+
 /**
  * Run a retention graph's inline script against a recording canvas and return
- * every text it draws, with where and in which colour: the panel as a reader
- * sees it. Each CSS variable resolves to its own name, so two different
- * variables are two different colours.
+ * every text it draws (with where, in which font and colour), the canvas it
+ * sized and every transform it applied: the panel as a reader sees it. Each
+ * CSS variable resolves to its own name, so two different variables are two
+ * different colours.
  */
-function drawnTexts(html: string): DrawnText[] {
+function runGraphScript(html: string, devicePixelRatio: number): GraphScriptRun {
     const script = /<script nonce="[^"]+">(?<body>[\s\S]*)<\/script>/u.exec(html)?.groups?.body ?? '';
     const texts: DrawnText[] = [];
+    const transforms: number[][] = [];
     const pen: RecordingPen = {
         fillStyle: '',
-        fillText: (text: string, _x: number, y: number): void => { texts.push({ text, y, fill: pen.fillStyle }); },
+        font: '',
+        textAlign: 'start',
+        fillText: (text: string, x: number, y: number): void => {
+            texts.push({ text, x, y, fill: pen.fillStyle, font: pen.font, align: pen.textAlign });
+        },
+        setTransform: (...matrix: readonly [number, number, number, number, number, number]): void => {
+            transforms.push([...matrix]);
+        },
     };
     const ctx = recordingCtx(pen);
     const canvas = recordingCanvas(ctx);
     const document = recordingDocument(canvas);
-    vm.runInNewContext(script, { document, getComputedStyle: mockGetComputedStyle, window: { addEventListener: noopCanvasMethod } });
-    return texts;
+    vm.runInNewContext(script, {
+        document,
+        getComputedStyle: mockGetComputedStyle,
+        window: { addEventListener: noopCanvasMethod, devicePixelRatio },
+    });
+    return { texts, canvas, transforms };
+}
+
+/** Every text the retention graph draws, at device pixel ratio 1. */
+function drawnTexts(html: string): DrawnText[] {
+    return [...runGraphScript(html, 1).texts];
 }
 
 function recordingCtx(pen: RecordingPen): RecordingPen {
@@ -176,6 +210,99 @@ function rootsAreNamedAboveWhatTheyHold(): void {
     assert.notStrictEqual(root.fill, holder.fill, 'a root is drawn apart from an intermediate holder');
 }
 
+/** A holder type far wider than its layer's gap, as production filming showed (#4). */
+const LONG_HOLDER_TYPE = 'System.Collections.Concurrent.ConcurrentDictionary`2[String,Shop.Session]';
+
+/** Four long-typed holders in one layer, a target below and a root above. */
+const LONG_TYPE_HOLDERS: ReferenceGraphResult = {
+    targetType: 'Shop.Session', maxDepth: 8, maxNodes: 60, script: '',
+    graph: {
+        nodes: [
+            { id: 0, type: 'Shop.Session', size: 40, repr: '0x1', depth: 0, isTarget: true },
+            { id: 1, type: LONG_HOLDER_TYPE, size: 4096, repr: '0x2', depth: 1, isTarget: false },
+            { id: 2, type: LONG_HOLDER_TYPE, size: 4096, repr: '0x3', depth: 1, isTarget: false },
+            { id: 3, type: LONG_HOLDER_TYPE, size: 4096, repr: '0x4', depth: 1, isTarget: false },
+            { id: 4, type: LONG_HOLDER_TYPE, size: 4096, repr: '0x5', depth: 1, isTarget: false },
+            { id: 5, type: 'Dictionary`2[Int32,Shop.Session]', size: 80, repr: 'static sessions', depth: 2, isTarget: false, isRoot: true, rootKind: 'Static' },
+        ],
+        edges: [
+            { from: 5, to: 1, label: 'keys' }, { from: 5, to: 2, label: 'vals' },
+            { from: 5, to: 3, label: 'set' }, { from: 5, to: 4, label: 'get' },
+        ],
+        cycles: [],
+    },
+};
+
+// [PROF-UI-REFGRAPH]: a Retina screen renders two device pixels per CSS
+// pixel, so the backing store must scale by devicePixelRatio and the context
+// with it, exactly as the dashboard timeline and the flame graph already do.
+function retinaBackingStoreScalesByDevicePixelRatio(): void {
+    // The recording canvas reports a 900px client width; three layers span 400px.
+    const cssWidth = 900;
+    const cssHeight = 400;
+    const run = runGraphScript(buildRefGraphHtml(ROOTED_SESSIONS), 2);
+    assert.strictEqual(run.canvas.width, cssWidth * 2, `backing width must be 2× the CSS width (${String(cssWidth * 2)}), was ${String(run.canvas.width)}`);
+    assert.strictEqual(run.canvas.height, cssHeight * 2, `backing height must be 2× the CSS height (${String(cssHeight * 2)}), was ${String(run.canvas.height)}`);
+    assert.strictEqual(run.canvas.style.width, `${String(cssWidth)}px`, 'the CSS width stays in logical pixels');
+    assert.strictEqual(run.canvas.style.height, `${String(cssHeight)}px`, 'the CSS height stays in logical pixels');
+    assert.deepStrictEqual(run.transforms.at(-1), [2, 0, 0, 2, 0, 0], 'the context must be scaled so all drawing stays in CSS pixels');
+    assert.strictEqual(runGraphScript(buildRefGraphHtml(ROOTED_SESSIONS), 1).canvas.width, cssWidth, 'at ratio 1 the backing store equals the CSS size');
+}
+
+/** Monospace advance per character (0.6 em) for every font the graph draws in. */
+const MONOSPACE_CHAR_WIDTH: Readonly<Record<string, number>> = {
+    '9px monospace': 5.4,
+    '10px monospace': 6,
+    '11px monospace': 6.6,
+    'bold 13px monospace': 7.8,
+};
+
+/** A monospace character's advance as a fraction of its font size. */
+const MONOSPACE_ADVANCE = 0.6;
+
+/** A drawn label's bounding box, in canvas CSS pixels. */
+interface LabelBox {
+    readonly text: string;
+    readonly x0: number;
+    readonly y0: number;
+    readonly x1: number;
+    readonly y1: number;
+}
+
+/** The box a drawn monospace label occupies: ascent above its baseline, quarter-em below. */
+function drawnLabelBox(label: DrawnText): LabelBox {
+    const charWidth = MONOSPACE_CHAR_WIDTH[label.font];
+    if (charWidth === undefined) {
+        throw new Error(`every drawn font must be measured here, saw: ${label.font}`);
+    }
+    const width = label.text.length * charWidth;
+    const x0 = label.align === 'center' ? label.x - width / 2 : label.x;
+    const fontHeight = charWidth / MONOSPACE_ADVANCE;
+    return { text: label.text, x0, y0: label.y - fontHeight, x1: x0 + width, y1: label.y + fontHeight / 4 };
+}
+
+function boxesOverlap(left: LabelBox, right: LabelBox): boolean {
+    return left.x0 < right.x1 && right.x0 < left.x1 && left.y0 < right.y1 && right.y0 < left.y1;
+}
+
+function assertLabelsNeverOverlap(boxes: readonly LabelBox[]): void {
+    for (let i = 0; i < boxes.length; i += 1) {
+        for (let j = i + 1; j < boxes.length; j += 1) {
+            assert.ok(!boxesOverlap(boxes[i], boxes[j]),
+                `drawn labels must not overlap: "${boxes[i].text}" overlaps "${boxes[j].text}"`);
+        }
+    }
+}
+
+// [PROF-UI-REFGRAPH]: a layer of many long-typed nodes must still label every
+// node: each label fits the gap between its neighbours, never the next label.
+function manyLongTypedNodesNeverOverlapTheirLabels(): void {
+    const run = runGraphScript(buildRefGraphHtml(LONG_TYPE_HOLDERS), 1);
+    const boxes = run.texts.map((label) => drawnLabelBox(label));
+    assert.ok(boxes.length > 10, `the graph must label its nodes, root and edges, drew ${String(boxes.length)} texts`);
+    assertLabelsNeverOverlap(boxes);
+}
+
 function decodingKeepsRoots(): void {
     const graph = decodeRefGraph({
         nodes: [
@@ -226,6 +353,8 @@ suite('Profiler webviews — shared host hardening', () => {
     test('the dashboard offers the raw heap profile via a button only when one exists', heapProfileButtonsOnlyWithATrace);
     test('retention graph HTML is CSP-locked and hostile type names/reprs cannot escape', hostileRetentionGraphIsInert);
     test('retention graph names each root by its label, above the holders and the targets they keep alive', rootsAreNamedAboveWhatTheyHold);
+    test('retention graph scales its canvas backing store by the device pixel ratio', retinaBackingStoreScalesByDevicePixelRatio);
+    test('retention graph never overlaps labels for many long-typed nodes in one layer', manyLongTypedNodesNeverOverlapTheirLabels);
     test('a decoded retention graph keeps each root, its kind and its label', decodingKeepsRoots);
     test('retention graph renders an honest empty state when the walk found nothing', anEmptyWalkSaysSo);
     test('profiler webviews follow the editor theme instead of hardcoding a dark palette', viewsFollowTheEditorTheme);

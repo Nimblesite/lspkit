@@ -76,7 +76,7 @@ fn document_text(sources: &Sources, uri: &str) -> Result<String, AnalysisError> 
 }
 
 /// Whether the session still tracks `uri`: an open document, or a JSON file
-/// in the watched root, as the workspace scan lists them. [MEM-060-PULL-ADMIT]
+/// in the watched root, as the workspace scan lists them. [MEM-LIFETIME-PULL-ADMIT]
 pub(super) fn tracked(sources: &Sources, uri: &str) -> bool {
     let open = sources
         .documents

@@ -1,4 +1,4 @@
-//! [MEM-FIX-SCOPE]: actual allocator bytes, before any count accessor can sweep entries.
+//! [MEM-LIFETIME]: actual allocator bytes, before any count accessor can sweep entries.
 
 use lspkit::sidecar::{Correlator, RequestId};
 

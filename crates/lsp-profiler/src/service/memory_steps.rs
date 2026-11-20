@@ -14,6 +14,7 @@ use crate::wire::{
     methods, MemoryIngestParams, MemoryResult, MemorySessionParams, MemoryStartParams,
     MemoryStartResult, MemoryStep, MemoryTypeParams,
 };
+use tracing::warn;
 
 /// Default retention-graph node budget.
 const DEFAULT_GRAPH_LIMIT: u32 = 200;
@@ -36,19 +37,52 @@ impl ProfilerService {
         let _owner = self.recognise(pid).await?;
         let runtime = self.memory_runtime(request.runtime.as_deref(), pid).await?;
         let backend = memory_backend(runtime.as_ref())?;
-        let depth = request.traceback_depth.and_then(|d| u32::try_from(d).ok());
         let context = self
-            .inner
-            .memory
-            .open(Arc::clone(&runtime), pid, depth)
+            .open_session(&runtime, pid, request.traceback_depth)
             .await;
-        let action = backend.start(&context).await?;
-        Ok(MemoryStartResult {
-            memory_session_id: context.session_id.clone(),
-            runtime: runtime.id().to_owned(),
-            mode: backend.capabilities().mode,
-            step: self.to_step(&context.session_id, action).await?,
-        })
+        let answer = self.start_step(backend, &context).await;
+        if answer.is_err() {
+            self.abandon(backend, &context).await;
+        }
+        answer.map(|step| start_result(&runtime, backend, &context, step))
+    }
+
+    /// Open the session this start will run its first step on.
+    async fn open_session(
+        &self,
+        runtime: &Arc<dyn Runtime>,
+        pid: u32,
+        traceback_depth: Option<i64>,
+    ) -> MemoryContext {
+        let depth = traceback_depth.and_then(|d| u32::try_from(d).ok());
+        self.inner
+            .memory
+            .open(Arc::clone(runtime), pid, depth)
+            .await
+    }
+
+    /// Run the backend's first step on a just-opened session.
+    async fn start_step(
+        &self,
+        backend: &dyn MemoryBackend,
+        context: &MemoryContext,
+    ) -> Result<MemoryStep, ProfilerError> {
+        let action = backend.start(context).await?;
+        self.to_step(&context.session_id, action).await
+    }
+
+    /// Release a session whose start failed, the way `memory/stop` does: the
+    /// backend may hold state from the failed start, and the client never
+    /// received the id, so nothing else can stop it.
+    async fn abandon(&self, backend: &dyn MemoryBackend, context: &MemoryContext) {
+        if let Err(error) = backend.stop(context).await {
+            warn!(
+                session_id = %context.session_id,
+                %error,
+                "cannot stop a memory session whose start failed"
+            );
+        }
+        self.inner.memory.close(&context.session_id).await;
     }
 
     /// Dispatch a parameter-free memory operation and normalize its next step.
@@ -188,4 +222,19 @@ fn memory_backend(runtime: &dyn Runtime) -> Result<&dyn MemoryBackend, ProfilerE
     runtime.memory().ok_or_else(|| {
         MemoryError::Unsupported(format!("memory profiling of {}", runtime.display_name())).into()
     })
+}
+
+/// The wire answer to a start whose first step produced `step`.
+fn start_result(
+    runtime: &Arc<dyn Runtime>,
+    backend: &dyn MemoryBackend,
+    context: &MemoryContext,
+    step: MemoryStep,
+) -> MemoryStartResult {
+    MemoryStartResult {
+        memory_session_id: context.session_id.clone(),
+        runtime: runtime.id().to_owned(),
+        mode: backend.capabilities().mode,
+        step,
+    }
 }

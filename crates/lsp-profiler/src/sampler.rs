@@ -10,7 +10,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, warn};
@@ -134,6 +134,9 @@ pub struct SamplerHandle {
     snapshots: Option<mpsc::UnboundedSender<oneshot::Sender<()>>>,
     /// The backend's producer task, aborted when the handle drops.
     producer: Option<tokio::task::AbortHandle>,
+    /// When the channel opened: the backend starts its producer, and with it
+    /// any requested duration, right after. [PROF-CPU-SESSIONS]
+    started_at: Instant,
 }
 
 /// Everything a backend needs to start producing samples.
@@ -192,7 +195,16 @@ impl SamplerHandle {
             finish_timeout,
             snapshots: None,
             producer: None,
+            started_at: Instant::now(),
         }
+    }
+
+    /// When recording began: the instant the producer's channel opened. A
+    /// session measures its duration from here, not from when it was
+    /// registered, so recorded time matches the producer's own clock.
+    #[must_use]
+    pub const fn started_at(&self) -> Instant {
+        self.started_at
     }
 
     /// Signal the producer to stop without waiting.

@@ -6,11 +6,13 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
+use lsp_profiler::wire::methods;
 use lsp_profiler::{ProfilerConfig, ProfilerEvents, ProfilerService};
 use lsp_profiler_dotnet::{DotNetConfig, DotNetRuntime};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -186,4 +188,98 @@ pub fn completed(step: &Value) -> &Value {
     step.get("result")
         .or_else(|| step.pointer("/step/result"))
         .unwrap_or_else(|| panic!("direct backend must complete every step: {step}"))
+}
+
+/// How long one poll may chase its condition before the test fails. The pass
+/// condition is always the observed event, never the clock ([PROF-TESTING]).
+const POLL_GUARD: Duration = Duration::from_secs(60);
+
+/// Poll `cpu.snapshot` until the session holds more than `threshold` samples —
+/// the same bound the caller asserts later. Each attempt is one awaited
+/// service call, the yield between attempts
+/// ([PROF-CPU-SNAPSHOT], [PROF-TESTING]).
+#[allow(
+    dead_code,
+    reason = "only the CPU suites sample; the held-step suite's crate never calls this"
+)]
+pub async fn cpu_samples_exceed(service: &ProfilerService, session_id: &str, threshold: i64) {
+    tokio::time::timeout(POLL_GUARD, async {
+        loop {
+            let snapshot = call(
+                service,
+                methods::CPU_SNAPSHOT,
+                json!({ "session_id": session_id }),
+            )
+            .await;
+            if snapshot["total_samples"].as_i64().unwrap_or(0) > threshold {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("the CPU session never exceeded {threshold} samples"));
+}
+
+/// Poll `memory.snapshot` until `type_name` holds more than `threshold`
+/// instances: the fixture grows its heap
+/// continuously, so every capture sees growth ([PROF-DOTNET-MEMORY]).
+#[allow(
+    dead_code,
+    reason = "only the C# suite's leak grows on its own; the F# crate never calls this"
+)]
+pub async fn memory_count_exceed(
+    service: &ProfilerService,
+    session: &Value,
+    type_name: &str,
+    threshold: i64,
+) {
+    tokio::time::timeout(POLL_GUARD, async {
+        loop {
+            let step = call(service, methods::MEMORY_SNAPSHOT, session.clone()).await;
+            let count = site_count(&completed(&step)["outcome"]["snapshot"], type_name);
+            if count > threshold {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("{type_name} never grew past {threshold} instances"));
+}
+
+/// The instances of `type_name` a snapshot's sites report, zero when absent.
+fn site_count(snapshot: &Value, type_name: &str) -> i64 {
+    snapshot["sites"].as_array().map_or(0, |sites| {
+        sites
+            .iter()
+            .filter(|site| site["type_name"] == type_name)
+            .map(|site| site["count"].as_i64().unwrap_or(0))
+            .sum()
+    })
+}
+
+/// Poll `cpu.list` until the session is no longer active — ended by its
+/// duration or by its target's exit ([PROF-CPU-SESSIONS], [PROF-TESTING]).
+#[allow(
+    dead_code,
+    reason = "only the C# suite ends sessions on its own; the F# crate never calls this"
+)]
+pub async fn cpu_session_ended(service: &ProfilerService, session_id: &str) {
+    tokio::time::timeout(POLL_GUARD, async {
+        loop {
+            let listed = call(service, methods::CPU_LIST, json!({})).await;
+            let active = listed["sessions"].as_array().is_some_and(|sessions| {
+                sessions
+                    .iter()
+                    .any(|session| session["session_id"] == session_id)
+            });
+            if !active {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("the CPU session never ended"));
 }

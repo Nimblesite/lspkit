@@ -214,11 +214,12 @@ doc:
 ## that `cargo build` generates).
 profiler-ui:
 	cargo build -p lsp-profiler --locked
-	cd packages/lsp-profiler-ui && npm ci && npm run build
+	npm ci --prefix packages/lsp-profiler-ui
+	npm run build --prefix packages/lsp-profiler-ui
 
 ## profiler-ui-test: Test the UI library against a mock language server.
 profiler-ui-test: profiler-ui
-	cd packages/lsp-profiler-ui && npm test
+	npm test --prefix packages/lsp-profiler-ui
 
 # [WEB-CONTENT] Share dependency setup; npm owns the build and dev commands.
 _website_setup:

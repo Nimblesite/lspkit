@@ -185,7 +185,7 @@ fn batch_new_preserves_fields() {
     assert_eq!(b.diagnostics.len(), 2);
 }
 
-/// [MEM-060-DIAGNOSTICS-SINK] A consumer that attaches per connection must not
+/// [MEM-LIFETIME-DIAGNOSTICS-SINK] A consumer that attaches per connection must not
 /// stay attached, with everything it owns, after its connection ends.
 #[tokio::test]
 async fn owned_sinks_detach_when_their_registration_drops() {

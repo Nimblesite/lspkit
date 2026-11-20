@@ -1,4 +1,4 @@
-//! [MEM-060-PULL-ADMIT]: a pull admits a Salsa input and memo for its URI.
+//! [MEM-LIFETIME-PULL-ADMIT]: a pull admits a Salsa input and memo for its URI.
 //! Once the URI is neither open nor a JSON file in the watched root, nothing
 //! will close it, so the session must release it itself.
 

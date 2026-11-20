@@ -96,19 +96,22 @@ fn render(result: HandlerResult) -> Outcome<Value> {
 /// A queued request's second registration must adopt its earlier client cancellation.
 async fn interrupted(dispatcher: &Dispatcher, ingress: &CancellationHandle) -> Outcome<Value> {
     let id = RequestId::Number(3);
-    ingress.register(id.clone(), None)?;
+    let first = ingress.queue(id.clone(), None)?;
     ingress.cancel(&id);
-    ingress.register(id.clone(), None)?;
-    render(dispatcher.dispatch(&id, METHOD, Value::Null).await?)
+    let second = ingress.queue(id.clone(), None)?;
+    let outcome = render(dispatcher.dispatch(&id, METHOD, Value::Null).await?);
+    drop((first, second));
+    outcome
 }
 
 /// Reader-side controls can arrive after their foreground owner has naturally exited.
 fn late_inputs(ingress: &CancellationHandle) -> Outcome<()> {
     let id = RequestId::Number(4);
-    ingress.register(id.clone(), None)?;
+    let queued = ingress.queue(id.clone(), None)?;
     ingress.cancel(&id);
     ingress.supersede(METHOD, "");
     ingress.supersede_all();
+    drop(queued);
     Ok(())
 }
 

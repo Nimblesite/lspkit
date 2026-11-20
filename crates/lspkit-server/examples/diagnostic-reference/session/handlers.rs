@@ -56,7 +56,7 @@ impl Drop for HandlerState {
     }
 }
 
-/// Register handlers without retaining their own registry. [MEM-FIX-SCOPE]
+/// Register handlers without retaining their own registry. [MEM-LIFETIME]
 pub(super) fn register_handlers(server: &Server) {
     let state = Arc::new(HandlerState {
         sources: server.sources.clone(),
@@ -90,7 +90,7 @@ fn register_metadata(server: &Server, state: Arc<HandlerState>) {
 }
 
 /// Release `uri`'s Salsa input and memo unless the session still tracks it:
-/// nothing else would ever close it. [MEM-060-PULL-ADMIT]
+/// nothing else would ever close it. [MEM-LIFETIME-PULL-ADMIT]
 pub(crate) fn release_untracked(sources: &Sources, pull: &PullStore, uri: &str) {
     if analysis::tracked(sources, uri) {
         return;

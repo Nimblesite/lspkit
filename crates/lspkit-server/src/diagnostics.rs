@@ -131,7 +131,7 @@ impl DiagnosticsBus {
 
     /// Attach a sink for as long as the returned guard lives: dropping it
     /// detaches the sink, so a per-connection consumer never accumulates on
-    /// a long-lived bus. [MEM-060-DIAGNOSTICS-SINK]
+    /// a long-lived bus. [MEM-LIFETIME-DIAGNOSTICS-SINK]
     pub fn attach_owned(&self, sink: Arc<dyn DiagnosticsSink>) -> SinkRegistration {
         let registered = Arc::downgrade(&sink);
         let _count = self.attach(sink);

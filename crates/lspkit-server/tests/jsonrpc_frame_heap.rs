@@ -1,4 +1,4 @@
-//! [JSONRPC-FRAME-LIMIT] [MEM-FIX-SCOPE] A body shorter than its claimed length
+//! [JSONRPC-FRAME-LIMIT] [MEM-LIFETIME] A body shorter than its claimed length
 //! costs only the bytes that arrived. Single-test binary: the instrumented
 //! allocator sees no sibling tests.
 

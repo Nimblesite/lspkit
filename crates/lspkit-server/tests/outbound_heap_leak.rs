@@ -1,4 +1,4 @@
-//! [LSP-OUTBOUND] [MEM-FIX-SCOPE]: every server-request outcome frees its heap.
+//! [LSP-OUTBOUND] [MEM-LIFETIME]: every server-request outcome frees its heap.
 //! Single-test binary: the instrumented allocator sees no sibling tests.
 
 use lspkit_server::{JsonRpcError, Message, Outbound, OutboundError, RequestId};

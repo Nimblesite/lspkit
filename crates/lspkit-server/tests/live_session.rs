@@ -119,9 +119,9 @@ async fn run_advances_generation_on_each_success() {
     let analyzer = OkAnalyzer {
         calls: Arc::clone(&calls),
     };
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = mpsc::channel(triggers.len());
     for t in triggers {
-        tx.send(t).expect("send");
+        tx.try_send(t).expect("send");
     }
     drop(tx);
 
@@ -137,9 +137,9 @@ async fn run_does_not_advance_on_analyzer_failure() {
     let triggers = produce_triggers(2).await.expect("two real triggers");
 
     let session = Session::new();
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = mpsc::channel(triggers.len());
     for t in triggers {
-        tx.send(t).expect("send");
+        tx.try_send(t).expect("send");
     }
     drop(tx);
 
@@ -152,7 +152,7 @@ async fn run_does_not_advance_on_analyzer_failure() {
 #[tokio::test]
 async fn run_handles_empty_trigger_stream() {
     let session = Session::new();
-    let (tx, rx) = mpsc::unbounded_channel::<Trigger>();
+    let (tx, rx) = mpsc::channel::<Trigger>(1);
     drop(tx);
     let observer = session.clone();
     session

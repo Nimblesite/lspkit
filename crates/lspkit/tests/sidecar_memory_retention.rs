@@ -1,4 +1,4 @@
-//! Allocation-lifetime proofs for [MEM-AUDIT-SCOPE] in docs/plans/memory-leak-audit.md.
+//! Allocation-lifetime proofs for [MEM-LIFETIME] (docs/specs/lspkit-spec.md).
 //! Isolated public-API tests are necessary to observe ownership without RSS noise.
 
 use lspkit::sidecar::Correlator;

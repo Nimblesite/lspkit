@@ -23,12 +23,14 @@ mod graph_retention;
 mod support;
 
 use std::path::PathBuf;
-use std::time::Duration;
 
 use lsp_profiler::wire::methods;
 use lsp_profiler::ProfilerService;
 use serde_json::{json, Value};
-use support::{assert_only_busy_threads_count, call, completed, engine, service, Fixture};
+use support::{
+    assert_only_busy_threads_count, call, completed, cpu_samples_exceed, cpu_session_ended, engine,
+    memory_count_exceed, service, Fixture,
+};
 
 const FIXTURE: &str = "HotLeakApp";
 const FIXTURE_TYPE: &str = "HotLeakApp.LeakedPayload";
@@ -37,6 +39,11 @@ const HOT_FUNCTION: &str = "HotLeakApp.Hot.Spin";
 const ENTRY_POINT: &str = "HotLeakApp.Program.Main(";
 /// `LeakCache.Items`: one small object, outside any top-twenty summary.
 const LEAK_LIST: &str = "System.Collections.Generic.List`1[HotLeakApp.LeakedPayload]";
+/// Payloads whose burst a 1 MB capture buffer cannot hold ([PROF-DOTNET-HEAP-CAPTURE]):
+/// 256 MB lost events past about six million objects, about 45 event bytes per
+/// object, and each payload is at least three objects (the record, its 1 KiB
+/// `Data` and its `Label`), so 20 000 payloads is a burst of roughly 2.7 MB.
+const HEAP_BURST_PAYLOADS: i64 = 20_000;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_fixture_is_recognised_as_an_attachable_dotnet_process() {
@@ -78,7 +85,9 @@ async fn cpu_profiling_finds_the_hot_function_and_its_lines() {
         .expect("session_id")
         .to_owned();
     assert_eq!(started["runtime"], "dotnet");
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    // The hot function needs samples on record before the report can name it:
+    // watch the live session until the count the report asserts exists.
+    cpu_samples_exceed(&service, &session_id, 100).await;
     let report = call(
         &service,
         methods::CPU_STOP,
@@ -175,7 +184,10 @@ async fn memory_profiling_sees_the_leak_its_root_and_the_collection() {
             > 0
     );
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // The diff needs the leak to have grown since `first`: the fixture never
+    // stops allocating, so watch its count through the service until it has.
+    let first_count = site["count"].as_i64().unwrap_or(0);
+    memory_count_exceed(&service, &session, FIXTURE_TYPE, first_count).await;
     let diff = call(&service, methods::MEMORY_DIFF, session.clone()).await;
     let grown = completed(&diff)["outcome"]["diff"]["grown"]
         .as_array()
@@ -219,6 +231,11 @@ async fn memory_profiling_sees_the_leak_its_root_and_the_collection() {
     service.shutdown().await;
 }
 
+/// The engine's refusal when the target has no diagnostics endpoint. Only the
+/// pre-connect check reports it; a failed connection reports the runtime's own
+/// error ([PROF-DOTNET-ENGINE-ENDPOINT]).
+const NO_ENDPOINT: &str = "has no .NET diagnostics endpoint";
+
 async fn error_code(service: &ProfilerService, method: &str, params: Value) -> i64 {
     match service.handle(method, params).await {
         Ok(value) => panic!("{method} must be refused, got {value}"),
@@ -250,9 +267,8 @@ async fn a_pid_that_names_no_process_is_process_not_found_everywhere() {
 }
 
 /// A live process no runtime recognises (this test binary) is `UNSUPPORTED_RUNTIME`
-/// for every PID-taking command, answered well under the engine's connect timeout:
-/// the engine decides "no .NET diagnostics endpoint" up front ([PROF-ERRORS],
-/// [PROF-DOTNET-ENGINE-ENDPOINT]). Kill refuses it — kill can never reach a
+/// for every PID-taking command ([PROF-ERRORS]); the engine-level test below proves
+/// the refusal comes before any connection ([PROF-DOTNET-ENGINE-ENDPOINT]). Kill refuses it — kill can never reach a
 /// process outside the profiler's reach.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() {
@@ -267,28 +283,20 @@ async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() 
         error_code(&service, methods::MEMORY_START, own.clone()).await,
         -32002
     );
-    let started = tokio::time::Instant::now();
     assert_eq!(error_code(&service, methods::CPU_START, own).await, -32002);
-    assert!(
-        started.elapsed() < Duration::from_secs(5),
-        "the engine answers without waiting for a connect timeout: {:?}",
-        started.elapsed()
-    );
     service.shutdown().await;
 }
 
 /// The engine itself refuses a live process with no .NET diagnostics endpoint as
-/// `UnsupportedRuntime` immediately, before any connection attempt
+/// `UnsupportedRuntime` before any connection attempt
 /// ([PROF-DOTNET-ENGINE-ENDPOINT]). Drives the engine binary directly so the
 /// endpoint decision is proven at the engine boundary, not through the service.
 #[tokio::test(flavor = "multi_thread")]
-async fn the_engine_refuses_a_process_without_a_dotnet_endpoint_immediately() {
-    let started = std::time::Instant::now();
+async fn the_engine_refuses_a_process_without_a_dotnet_endpoint_before_connecting() {
     let output = std::process::Command::new(engine())
         .args(["cpu", "--pid", &std::process::id().to_string()])
         .output()
         .expect("run the engine");
-    let elapsed = started.elapsed();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let last: Value = serde_json::from_str(stdout.lines().last().unwrap_or_default())
         .unwrap_or_else(|error| panic!("one protocol line expected ({error}): {stdout}"));
@@ -296,8 +304,10 @@ async fn the_engine_refuses_a_process_without_a_dotnet_endpoint_immediately() {
     assert_eq!(last["kind"], "failure", "{last}");
     assert_eq!(last["error_kind"], "UnsupportedRuntime", "{last}");
     assert!(
-        elapsed < Duration::from_secs(5),
-        "the engine answers without waiting for a connect timeout: {elapsed:?}"
+        last["message"]
+            .as_str()
+            .is_some_and(|m| m.contains(NO_ENDPOINT)),
+        "decided before any connection attempt: {last}"
     );
 }
 
@@ -361,10 +371,22 @@ async fn a_target_that_exits_mid_session_keeps_its_samples() {
     let dir = tempfile::tempdir().expect("tempdir");
     let service = service(dir.path().to_path_buf());
     let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // Samples must exist before the exit for the kept report to hold any.
+    cpu_samples_exceed(
+        &service,
+        started["session_id"].as_str().expect("session_id"),
+        0,
+    )
+    .await;
     let _ = fixture.child.kill();
     let _ = fixture.child.wait();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // The session ends itself once the engine notices the exit; only a session
+    // that ended keeps its recording for the stop below ([PROF-CPU-SESSIONS]).
+    cpu_session_ended(
+        &service,
+        started["session_id"].as_str().expect("session_id"),
+    )
+    .await;
     let report = call(
         &service,
         methods::CPU_STOP,
@@ -421,8 +443,12 @@ async fn a_duration_caps_the_recorded_time() {
         json!({ "pid": fixture.pid, "duration_secs": 1.0 }),
     )
     .await;
-    tokio::time::sleep(Duration::from_secs(3)).await;
     // [PROF-CPU-SESSIONS] the duration ended the session: it is no longer active.
+    cpu_session_ended(
+        &service,
+        started["session_id"].as_str().expect("session_id"),
+    )
+    .await;
     let listed = call(&service, methods::CPU_LIST, json!({})).await;
     assert!(
         !listed["sessions"]
@@ -461,7 +487,13 @@ async fn a_mid_session_snapshot_reports_the_samples_so_far() {
     let service = service(dir.path().to_path_buf());
     let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
     let session = json!({ "session_id": started["session_id"] });
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // The snapshot the test asserts on needs samples on record first.
+    cpu_samples_exceed(
+        &service,
+        session["session_id"].as_str().expect("session_id"),
+        0,
+    )
+    .await;
     let snapshot = call(&service, methods::CPU_SNAPSHOT, session.clone()).await;
     let _ = call(&service, methods::CPU_STOP, session).await;
     assert!(
@@ -478,7 +510,21 @@ async fn a_mid_session_snapshot_reports_the_samples_so_far() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_snapshot_that_loses_events_fails_instead_of_misreporting_the_heap() {
     let fixture = Fixture::start(FIXTURE);
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // The burst must overflow the 1 MB buffer: the fixture never stops growing,
+    // so watch its heap through the service until it holds more payloads than
+    // such a buffer can capture, then ask the engine for exactly that capture.
+    let poll_dir = tempfile::tempdir().expect("tempdir");
+    let service = service(poll_dir.path().to_path_buf());
+    let started = call(
+        &service,
+        methods::MEMORY_START,
+        json!({ "pid": fixture.pid }),
+    )
+    .await;
+    let session = json!({ "memory_session_id": started["memory_session_id"] });
+    memory_count_exceed(&service, &session, FIXTURE_TYPE, HEAP_BURST_PAYLOADS).await;
+    let _ = call(&service, methods::MEMORY_STOP, session).await;
+    service.shutdown().await;
     let dir = tempfile::tempdir().expect("tempdir");
     let graph = dir.path().join("snapshot.heapgraph.json");
     let output = std::process::Command::new(engine())

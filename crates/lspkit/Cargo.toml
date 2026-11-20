@@ -29,7 +29,9 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 toml.workspace = true
-# Dropped sidecar notifications are logged. [MEM-060-SIDECAR-NOTIFICATIONS]
+# Identifier classification for position-aware text primitives. [VFS-TEXT-IDENTIFIER]
+unicode-ident.workspace = true
+# Dropped sidecar notifications are logged. [MEM-LIFETIME-SIDECAR-NOTIFICATIONS]
 tracing.workspace = true
 
 # Optional: tree-sitter compiles a C runtime, so LSP-only consumers opt in.

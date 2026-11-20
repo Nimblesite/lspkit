@@ -1,4 +1,5 @@
 // Implements [PROF-UI-MEMORY]. Dashboard document rendering.
+import { sizeCanvasToDevicePixels } from "./canvas-hidpi";
 import { brand } from "./ids";
 import type { MemoryDashboardSnapshot, MemoryDiffData } from "./memory-dashboard";
 import { buildWebviewDocument, embedJson } from "./profiler-webview";
@@ -145,9 +146,7 @@ const TIMELINE_SETUP_SCRIPT = `
 const TIMELINE_DRAW_SCRIPT = `
     function renderTimeline() {
       const ctr=tlCanvas.parentElement, w=ctr.clientWidth-24, h=200;
-      tlCanvas.width=w*devicePixelRatio; tlCanvas.height=h*devicePixelRatio;
-      tlCanvas.style.width=w+'px'; tlCanvas.style.height=h+'px';
-      tlCtx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+      sizeCanvasToDevicePixels({canvas:tlCanvas,ctx:tlCtx,cssWidth:w,cssHeight:h,devicePixelRatio:devicePixelRatio||1});
       if(timeline.length<2){
         tlCtx.fillStyle=cssVar('--prof-text-secondary');tlCtx.font='13px "Space Grotesk",-apple-system,sans-serif';
         tlCtx.textAlign='center';tlCtx.textBaseline='middle';
@@ -325,6 +324,7 @@ function buildDashboardScriptTag(
     const vscode = globalThis.profilerVsCodeApi || (globalThis.profilerVsCodeApi = acquireVsCodeApi());
     ${dashboardDataScript(snapshot, diff)}
     ${PROFILER_JS_UTILS}
+    ${sizeCanvasToDevicePixels.toString()}
     ${SUMMARY_SCRIPT}
     ${TIMELINE_SCRIPT}
     ${TOGGLE_SCRIPT}

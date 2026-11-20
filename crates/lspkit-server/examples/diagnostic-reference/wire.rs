@@ -56,7 +56,7 @@ impl Outbox {
 
     /// Tell the editor the workspace changed. One queued notification covers
     /// every change until the pump dequeues it, so a stalled editor never
-    /// accumulates them. [MEM-060-EXAMPLE-OUTBOX]
+    /// accumulates them. [MEM-LIFETIME-EXAMPLE-OUTBOX]
     pub(super) fn send_workspace_changed(&self) -> Result<(), EgressClosed> {
         if self.change_queued.swap(true, Ordering::AcqRel) {
             return Ok(());

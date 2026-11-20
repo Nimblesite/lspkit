@@ -55,7 +55,7 @@ impl CpuSession {
         Self {
             session_id: mint_id("prof", 0),
             runtime,
-            started_at: Instant::now(),
+            started_at: sampler.started_at(),
             started_at_iso: rfc3339_now(),
             data: ProfileData::default(),
             sampler,
@@ -215,20 +215,13 @@ impl std::fmt::Debug for CpuSessionManager {
 }
 
 impl CpuSessionManager {
-    /// Fail when `pid` already has a session.
+    /// Fail when `pid` already has a session that is still recording.
     ///
     /// # Errors
     ///
     /// Returns [`ProfilerError::AlreadyProfiling`].
     pub async fn ensure_free(&self, pid: u32) -> Result<(), ProfilerError> {
-        let sessions = self.sessions.lock().await;
-        match sessions.iter().find(|(_, entry)| entry.pid == pid) {
-            Some((session_id, _)) => Err(ProfilerError::AlreadyProfiling {
-                pid,
-                session_id: session_id.clone(),
-            }),
-            None => Ok(()),
-        }
+        refuse_recorded(&*self.sessions.lock().await, pid)
     }
 
     /// Register a freshly attached sampler as a session.
@@ -243,16 +236,17 @@ impl CpuSessionManager {
         sample_rate: u64,
         limit: Option<Duration>,
     ) -> Result<StartProfileResult, ProfilerError> {
-        self.ensure_free(sampler.pid).await?;
         let session = CpuSession::new(runtime, sampler, sample_rate, limit);
         let started = session.started();
-        self.register(session).await;
+        self.register(session).await?;
         info!(session_id = %started.session_id, pid = started.pid, runtime = %started.runtime, sample_rate, "profiling session started");
         Ok(started)
     }
 
     /// Insert the stable identity without holding the registry across recording work.
-    async fn register(&self, session: CpuSession) {
+    /// The PID check and the insert share one lock, so concurrent starts on one
+    /// process cannot both succeed.
+    async fn register(&self, session: CpuSession) -> Result<(), ProfilerError> {
         let session_id = session.session_id.clone();
         let entry = Arc::new(SessionEntry {
             pid: session.sampler.pid,
@@ -260,8 +254,10 @@ impl CpuSessionManager {
             state: Mutex::new(Some(session)),
         });
         let mut sessions = self.sessions.lock().await;
+        refuse_recorded(&sessions, entry.pid)?;
         let _ = sessions.insert(session_id, entry);
         evict_ended(&mut sessions);
+        Ok(())
     }
 
     /// Stop a session, wait for its producer's last batch, and return the recording.
@@ -382,6 +378,24 @@ fn evict_ended(sessions: &mut HashMap<String, Arc<SessionEntry>>) {
             entry.stop.request();
             debug!(session_id = %id, "dropped an ended recording that was never stopped");
         }
+    }
+}
+
+/// Refuse `pid` while a session still records it. An ended recording, kept
+/// only so `stop` can return it, does not hold its process. [PROF-CPU-SESSIONS]
+fn refuse_recorded(
+    sessions: &HashMap<String, Arc<SessionEntry>>,
+    pid: u32,
+) -> Result<(), ProfilerError> {
+    match sessions
+        .iter()
+        .find(|(_, entry)| entry.pid == pid && ended_at(entry).is_none())
+    {
+        Some((session_id, _)) => Err(ProfilerError::AlreadyProfiling {
+            pid,
+            session_id: session_id.clone(),
+        }),
+        None => Ok(()),
     }
 }
 

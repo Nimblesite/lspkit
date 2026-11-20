@@ -1,7 +1,5 @@
 //! Process recognition, CPU profiling and CPU session steps on the F# fixture.
 
-use std::time::Duration;
-
 use lsp_profiler::wire::methods;
 use serde_json::{json, Value};
 
@@ -10,7 +8,7 @@ use crate::harness::{
     CLASSIFY_COUNT, ENTRY_POINT, FIXTURE, HOT_FUNCTION, MATCHING_FS, MATCH_FUNCTION, MATCH_LINES,
     ORDER_TYPE,
 };
-use crate::support::{assert_only_busy_threads_count, call, service, Fixture};
+use crate::support::{assert_only_busy_threads_count, call, cpu_samples_exceed, service, Fixture};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_fsharp_fixture_is_recognised_as_an_attachable_dotnet_process() {
@@ -52,7 +50,14 @@ async fn cpu_profiling_finds_the_fsharp_hot_function_and_its_lines() {
     let service = service(dir.path().to_path_buf());
     let started = call(&service, methods::CPU_START, json!({ "pid": fixture.pid })).await;
     assert_eq!(started["runtime"], "dotnet");
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    // The hot function needs samples on record before the report can name it:
+    // watch the live session until the count the report asserts exists.
+    cpu_samples_exceed(
+        &service,
+        started["session_id"].as_str().expect("session_id"),
+        100,
+    )
+    .await;
     let report = call(
         &service,
         methods::CPU_STOP,
@@ -203,7 +208,13 @@ async fn cpu_sessions_list_snapshot_and_refuse_a_second_attach() {
         Some(1),
         "the refusal stacks nothing"
     );
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // The snapshot the test asserts on needs samples on record first.
+    cpu_samples_exceed(
+        &service,
+        started["session_id"].as_str().expect("session_id"),
+        0,
+    )
+    .await;
     let snapshot = call(&service, methods::CPU_SNAPSHOT, session.clone()).await;
     assert!(
         snapshot["total_samples"].as_i64().unwrap_or(0) > 0,
@@ -321,7 +332,14 @@ async fn heap_snapshots_during_a_cpu_session_name_every_type() {
         json!({ "pid": h.fixture.pid }),
     )
     .await;
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // The CPU session must demonstrably record before the memory session starts:
+    // samples on record prove its EventPipe session is live in the runtime.
+    cpu_samples_exceed(
+        &h.service,
+        cpu["session_id"].as_str().expect("session_id"),
+        0,
+    )
+    .await;
     let session = start(&h).await;
     for orders in [100, 200] {
         let grown = h.fixture.send("grow 100");

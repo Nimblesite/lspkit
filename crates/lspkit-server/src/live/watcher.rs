@@ -48,7 +48,7 @@ pub struct FileWatcher {
 #[derive(Debug)]
 pub struct CoalescedWatcher {
     /// Yields batches after the shared scheduler's quiet or capped window.
-    triggers: mpsc::UnboundedReceiver<crate::live::scheduler::Trigger>,
+    triggers: mpsc::Receiver<crate::live::scheduler::Trigger>,
     /// Owns the async pump so dropping this value stops reading native events.
     reader: tokio::task::JoinHandle<()>,
 }

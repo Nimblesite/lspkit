@@ -79,7 +79,7 @@ impl Session {
     /// on success. Returns when `triggers` closes.
     pub async fn run<A: Analyzer>(
         self,
-        mut triggers: tokio::sync::mpsc::UnboundedReceiver<Trigger>,
+        mut triggers: tokio::sync::mpsc::Receiver<Trigger>,
         analyzer: A,
     ) {
         while let Some(trigger) = triggers.recv().await {

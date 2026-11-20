@@ -1,4 +1,4 @@
-// Implements [PROF-UI-LIFETIME]. See docs/plans/memory-leak-fixes-0.6.0.md
+// Implements [PROF-UI-LIFETIME] (docs/specs/LSP-PROFILER-SPEC.md).
 /**
  * Append-only per-session records with an eviction boundary: a tracking
  * session can run for days, so a list that grows once per capture keeps only

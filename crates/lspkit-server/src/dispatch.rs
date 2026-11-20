@@ -183,7 +183,7 @@ impl Dispatcher {
 
     /// Release ingress-only state for a rejected request. A control still held by
     /// a prepared request with the same id stays registered and cancellable.
-    /// [LSP-PULL-CANCELLATION] [MEM-FIX-SCOPE]
+    /// [LSP-PULL-CANCELLATION] [MEM-LIFETIME]
     ///
     /// # Errors
     /// Returns [`DispatchError::RegistrationPoisoned`] if the registry lock is poisoned.

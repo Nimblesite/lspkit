@@ -172,7 +172,7 @@ fn content_hash_is_hashable() {
 /// Edits a document this many times; every edit is new content.
 const EDITED_VERSIONS: usize = 512;
 
-/// [MEM-060-PARSE-CACHE] A long session parses every edited version of every
+/// [MEM-LIFETIME-PARSE-CACHE] A long session parses every edited version of every
 /// document. Old versions must leave the cache, or it keeps one tree per
 /// keystroke for the life of the server.
 #[test]

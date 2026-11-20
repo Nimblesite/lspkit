@@ -91,12 +91,6 @@ pub trait EngineApi: Send + Sync + 'static {
 ## Cross-cutting helpers — required behavior
 
 - **[SIDECAR-REQUEST-LIFETIME]** Dropping a correlator response future immediately unregisters and frees its response channel without another correlator call or a runtime. Abandoned IDs are no longer pending, so later responses return `UnknownId`; no cancellation tombstones accumulate. `register` returns `PendingResponse`, supporting `Future` and `try_recv`. A receiver holds only a weak registry reference, so it cannot prolong the correlator's lifetime. Inbound readers terminate when both destination receivers close, even without EOF or another frame.
-- **[LIFETIME-BOUNDS-060]** Long-lived structures that grow with use are bounded or owned ([plan](../plans/memory-leak-fixes-0.6.0.md)):
-  - `treesitter::ParseCache` keeps at most `MAX_TREES` (128) trees and evicts the oldest first, so an edited document never keeps one tree per keystroke.
-  - `sidecar::inbound` buffers at most `NOTIFICATION_CAPACITY` (1024) unread notifications; later ones are dropped and counted in `Inbound::dropped_notifications`, so a consumer that only reads responses never accumulates them and the reader never blocks.
-  - `CancellationHandle::queue` registers a request like `register` and returns a `QueuedRequest` guard; dropping it before `prepare` releases the queued control. `register` stays dispatcher-owned until preparation.
-  - `DiagnosticsBus::attach_owned` returns a `SinkRegistration`; dropping it detaches the sink. `attach` stays for sinks that live as long as the bus.
-  - The live scheduler's task ends when its consumer drops the trigger receiver, not only when the events end.
 - **[JSONRPC-FRAME-LIMIT]** `read_message` accepts a body of at most `MAX_FRAME_BYTES` (64 MiB); `read_message_within` takes a server-chosen cap. A larger `Content-Length` is `FramingError::FrameTooLarge`: its body is discarded through a fixed-size buffer, never allocated, so the connection stays usable and the next read starts at the following frame. A length beyond `u64` is `BadHeader`, and the body is read incrementally, so memory follows the bytes that arrive, never the claimed length. A body shorter than its claim is `Io(UnexpectedEof)`. The header block, every line and terminator included, is read through one `MAX_HEADER_BYTES` (8 KiB) budget, so one endless line and endless short lines both end in `HeaderTooLarge` with memory bounded by the cap; no frame boundary is known after it, so the connection cannot continue. Peer input never panics.
 - **[LSP-OUTBOUND]** Server→client requests (`lspkit-server::outbound::Outbound`): `request` allocates a numeric JSON-RPC id from the sidecar correlator and returns the request frame plus an `OutboundResponse` future; once ids pass `i64::MAX` it returns `IdsExhausted` instead of reusing a number. `null` params are omitted from the frame. `resolve` routes an inbound response to its waiter as the editor's `result` (absent or `null` is `Value::Null`) or its `JsonRpcError`. Requests and notifications are `NotAResponse`; ids never allocated, already answered or abandoned are `UnknownId`. Dropping a wait unregisters it ([SIDECAR-REQUEST-LIFETIME]). `sidecar::RequestId` rebuilds from its raw wire number with `From<u64>`, and `JsonRpcError` implements `Display` and `std::error::Error`.
 - **Position encoding** (`lspkit::vfs::PositionEncoding`): negotiates encoding at `initialize` per LSP 3.17 client capabilities; converts on every read; round-trips byte/char offsets correctly across multi-byte scalars and surrogate pairs.
@@ -111,6 +105,19 @@ pub trait EngineApi: Send + Sync + 'static {
 - **Progress** (`lspkit-server::progress`): wraps LSP `window/workDoneProgress`; the `Progress` sink is a no-op when the client did not advertise the capability.
 - **Diagnostics bus** (`lspkit-server::diagnostics`): fan-out from one source to LSP `publishDiagnostics` AND MCP resource-updated notifications, atomically per generation.
 - **Workspace folders** (`lspkit-server::workspace`): multi-root aware; `Workspace` exposes folder enumeration and per-folder configuration scope.
+
+## [MEM-LIFETIME] Memory lifetimes
+
+Language servers run for days, so an allocation retained after the work that needed it ends is a production bug. The rules are in [AGENTS.md](../../AGENTS.md#memory-lifetimes-). Every fix ships a regression that failed on the leak: exact allocator bytes through `test-support/state.rs` in a single-test binary, or a `Weak::strong_count() == 0` check after teardown. RSS, timing and `sleep` never prove or disprove a leak.
+
+- **[MEM-LIFETIME-PARSE-CACHE]** `treesitter::ParseCache` keeps at most `MAX_TREES` (128) trees and evicts the oldest first, so an edited document never keeps one tree per keystroke.
+- **[MEM-LIFETIME-SIDECAR-NOTIFICATIONS]** `sidecar::inbound` buffers at most `NOTIFICATION_CAPACITY` (1024) unread notifications; later ones are dropped, counted in `Inbound::dropped_notifications` and logged, so a consumer that only reads responses never accumulates them and the reader never blocks.
+- **[MEM-LIFETIME-QUEUED-REQUEST]** `CancellationHandle::queue` registers a request like `register` and returns a `QueuedRequest` guard; dropping it before `prepare` releases the queued control. A terminal preparation error (an unknown method) releases its ingress registration. `register` stays dispatcher-owned until preparation.
+- **[MEM-LIFETIME-DIAGNOSTICS-SINK]** `DiagnosticsBus::attach_owned` returns a `SinkRegistration`; dropping it detaches the sink. `attach` stays for sinks that live as long as the bus.
+- **[MEM-LIFETIME-SCHEDULER-TASK]** The live scheduler's task ends when its consumer drops the trigger receiver, not only when the events end.
+- **[MEM-LIFETIME-EXAMPLE-TASKS]** The reference server's `Tasks` owns its request tasks in a `JoinSet`, reaped per spawn and aborted when the session ends. Its handlers never capture the dispatcher that stores them, and its initialized watcher is owned and aborted by the session.
+- **[MEM-LIFETIME-PULL-ADMIT]** The reference server forgets a pulled URI that is neither open nor a JSON file in the watched root, after pulls, scans and watched-file changes, and `didClose` releases a document's source buffer and its pull state ([LSP-PULL-FORGET]).
+- **[MEM-LIFETIME-EXAMPLE-OUTBOX]** One queued workspace-change notification covers every change until the output pump dequeues it, so a stalled editor never accumulates them.
 
 ## Tech stack (locked)
 

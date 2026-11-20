@@ -548,7 +548,7 @@ The same code then runs in any VS Code-family editor and under test fakes.
 
 ### [PROF-UI-LIFETIME] Lifetimes
 
-An editor session runs for days, so nothing the library keeps grows without a bound or outlives its owner ([plan](../plans/memory-leak-fixes-0.6.0.md)):
+An editor session runs for days, so nothing the library keeps grows without a bound or outlives its owner ([MEM-LIFETIME](lspkit-spec.md#mem-lifetime-memory-lifetimes)):
 
 - `ProfilerUi.dispose()` disposes everything `registerProfilerUi` created, the processes tree view and its provider (with the provider's poll and effects) included.
 - A debug session's output buffer, stop-state and pending resume requests are dropped when the session terminates.

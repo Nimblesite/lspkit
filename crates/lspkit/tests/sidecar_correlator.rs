@@ -193,7 +193,7 @@ impl RequestIdTestExt for RequestId {
     }
 }
 
-/// Callers storing in-flight responses name the future through the sidecar facade. [MEM-FIX-SCOPE]
+/// Callers storing in-flight responses name the future through the sidecar facade. [MEM-LIFETIME]
 #[tokio::test]
 async fn pending_response_is_nameable_from_the_sidecar_facade() {
     let correlator: Correlator<String> = Correlator::new();

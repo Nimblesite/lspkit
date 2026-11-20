@@ -219,6 +219,11 @@ async fn memory_profiling_sees_the_leak_its_root_and_the_collection() {
     service.shutdown().await;
 }
 
+/// The engine's refusal when the target has no diagnostics endpoint. Only the
+/// pre-connect check reports it; a failed connection reports the runtime's own
+/// error ([PROF-DOTNET-ENGINE-ENDPOINT]).
+const NO_ENDPOINT: &str = "has no .NET diagnostics endpoint";
+
 async fn error_code(service: &ProfilerService, method: &str, params: Value) -> i64 {
     match service.handle(method, params).await {
         Ok(value) => panic!("{method} must be refused, got {value}"),
@@ -250,9 +255,8 @@ async fn a_pid_that_names_no_process_is_process_not_found_everywhere() {
 }
 
 /// A live process no runtime recognises (this test binary) is `UNSUPPORTED_RUNTIME`
-/// for every PID-taking command, answered well under the engine's connect timeout:
-/// the engine decides "no .NET diagnostics endpoint" up front ([PROF-ERRORS],
-/// [PROF-DOTNET-ENGINE-ENDPOINT]). Kill refuses it — kill can never reach a
+/// for every PID-taking command ([PROF-ERRORS]); the engine-level test below proves
+/// the refusal comes before any connection ([PROF-DOTNET-ENGINE-ENDPOINT]). Kill refuses it — kill can never reach a
 /// process outside the profiler's reach.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() {
@@ -267,28 +271,20 @@ async fn a_live_process_no_runtime_recognises_is_unsupported_and_never_killed() 
         error_code(&service, methods::MEMORY_START, own.clone()).await,
         -32002
     );
-    let started = tokio::time::Instant::now();
     assert_eq!(error_code(&service, methods::CPU_START, own).await, -32002);
-    assert!(
-        started.elapsed() < Duration::from_secs(5),
-        "the engine answers without waiting for a connect timeout: {:?}",
-        started.elapsed()
-    );
     service.shutdown().await;
 }
 
 /// The engine itself refuses a live process with no .NET diagnostics endpoint as
-/// `UnsupportedRuntime` immediately, before any connection attempt
+/// `UnsupportedRuntime` before any connection attempt
 /// ([PROF-DOTNET-ENGINE-ENDPOINT]). Drives the engine binary directly so the
 /// endpoint decision is proven at the engine boundary, not through the service.
 #[tokio::test(flavor = "multi_thread")]
-async fn the_engine_refuses_a_process_without_a_dotnet_endpoint_immediately() {
-    let started = std::time::Instant::now();
+async fn the_engine_refuses_a_process_without_a_dotnet_endpoint_before_connecting() {
     let output = std::process::Command::new(engine())
         .args(["cpu", "--pid", &std::process::id().to_string()])
         .output()
         .expect("run the engine");
-    let elapsed = started.elapsed();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let last: Value = serde_json::from_str(stdout.lines().last().unwrap_or_default())
         .unwrap_or_else(|error| panic!("one protocol line expected ({error}): {stdout}"));
@@ -296,8 +292,10 @@ async fn the_engine_refuses_a_process_without_a_dotnet_endpoint_immediately() {
     assert_eq!(last["kind"], "failure", "{last}");
     assert_eq!(last["error_kind"], "UnsupportedRuntime", "{last}");
     assert!(
-        elapsed < Duration::from_secs(5),
-        "the engine answers without waiting for a connect timeout: {elapsed:?}"
+        last["message"]
+            .as_str()
+            .is_some_and(|m| m.contains(NO_ENDPOINT)),
+        "decided before any connection attempt: {last}"
     );
 }
 

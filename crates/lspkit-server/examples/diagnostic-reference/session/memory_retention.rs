@@ -1,4 +1,4 @@
-//! [MEM-AUDIT-SCOPE]: isolate actual reference-server ownership without process-exit masking.
+//! [MEM-LIFETIME]: isolate actual reference-server ownership without process-exit masking.
 
 use super::{handle_notification, register_handlers, Outbox, Server};
 use lspkit_server::Message;

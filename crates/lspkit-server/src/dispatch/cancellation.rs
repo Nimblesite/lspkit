@@ -46,7 +46,7 @@ impl CancellationHandle {
 
     /// [`register`](Self::register) `id` and own the queued control: dropping
     /// the guard releases it unless a prepared request adopted it.
-    /// [MEM-060-QUEUED-REQUEST]
+    /// [MEM-LIFETIME-QUEUED-REQUEST]
     ///
     /// # Errors
     /// Returns a registration error if the registry is unavailable.

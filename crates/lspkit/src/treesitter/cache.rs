@@ -3,7 +3,7 @@
 //! Parse trees are cached by `(language_name, content_hash)`. Repeated parses
 //! of identical source bytes return the cached tree directly. The cache keeps
 //! at most [`MAX_TREES`] trees and evicts the oldest first, so editing a
-//! document never leaves one tree per version behind. [MEM-060-PARSE-CACHE]
+//! document never leaves one tree per version behind. [MEM-LIFETIME-PARSE-CACHE]
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::VecDeque;

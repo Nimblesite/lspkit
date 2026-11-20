@@ -111,7 +111,7 @@ impl Burst {
 }
 
 /// Coalesce events until the source ends or the consumer drops the triggers;
-/// the task never outlives its consumer. [MEM-060-SCHEDULER-TASK]
+/// the task never outlives its consumer. [MEM-LIFETIME-SCHEDULER-TASK]
 async fn run(
     mut events_rx: mpsc::UnboundedReceiver<ChangeEvent>,
     tx: mpsc::UnboundedSender<Trigger>,

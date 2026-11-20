@@ -1,4 +1,4 @@
-//! [MEM-060-EXAMPLE-TASKS]: a request still in flight when the session ends
+//! [MEM-LIFETIME-EXAMPLE-TASKS]: a request still in flight when the session ends
 //! must not keep the session's documents alive.
 
 use std::sync::Arc;

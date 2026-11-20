@@ -1,4 +1,4 @@
-//! Owned ingress registration. [MEM-060-QUEUED-REQUEST]
+//! Owned ingress registration. [MEM-LIFETIME-QUEUED-REQUEST]
 
 use std::sync::{Arc, Weak};
 

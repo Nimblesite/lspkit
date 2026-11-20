@@ -1,4 +1,4 @@
-//! [LSP-PULL-CANCELLATION] [MEM-FIX-SCOPE]: terminal errors release actual heap allocations.
+//! [LSP-PULL-CANCELLATION] [MEM-LIFETIME]: terminal errors release actual heap allocations.
 
 use lspkit_server::{DispatchError, Dispatcher, HandlerResult, RequestId, RequestInterest};
 use serde_json::Value;

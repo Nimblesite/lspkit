@@ -48,7 +48,7 @@ pub enum CorrelationError<R = ()> {
 type Pending<R> = Mutex<HashMap<RequestId, oneshot::Sender<R>>>;
 
 /// A response future that releases its registration immediately when abandoned.
-/// [MEM-FIX-SCOPE]
+/// [MEM-LIFETIME]
 #[derive(Debug)]
 pub struct PendingResponse<R> {
     /// The registration released by this receiver.

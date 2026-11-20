@@ -34,7 +34,7 @@ Reusable Rust components for building language servers, plus the shared CPU and 
 
 ## Memory lifetimes 🛑
 
-Language servers run for days, so a retained allocation is a production bug. These rules come from the leaks fixed under `[MEM-FIX-SCOPE]` ([plan](docs/plans/memory-leak-fixes.md)); review every change against them.
+Language servers run for days, so a retained allocation is a production bug. These rules come from the leaks fixed under `[MEM-LIFETIME]` ([spec](docs/specs/lspkit-spec.md#mem-lifetime-memory-lifetimes)); review every change against them.
 
 - **No ownership cycles.** A handler, callback or spawned task never captures an owner of the registry that stores it (`Server`, `Dispatcher`, correlator). Capture an `Arc` of only the data it needs; back-references are `Weak` and get upgraded per call.
 - **Every registration has an RAII owner.** Pending-response entries, cancellation controls, watcher tasks and subscriptions are removed by a guard's `Drop`. That includes error, rejection, cancellation and abandoned-future paths. Never rely on a later sweep or count call.

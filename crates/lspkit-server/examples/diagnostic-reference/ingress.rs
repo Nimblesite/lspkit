@@ -6,7 +6,7 @@ use serde_json::Value;
 
 /// Register before preparation; the prepared future adopts this queued
 /// control. Hold the guard until then: dropping it releases a request that
-/// was never prepared. [MEM-060-QUEUED-REQUEST]
+/// was never prepared. [MEM-LIFETIME-QUEUED-REQUEST]
 pub(super) fn register(
     dispatcher: &Dispatcher,
     id: RequestId,

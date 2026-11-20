@@ -1,4 +1,4 @@
-//! Direct heap accounting shared by isolated, single-test executables. [MEM-FIX-SCOPE]
+//! Direct heap accounting shared by isolated, single-test executables. [MEM-LIFETIME]
 
 use stats_alloc::{Region, Stats, StatsAlloc, INSTRUMENTED_SYSTEM};
 use std::alloc::System;

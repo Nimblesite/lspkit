@@ -12,7 +12,7 @@ exclude = ["crates/lsp-profiler-python"]
 [workspace.package]
 version = "0.0.0-dev"
 edition = "2021"
-rust-version = "1.89"
+rust-version = "1.95"
 license = "MIT"
 repository = "https://github.com/Nimblesite/lspkit"
 # Inherited by every crate. `readme`/`keywords`/`categories` resolve relative to
@@ -117,7 +117,7 @@ integer_division     = "deny"
 [workspace.dependencies]
 # Async runtime + utilities
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-util", "fs", "process", "time", "net"] }
-tokio-util = { version = "0.7", features = ["codec"] }
+tokio-util = "0.7"
 futures-core = "0.3"
 futures-util = "0.3"
 async-trait = "0.1"
@@ -131,12 +131,11 @@ lsp-types = "0.97"
 
 
 # Document / state
-dashmap = "6"
 ropey = "1"
 unicode-ident = "1.0.24"
 
 # Filesystem
-notify = "9"
+notify = "8"
 
 # Config
 toml = "1.1"
@@ -151,7 +150,6 @@ inferno = { version = "0.12", default-features = false }
 num-traits = "0.2"
 sysinfo = { version = "0.39.3", default-features = false, features = ["system", "user"] }
 tempfile = "3"
-url = "2"
 
 # Tree-sitter (optional: the `treesitter` feature of lspkit)
 tree-sitter = "0.27"

@@ -117,8 +117,8 @@ export function profilerStatusText(): string | undefined {
  * instance — so registering once per client *instance* is sufficient.
  */
 export function registerProgressListener(store: Store): vscode.Disposable {
-  let boundClient: LanguageClient | undefined = undefined;
-  let registration: vscode.Disposable | undefined = undefined;
+  let boundClient: LanguageClient | undefined;
+  let registration: vscode.Disposable | undefined;
 
   const disposeEffect = effect(() => {
     const client = store.client.value;

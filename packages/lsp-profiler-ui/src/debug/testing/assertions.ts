@@ -5,6 +5,7 @@
 import * as assert from "node:assert";
 import { evaluate, findVariable } from "./dap-client";
 import type { DapSessionLike, DapStackFrame, DapVariable } from "./dap-client";
+import { comparablePath } from "../../paths";
 
 /** Accepts a substring, a RegExp, or a predicate to match a rendered value. */
 export type ValueMatcher = string | RegExp | ((value: string) => boolean);
@@ -75,13 +76,8 @@ export async function assertWatch(
   return result.result;
 }
 
-/** A path in a comparable form: forward slashes, lower case. */
-function normalizePath(filePath: string): string {
-  return filePath.replaceAll("\\", "/").toLowerCase();
-}
-
 function sameFile(left: string, right: string): boolean {
-  return normalizePath(left) === normalizePath(right);
+  return comparablePath(left, process.platform) === comparablePath(right, process.platform);
 }
 
 /** Assert the top frame's source is `sourcePath`, matching either separator. */

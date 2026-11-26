@@ -8,7 +8,7 @@ import type { LeakConfidence } from '../memory-decorations';
 import { appliedMemoryDecorations, applyLeakDecorations, clearMemoryDecorations } from '../memory-decorations';
 import { profilerPalette } from '../palette';
 import { closeAllEditors, removeTestDir } from './webview-contract-helpers';
-import { pathKeyer } from '../editor-path-key';
+import { pathKeyer } from '../paths';
 
 const CONFIDENCES: readonly LeakConfidence[] = ['DEFINITE', 'HIGH', 'MEDIUM', 'LOW'];
 

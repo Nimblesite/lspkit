@@ -13,7 +13,8 @@ These are non-negotiable. Any patch violating one is illegal.
 - **Maintained bedrock or self-owned.** Toolkit MUST NOT depend on unmaintained crates for core protocol handling. `tower-lsp` is forbidden (last release 2023). The toolkit depends on `lsp-types` (maintained) and ships its own JSON-RPC server loop inside `lspkit-server`.
 - **Third-party LSP/MCP types stay hidden.** No MCP SDK or `lsp_types::*` request/response type appears in a `pub` signature of `lspkit` or `lspkit-server`. Newtype wrappers are required at every boundary.
 - **No wire-format coupling.** The toolkit ships no typeDiagram-generated types. Consumers define their own wire schemas case-by-case.
-- **Locks never span `.await`.** `lspkit::vfs` MUST scope all `DashMap` and `Mutex` guards inside synchronous blocks; methods MUST NOT return guards.
+- **🔥 [PATH-CENTRAL] Path handling is centralized.** Every file path operation in every published crate goes through `lspkit::path`, and nowhere else. A loose path helper anywhere else is a defect, however small. Details under [Path handling](#path-central-path-handling).
+- **Locks never span `.await`.** `lspkit::vfs` MUST scope all `RwLock` and `Mutex` guards inside synchronous blocks; public methods MUST NOT return guards.
 
 ## Public crate inventory
 
@@ -21,8 +22,8 @@ Four published crates. The split is locked.
 
 | Crate | Public surface (intent) |
 |---|---|
-| **lspkit** | Façade. Exposes `EngineApi` trait + `Generation`, `Snapshot<R>`, `GenerationEvent`, `Cause`, `RescanScope`, `RescanTicket` types. Feature `tracing-setup` exposes a stdio-safe `tracing-subscriber` builder. `prelude` module re-exports the headline items. Modules `config` (layered TOML loader), `vfs` (concurrent open-document store), `sidecar` (framed IPC transport) and `treesitter` (parse cache, behind the `treesitter` feature). |
-| **lspkit-server** | LSP server scaffolding built on `lsp-types`: Content-Length framing, JSON-RPC request/response/notification dispatcher, capability builder, URI ↔ `PathBuf` helpers, workspace-folders abstraction, diagnostics fan-out bus, progress sink, cancellation plumbing. Consumers register handlers; the crate routes them to an `EngineApi` + VFS pair. Modules `live` (file-watcher → debouncer → single-flight scheduler → session lifecycle) and `mcp` (tool adapter, always on; it takes no MCP SDK, since every `rmcp` release pulls unmaintained `chrono`, RUSTSEC-2026-0543). |
+| **lspkit** | Façade. Exposes `EngineApi` trait + `Generation`, `Snapshot<R>`, `GenerationEvent`, `Cause`, `RescanScope`, `RescanTicket` types. Feature `tracing-setup` exposes a stdio-safe `tracing-subscriber` builder. `prelude` module re-exports the headline items. Module `path` is the workspace's only path handling ([PATH-CENTRAL]). Modules `config` (layered TOML loader), `vfs` (concurrent open-document store), `sidecar` (framed IPC transport) and `treesitter` (parse cache, behind the `treesitter` feature). |
+| **lspkit-server** | LSP server scaffolding built on `lsp-types`: Content-Length framing, JSON-RPC request/response/notification dispatcher, capability builder, URI ↔ `PathBuf` conversion (re-exported from `lspkit::path` as `lspkit_server::uri`), workspace-folders abstraction, diagnostics fan-out bus, progress sink, cancellation plumbing. Consumers register handlers; the crate routes them to an `EngineApi` + VFS pair. Modules `live` (file-watcher → debouncer → single-flight scheduler → session lifecycle) and `mcp` (tool adapter, always on; it takes no MCP SDK, since every `rmcp` release pulls unmaintained `chrono`, RUSTSEC-2026-0543). |
 | **lsp-profiler** | Language-neutral CPU and memory profiler core: sessions, hotspots, flame graphs, speedscope/V8 exports, heap snapshots, leak scoring, one JSON-RPC protocol. Spec: [LSP-PROFILER-SPEC.md](LSP-PROFILER-SPEC.md). |
 | **lsp-profiler-dotnet** | The profiler's .NET runtime: EventPipe CPU sampling and heap snapshots through the engine in `dotnet/`. |
 
@@ -30,8 +31,8 @@ Four published crates. The split is locked.
 
 Implementation tracker: [docs/plans/crate-consolidation-plan.md](../plans/crate-consolidation-plan.md). The layer graph is under [Dependency direction](#dependency-direction-acyclic).
 
-- **[CRATE-LAYOUT]** The workspace publishes exactly four crates in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `lsp-profiler-python` is parked: it stays in the repo, excluded from the workspace and unpublished.
-- **[CRATE-LAYOUT-LAYERS]** An L1 crate depends only on its own tree's L0 crate. An L0 crate has no internal dependencies.
+- **[CRATE-LAYOUT]** The workspace publishes exactly four crates in dependency order: `lspkit`, `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit-server`. `lsp-profiler-python` is parked: it stays in the repo, excluded from the workspace and unpublished.
+- **[CRATE-LAYOUT-LAYERS]** `lspkit` is the only L0 crate and has no internal dependencies. `lspkit-server` and `lsp-profiler` are L1 and depend only on `lspkit`. `lsp-profiler-dotnet` is L2 and depends only on `lsp-profiler` and `lspkit`. The profiler tree depends on `lspkit` so that it uses the one path module ([PATH-CENTRAL]).
 - **[CRATE-LAYOUT-MODULES]** Each absorbed crate becomes a top-level module with the same name: `lspkit::config`, `lspkit::vfs`, `lspkit::treesitter`, `lspkit::sidecar`, `lspkit_server::live`, `lspkit_server::mcp`. Each module keeps its absorbed crate's coverage floor as a `<crate>::<module>` key in `coverage-thresholds.json`.
 - **[CRATE-LAYOUT-FEATURES]** Heavy dependency cones are opt-in cargo features, all default off: `lspkit-server/pull` (`salsa`), `lspkit/treesitter` (`tree-sitter`, a C runtime) and `lspkit/tracing-setup` (`tracing-subscriber`). `lspkit::sidecar` is always on; its dependencies are already in `lspkit`'s core.
 - **[CRATE-LAYOUT-HELPER]** `lsp-profiler-helper` is a `[[bin]]` target of `lsp-profiler-python` (`src/bin/lsp-profiler-helper/`), not a crate.
@@ -42,8 +43,10 @@ Implementation tracker: [docs/plans/crate-consolidation-plan.md](../plans/crate-
 ```mermaid
 flowchart TD
     lspkit-server["lspkit-server (L1)"] --> lspkit["lspkit (L0)"]
-    lsp-profiler-dotnet["lsp-profiler-dotnet (L1)"] --> lsp-profiler["lsp-profiler (L0)"]
-    lsp-profiler-python["lsp-profiler-python (L1, parked)"] --> lsp-profiler
+    lsp-profiler["lsp-profiler (L1)"] --> lspkit
+    lsp-profiler-dotnet["lsp-profiler-dotnet (L2)"] --> lsp-profiler
+    lsp-profiler-dotnet --> lspkit
+    lsp-profiler-python["lsp-profiler-python (L2, parked)"] --> lsp-profiler
 ```
 
 ## `EngineApi` contract
@@ -101,9 +104,9 @@ pub trait EngineApi: Send + Sync + 'static {
   - **[VFS-TEXT-MEASURE]** `char_width(ch, encoding)` is the position units one scalar occupies — UTF-8 bytes, UTF-16 code units (2 for surrogate pairs), one UTF-32 unit — and `measure(text, encoding)` is its saturating sum over a text.
   - **[VFS-TEXT-PREFIX]** `prefix_to(line, character, encoding)` returns the line's UTF-8 prefix up to an encoded column boundary; `None` when the column splits a multi-unit character or lies beyond the line.
 - **[LSP-HOVER-MARKDOWN]** `lspkit_server::hover_markdown(Option<String>)` builds the `textDocument/hover` result `{ "contents": { "kind": "markdown", "value": … } }` as a plain `serde_json::Value`; `None` is JSON `null` (no hover). No protocol type appears in its signature.
-- **URI ↔ `PathBuf`** (`lspkit-server::uri`): handles `file://`, percent-decoding, Windows drive letters, UNC paths, and non-UTF-8 paths.
+- **URI ↔ `PathBuf`** (`lspkit::path`, re-exported as `lspkit_server::uri`): handles `file://`, percent-decoding, Windows drive letters, UNC paths, and non-UTF-8 paths. It is part of the one path module ([PATH-CENTRAL]).
   - **[URI-AUTHORITY]** A URI's authority is its host, never a path segment. An empty or `localhost` host names a local path; any other host names a UNC path (`file://server/share/a.rs` ↔ `\\server\share\a.rs`) on Windows and is an error elsewhere. `uri_to_path` never returns a relative path. `path_to_uri` removes the extended-length prefixes `\\?\` and `\\?\UNC\` that `std::fs::canonicalize` adds.
-  - **[URI-WINDOWS]** All path ↔ URI handling in the lspkit tree lives in `lspkit-server::uri`; nothing else parses or builds a file path from a URI. On Windows one file has one URI, and every URI decodes to one exact, absolute path:
+  - **[URI-WINDOWS]** All path ↔ URI handling in the workspace lives in `lspkit::path`; nothing else parses or builds a file path from a URI, or a URI from a path ([PATH-CENTRAL]). On Windows one file has one URI, and every URI decodes to one exact, absolute path:
     - The drive letter is upper case and the UNC server name lower case, in both directions. Repeated separators collapse, and `.` and `..` resolve lexically without climbing above the drive or share.
     - `file:////server/share` (an empty authority before a UNC path) decodes like `file://server/share`. An IPv6 host `[fe80::1%25eth0]` becomes the server `fe80--1seth0.ipv6-literal.net`.
     - `uri_to_path` returns the `\\?\` form only when Win32 would otherwise open a different file: a segment ending in `.` or a space, or a DOS device name (`CON`, `NUL`, `aux.rs`, `COM1`).
@@ -112,6 +115,25 @@ pub trait EngineApi: Send + Sync + 'static {
 - **Progress** (`lspkit-server::progress`): wraps LSP `window/workDoneProgress`; the `Progress` sink is a no-op when the client did not advertise the capability.
 - **Diagnostics bus** (`lspkit-server::diagnostics`): fan-out from one source to LSP `publishDiagnostics` AND MCP resource-updated notifications, atomically per generation.
 - **Workspace folders** (`lspkit-server::workspace`): multi-root aware; `Workspace` exposes folder enumeration and per-folder configuration scope.
+
+## [PATH-CENTRAL] Path handling
+
+🔥 **One module owns every file path operation: `lspkit::path`.** No other module in any crate, test-support file or example parses, builds, converts, normalizes, resolves, compares or rebases a file path. A loose path helper is a defect, whatever its size, and a review rejects it on sight. Paths that disagree split one file into two documents: the editor then shows a profiler hint on a phantom file, or a diagnostic never clears.
+
+- **[PATH-CENTRAL-SCOPE]** `lspkit::path` owns:
+  - path ↔ `file://` URI conversion and `DocumentUri` construction;
+  - resolving a relative path against a base;
+  - canonicalization and normalization;
+  - containment and equality between two paths (`is_within`, `same_path`, `path_in_roots`);
+  - rebasing a path from one root to another (`rebase`);
+  - walking up a tree to find a file (`find_ancestor`).
+
+  The rule covers production code, tests, examples and `test-support/` alike. There are three exceptions. Std accessors that read one already-resolved path's own parts (`file_name`, `file_stem`, `extension`, a single `parent`) and `join` with a plain relative name are not path handling. The tests of `lspkit::path` itself use the OS as their oracle. A literal `file:///…` URI for a synthetic document that exists on no disk is wire data in a test or audit fixture.
+- **[PATH-CENTRAL-ONE-URI]** One file has one URI everywhere. The profiler's diagnostics, the server's diagnostics bus and the VFS all spell a file's URI with `lspkit::path::path_to_uri`, so their URIs compare equal byte for byte. `tests::diagnostic_uri_is_the_servers_uri_for_the_same_file` in `lsp-profiler` pins this: `/home/me/Projects (old)/a+b@c.py` is `file:///home/me/Projects%20%28old%29/a%2Bb%40c.py`, and on Windows `C:\repo\sub\..\a+b.py` is `file:///C:/repo/a%2Bb.py`.
+- **[PATH-CENTRAL-NO-DEPS]** No third-party path or URL crate (`url`, `path-clean`, `dunce`, `normpath`, …) enters the workspace. `lspkit::path` implements the rules in [URI-AUTHORITY] and [URI-WINDOWS] itself.
+- **[PATH-CENTRAL-NEW]** A new path operation is added to `lspkit::path` with its tests, then called from where it is needed. It is never written inline in a caller first. Other crates may re-export it (`lspkit_server::uri`), but never wrap it.
+- **[PATH-CENTRAL-TS]** The TypeScript library follows the same rule through its one module, `packages/lsp-profiler-ui/src/paths.ts`; the profiler spec's `PROF-UI-PATHS` section lists what it owns.
+- **[PATH-CENTRAL-REVIEW]** `.claude/rules/path-handling.md` carries this rule into every agent session that edits Rust, and reviews check every diff against it.
 
 ## [MEM-LIFETIME] Memory lifetimes
 
@@ -131,7 +153,9 @@ Language servers run for days, so an allocation retained after the work that nee
 
 - `tokio` 1.x, `tracing` + `tracing-subscriber`, `serde` + `serde_derive`, `async-trait`.
 - `lsp-types` (current major).
-- `notify` 7.x, `ropey` 1.x, `dashmap` 6.x, `tokio-util` (for `CancellationToken`).
+- `notify` 8.x, `ropey` 1.x, `tokio-util` (for `CancellationToken`). Concurrent maps are std `RwLock`/`Mutex` maps, not a map crate.
+- **[DEPS-MINIMAL]** Every third-party crate earns its place. A crate used for one or two calls is replaced by a small, tested function in the owning module, unless it carries a hard correctness domain (a parser, Unicode tables, a flame-graph renderer, OS process APIs). Every feature enabled on a crate is used.
+- **[DEPS-MSRV]** `rust-version` is the highest `rust-version` any locked dependency declares (1.95). It is raised with the upgrade that needs it, never left below what the lockfile requires.
 - `lspkit::sidecar` carries opaque length-prefixed payloads; the consumer picks the encoding (JSON, MessagePack, CBOR) and its crate.
 - **No `tower-lsp`.** Ever.
 
@@ -173,7 +197,7 @@ lspkit runs a **release-only** regime modelled on [Shipwright](https://github.co
 
   The `lsp-profiler-dotnet` e2e suites honour `LSP_PROFILER_DOTNET_ENGINE`, so they run unchanged against a released engine.
 - **[REL-OIDC]** crates.io and npm both publish through OIDC Trusted Publishing from `release.yml` in the protected `release` environment. The repo stores no `CARGO_REGISTRY_TOKEN` or `NPM_TOKEN`. npm packages also publish with `--provenance`. `[SWR-SEC-OIDC-PUBLISH]`
-- **[REL-ORDER]** Crates publish in dependency order: `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit`, `lspkit-server`. `cargo publish` waits for each crate to appear in the index, so no sleeps are needed. The npm package (`@nimblesite/lsp-profiler-ui`) publishes after the crates. Both publish wrappers skip a version that is already on the registry, so a re-run after a failure partway through is safe.
+- **[REL-ORDER]** Crates publish in dependency order: `lspkit`, `lsp-profiler`, `lsp-profiler-dotnet`, `lspkit-server`. `cargo publish` waits for each crate to appear in the index, so no sleeps are needed. The npm package (`@nimblesite/lsp-profiler-ui`) publishes after the crates. Both publish wrappers skip a version that is already on the registry, so a re-run after a failure partway through is safe.
 - **[REL-METADATA]** Every published crate and npm package declares `license = "MIT"` and a repository. The root `LICENSE-MIT` is staged into each crate (`LICENSE-MIT`) and each npm package (`LICENSE`) at publish time, so the declared license ships with the package. `[SWR-REL-LICENSE]`
 - **[REL-PACKAGED-BUILD]** A published crate builds without the workspace around it. `lsp-profiler`'s `build.rs` runs the typeDiagram generator only when the workspace generator exists. Otherwise it requires the generated `src/wire_generated.rs` that the crate's `include` packs. `[PROF-WIRE-PACKAGED]`
 - **[REL-PAGES]** `pages.yml` builds the Eleventy website with the GitHub Pages base path and deploys it to `https://lspkit.dev` through the `github-pages` environment, which allows `main` and `v*` tags. `release.yml` calls it after the packages publish; a website-only change ships by running it by hand from `main` (`gh workflow run pages.yml`), with no release.

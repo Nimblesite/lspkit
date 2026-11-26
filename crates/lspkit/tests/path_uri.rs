@@ -1,10 +1,10 @@
-//! End-to-end tests for [`lspkit_server::uri`] conversions.
+//! End-to-end tests for [`lspkit::path`] conversions.
 
 use std::path::Path;
 #[cfg(not(windows))]
 use std::path::PathBuf;
 
-use lspkit_server::{path_to_uri, uri_to_path, UriError};
+use lspkit::path::{path_to_uri, uri_to_path, UriError};
 
 /// `path` encodes to exactly `uri`, which decodes back to exactly `path`.
 #[cfg(not(windows))]

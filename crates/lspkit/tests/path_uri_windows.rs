@@ -8,9 +8,9 @@ use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use lspkit_server::{path_to_uri, uri_to_path};
+use lspkit::path::{path_to_uri, uri_to_path};
 
-#[path = "../src/uri_cases.rs"]
+#[path = "../src/path/cases.rs"]
 mod cases;
 
 /// A failed check, naming the input that failed and why.

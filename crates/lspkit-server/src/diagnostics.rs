@@ -10,7 +10,9 @@ use async_trait::async_trait;
 use lspkit::vfs::DocumentUri;
 use lspkit::Generation;
 
-use crate::uri::path_to_uri;
+/// The path → [`DocumentUri`] conversion, kept in `lspkit::path` with every
+/// other path operation ([PATH-CENTRAL]).
+pub use lspkit::path::document_uri as document_uri_from_path;
 
 /// Severity ladder matching the LSP convention.
 #[non_exhaustive]
@@ -189,12 +191,4 @@ impl std::fmt::Debug for DiagnosticsBus {
             .field("sinks", &count)
             .finish()
     }
-}
-
-/// Convenience: build a `DocumentUri` from an absolute path.
-///
-/// # Errors
-/// Returns [`crate::uri::UriError`] if the path cannot be expressed as a URI.
-pub fn document_uri_from_path(path: &std::path::Path) -> Result<DocumentUri, crate::uri::UriError> {
-    Ok(DocumentUri::new(path_to_uri(path)?))
 }

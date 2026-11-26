@@ -8,6 +8,8 @@
 //! This is the L0 toolkit crate ([CRATE-LAYOUT-LAYERS]). Its modules have no
 //! internal dependencies:
 //!
+//! - [`path`] — every file path operation: URI conversion, resolution,
+//!   normalization, containment, rebasing ([PATH-CENTRAL]).
 //! - [`config`] — layered TOML config loader.
 //! - [`vfs`] — concurrent open-document store with position-encoding support.
 //! - [`sidecar`] — framed-IPC transport and lifecycle for out-of-process backends.
@@ -19,6 +21,7 @@
 
 pub mod config;
 pub mod engine;
+pub mod path;
 pub mod prelude;
 pub mod sidecar;
 #[cfg(feature = "treesitter")]

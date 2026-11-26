@@ -68,7 +68,7 @@ export function bindProcessPolling(
 
 /** A fetch now and then every configured interval, until stopped. */
 function processPoll(store: Store): { start: () => void; stop: () => void } {
-  let timer: ReturnType<typeof setInterval> | undefined = undefined;
+  let timer: ReturnType<typeof setInterval> | undefined;
   return {
     start(): void {
       if (timer !== undefined) { return; }

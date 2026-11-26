@@ -6,11 +6,10 @@
 //! document never leaves one tree per version behind. [MEM-LIFETIME-PARSE-CACHE]
 
 use std::collections::hash_map::DefaultHasher;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use dashmap::DashMap;
 use tree_sitter::{Language, Parser, Tree};
 
 use crate::treesitter::parser::ParserError;
@@ -41,13 +40,20 @@ pub const MAX_TREES: usize = 128;
 /// Cache key: language identity and exact source-content hash.
 type Key = (String, ContentHash);
 
+/// Trees and their eviction order, changed together under one lock.
+#[derive(Default)]
+struct Trees {
+    /// Trees shared by language identity and exact source-content hash.
+    entries: HashMap<Key, Arc<Tree>>,
+    /// Keys in insertion order, oldest first; the eviction boundary.
+    order: VecDeque<Key>,
+}
+
 /// Concurrent parse cache.
 #[derive(Default, Clone)]
 pub struct ParseCache {
-    /// Trees shared by language identity and exact source-content hash.
-    entries: Arc<DashMap<Key, Arc<Tree>>>,
-    /// Keys in insertion order, oldest first; the eviction boundary.
-    order: Arc<Mutex<VecDeque<Key>>>,
+    /// Cached trees shared by cheap clones; no guard outlives one method.
+    trees: Arc<Mutex<Trees>>,
 }
 
 impl ParseCache {
@@ -68,8 +74,8 @@ impl ParseCache {
         source: &[u8],
     ) -> Result<Arc<Tree>, ParserError> {
         let key = (language_name.to_owned(), ContentHash::of(source));
-        if let Some(existing) = self.entries.get(&key) {
-            return Ok(Arc::clone(&existing));
+        if let Some(existing) = self.locked().entries.get(&key) {
+            return Ok(Arc::clone(existing));
         }
         let mut parser = Parser::new();
         parser
@@ -84,43 +90,47 @@ impl ParseCache {
             return Err(ParserError::NoTree(key.0));
         };
         let arc = Arc::new(tree);
-        let mut order = self.order.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut trees = self.locked();
+        let Trees { entries, order } = &mut *trees;
         // Racing parsers may replace an equivalent tree; either tree remains
         // valid, and the key moves to the newest end of the order.
-        let _replaced = self.entries.insert(key.clone(), Arc::clone(&arc));
+        let _replaced = entries.insert(key.clone(), Arc::clone(&arc));
         order.retain(|queued| queued != &key);
         order.push_back(key);
         let excess = order.len().saturating_sub(MAX_TREES);
         for oldest in order.drain(..excess) {
-            let _evicted = self.entries.remove(&oldest);
+            let _evicted = entries.remove(&oldest);
         }
         Ok(arc)
     }
 
+    /// The cached trees; a panicked holder left them whole.
+    fn locked(&self) -> MutexGuard<'_, Trees> {
+        self.trees.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// Drop all cached trees.
     pub fn clear(&self) {
-        let mut order = self.order.lock().unwrap_or_else(PoisonError::into_inner);
-        order.clear();
-        self.entries.clear();
+        *self.locked() = Trees::default();
     }
 
     /// Number of cached trees.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.entries.len()
+        self.locked().entries.len()
     }
 
     /// `true` if the cache is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.locked().entries.is_empty()
     }
 }
 
 impl std::fmt::Debug for ParseCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParseCache")
-            .field("entries", &self.entries.len())
+            .field("entries", &self.len())
             .finish_non_exhaustive()
     }
 }

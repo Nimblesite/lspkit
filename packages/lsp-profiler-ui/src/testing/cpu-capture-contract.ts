@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as vscode from "vscode";
 import type { ProfileResult } from "../profiler-decorations";
 import { configSection } from "../ids";
-import { editorPathKey } from "../editor-path-key";
+import { editorPathKey } from "../paths";
 import { SingletonWebviewPanel, buildWebviewDocument, handleSourceNavigation } from "../profiler-webview";
 import { closeAllEditors, pollUntilResult } from "./webview-contract-helpers";
 import { capturesAttributedSamples, mountsTheInteractiveViews } from "./cpu-capture-assertions";
@@ -21,7 +21,7 @@ function paletteProbe(): string {
 async function paletteOverridesRepaintOpenPanels(): Promise<void> {
   const config = vscode.workspace.getConfiguration(configSection());
   const previous = config.inspect("profiler.palette")?.globalValue;
-  let observed: string | undefined = undefined;
+  let observed: string | undefined;
   const panel = new SingletonWebviewPanel(() => "profiler.palette.contract", message => { observed = message.file; });
   panel.show("Palette contract", paletteProbe());
   try {

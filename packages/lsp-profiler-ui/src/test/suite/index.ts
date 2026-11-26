@@ -1,5 +1,4 @@
 // Mocha entry of the UI suites. Tests [PROF-TESTING].
-import path from "node:path";
 import { once } from "node:events";
 import { env } from "node:process";
 import Mocha from "mocha";
@@ -38,9 +37,8 @@ export async function run(): Promise<void> {
     ...configuredGrep(),
     rootHooks: { beforeAll },
   });
-  const testsRoot = path.resolve(__dirname);
-  for (const file of await glob(TEST_FILE_GLOB, { cwd: testsRoot })) {
-    mocha.addFile(path.resolve(testsRoot, file));
+  for (const file of await glob(TEST_FILE_GLOB, { cwd: __dirname, absolute: true })) {
+    mocha.addFile(file);
   }
   const runner = mocha.run();
   await once(runner, SUITE_END_EVENT);

@@ -331,16 +331,23 @@ async fn events_absorbed_by_a_ready_burst_are_delivered_when_the_events_end() {
     send_and_quiet(&tx, touched("second.rs"))
         .await
         .expect("send the burst that becomes ready behind it");
-    tx.send(removed("late.rs")).expect("send an event into the ready burst");
+    tx.send(removed("late.rs"))
+        .expect("send an event into the ready burst");
     drop(tx);
     settle().await;
 
     let first = triggers.recv().await.expect("the held trigger");
     assert_eq!(paths_of(&first), vec![PathBuf::from("first.rs")]);
-    let second = triggers.recv().await.expect("the ready burst with the late event");
+    let second = triggers
+        .recv()
+        .await
+        .expect("the ready burst with the late event");
     assert_eq!(
         paths_of(&second),
         vec![PathBuf::from("second.rs"), PathBuf::from("late.rs")]
     );
-    assert!(triggers.recv().await.is_none(), "the channel closes after the last burst");
+    assert!(
+        triggers.recv().await.is_none(),
+        "the channel closes after the last burst"
+    );
 }

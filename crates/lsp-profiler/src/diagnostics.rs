@@ -55,10 +55,11 @@ pub struct DiagnosticSet {
 }
 
 impl DiagnosticSet {
-    /// Add one diagnostic for `file`, at most `cap` per file. Files that cannot
-    /// be expressed as a `file://` URI are skipped.
+    /// Add one diagnostic for `file`, at most `cap` per file, under the one URI
+    /// the language server also gives that file; files that cannot be expressed
+    /// as a `file://` URI are skipped. [PROF-PATHS]
     pub fn push(&mut self, file: &str, diagnostic: ProfilerDiagnostic, cap: usize) {
-        let Some(uri) = file_uri(file) else {
+        let Ok(uri) = lspkit::path::path_to_uri(Path::new(file)) else {
             return;
         };
         let entries = self.files.entry(uri).or_default();
@@ -75,14 +76,6 @@ impl DiagnosticSet {
             .map(|(uri, diagnostics)| FileDiagnostics { uri, diagnostics })
             .collect()
     }
-}
-
-/// `file://` URI for an absolute path, when it has one.
-#[must_use]
-pub fn file_uri(path: &str) -> Option<String> {
-    url::Url::from_file_path(Path::new(path))
-        .ok()
-        .map(String::from)
 }
 
 /// Build one diagnostic.
@@ -237,6 +230,39 @@ mod tests {
         let lines: Vec<HotLine> = (1..=30).map(|n| hot_line(&file, n, 3.0)).collect();
         let files = hotspot_diagnostics(&DiagnosticStyle::default(), &lines, &[], 100, 5);
         assert_eq!(files.first().map(|f| f.diagnostics.len()), Some(5));
+    }
+
+    /// [PROF-PATHS] One file has one URI: a profiler
+    /// diagnostic names a file by exactly the URI the language server gives it,
+    /// so reserved characters common in real folder names are percent-encoded.
+    #[cfg(unix)]
+    #[test]
+    fn diagnostic_uri_is_the_servers_uri_for_the_same_file() {
+        assert_hot_line_uri(
+            "/home/me/Projects (old)/a+b@c.py",
+            "file:///home/me/Projects%20%28old%29/a%2Bb%40c.py",
+        );
+    }
+
+    /// [PROF-PATHS] On Windows the server's URI also resolves
+    /// `..` lexically and keeps `\\wsl$` shares, so the profiler's must too.
+    #[cfg(windows)]
+    #[test]
+    fn diagnostic_uri_is_the_servers_uri_for_the_same_file() {
+        assert_hot_line_uri(r"C:\repo\sub\..\a+b.py", "file:///C:/repo/a%2Bb.py");
+        assert_hot_line_uri(r"\\wsl$\Ubuntu\home\a.py", "file://wsl%24/Ubuntu/home/a.py");
+    }
+
+    /// The URI of the one diagnostic file a hot line in `file` produces.
+    fn assert_hot_line_uri(file: &str, uri: &str) {
+        let files = hotspot_diagnostics(
+            &DiagnosticStyle::default(),
+            &[hot_line(file, 3, 50.0)],
+            &[],
+            10,
+            20,
+        );
+        assert_eq!(files.first().map(|f| f.uri.as_str()), Some(uri), "{file}");
     }
 
     #[test]

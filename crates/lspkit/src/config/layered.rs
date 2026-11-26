@@ -44,20 +44,9 @@ pub struct LoadedConfig<T> {
     pub value: T,
 }
 
-/// Walk up from `start` looking for `file_name`. Returns the first hit's path,
-/// or `None` if the search reaches the filesystem root.
-#[must_use]
-pub fn find_ancestor(start: &Path, file_name: &str) -> Option<PathBuf> {
-    let mut current: Option<&Path> = Some(start);
-    while let Some(dir) = current {
-        let candidate = dir.join(file_name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-        current = dir.parent();
-    }
-    None
-}
+/// The ancestor walk that finds a config file; it lives in `lspkit::path`
+/// with every other path operation. [PATH-CENTRAL]
+pub use crate::path::find_ancestor;
 
 /// Load and deserialize a config file by walking up from `start`.
 ///

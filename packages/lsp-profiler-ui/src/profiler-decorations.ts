@@ -17,7 +17,7 @@ import type { SampledView } from "./sampled-view";
 import * as vscode from "vscode";
 import { configSection } from "./ids";
 import { Logger } from "./logger";
-import { groupByFile, rowAndEditorKeyer } from "./editor-path-key";
+import { groupByFile, rowAndEditorKeyer } from "./paths";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

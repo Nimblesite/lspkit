@@ -5,9 +5,9 @@
 //! always scoped inside synchronous blocks — no guard ever crosses an
 //! `await` boundary.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use dashmap::DashMap;
 use ropey::Rope;
 
 use crate::vfs::edit::{self, EditError, TextEdit};
@@ -83,8 +83,9 @@ struct DocumentEntry {
 /// Concurrent open-document store.
 #[derive(Debug, Default, Clone)]
 pub struct Vfs {
-    /// Open entries shared by cheap clones of the store.
-    docs: Arc<DashMap<DocumentUri, DocumentEntry>>,
+    /// Open entries shared by cheap clones of the store. Every guard lives
+    /// inside one synchronous method, never across an `.await`.
+    docs: Arc<RwLock<HashMap<DocumentUri, DocumentEntry>>>,
     /// Encoding used to translate every incoming edit position.
     encoding: PositionEncoding,
 }
@@ -94,9 +95,19 @@ impl Vfs {
     #[must_use]
     pub fn new(encoding: PositionEncoding) -> Self {
         Self {
-            docs: Arc::new(DashMap::new()),
+            docs: Arc::default(),
             encoding,
         }
+    }
+
+    /// Shared access to the open entries; a panicked writer left them whole.
+    fn entries(&self) -> RwLockReadGuard<'_, HashMap<DocumentUri, DocumentEntry>> {
+        self.docs.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Exclusive access to the open entries; a panicked writer left them whole.
+    fn entries_mut(&self) -> RwLockWriteGuard<'_, HashMap<DocumentUri, DocumentEntry>> {
+        self.docs.write().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Insert (or replace) a document. Called from `textDocument/didOpen`.
@@ -106,7 +117,7 @@ impl Vfs {
             version,
         };
         // A reopened URI intentionally replaces and drops its previous entry.
-        let _ = self.docs.insert(uri, entry);
+        let _ = self.entries_mut().insert(uri, entry);
     }
 
     /// Apply incremental edits. Called from `textDocument/didChange`.
@@ -121,8 +132,8 @@ impl Vfs {
         edits: &[TextEdit],
         version: DocumentVersion,
     ) -> Result<(), VfsError> {
-        let mut entry = self
-            .docs
+        let mut entries = self.entries_mut();
+        let entry = entries
             .get_mut(uri)
             .ok_or_else(|| VfsError::NotFound(uri.as_str().to_owned()))?;
         if version.get() <= entry.version.get() {
@@ -139,19 +150,19 @@ impl Vfs {
     /// Remove a document. Called from `textDocument/didClose`.
     pub fn close(&self, uri: &DocumentUri) {
         // Closing an unknown document is idempotent; a removed entry can be dropped.
-        let _ = self.docs.remove(uri);
+        let _ = self.entries_mut().remove(uri);
     }
 
     /// Read a document's current text. Returns `None` if not tracked.
     #[must_use]
     pub fn text(&self, uri: &DocumentUri) -> Option<String> {
-        self.docs.get(uri).map(|entry| entry.rope.to_string())
+        self.entries().get(uri).map(|entry| entry.rope.to_string())
     }
 
     /// Read a document's current LSP version. Returns `None` if not tracked.
     #[must_use]
     pub fn version(&self, uri: &DocumentUri) -> Option<DocumentVersion> {
-        self.docs.get(uri).map(|entry| entry.version)
+        self.entries().get(uri).map(|entry| entry.version)
     }
 
     /// The negotiated position encoding.
@@ -163,12 +174,12 @@ impl Vfs {
     /// Number of currently tracked documents.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.docs.len()
+        self.entries().len()
     }
 
     /// `true` if no documents are tracked.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.docs.is_empty()
+        self.entries().is_empty()
     }
 }

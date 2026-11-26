@@ -1,5 +1,10 @@
-// Implements [PROF-TESTING] path keying. See docs/specs/LSP-PROFILER-SPEC.md
+// Implements [PROF-UI-PATHS] and [PROF-TESTING] path keying. See docs/specs/LSP-PROFILER-SPEC.md
 /**
+ * The library's only path handling: keying, canonicalizing, comparing and the
+ * per-platform path rules ([PROF-UI-PATHS]). No other module normalizes,
+ * resolves, folds or compares file paths. Editor URIs are built only with the
+ * editor's own `vscode.Uri.file`, never by formatting a string.
+ *
  * Keying a file path so a runtime's paths and the editor's agree.
  *
  * Every in-editor overlay the library paints — the CPU heat map, the memory track,
@@ -20,6 +25,27 @@
 
 import path from "node:path";
 import { realpath } from "node:fs/promises";
+
+/** Path rules of `platform`, never of the host running this code. */
+export function pathRules(platform: NodeJS.Platform): typeof path.posix {
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
+/** True when `value` names a filesystem path rather than a bare PATH command. */
+export function looksLikePath(value: string): boolean {
+  return value.includes("/") || value.includes("\\");
+}
+
+/**
+ * `file` spelled for a textual comparison under `platform`'s rules: separators
+ * and `.`/`..` normalized, and case folded only where the platform's paths are
+ * case-insensitive. Touches no disk; for paths from different producers use
+ * `editorPathKey`.
+ */
+export function comparablePath(file: string, platform: NodeJS.Platform): string {
+  const normalized = pathRules(platform).normalize(file);
+  return platform === "win32" ? normalized.toLowerCase() : normalized;
+}
 
 /**
  * Key a path for cross-producer comparison.

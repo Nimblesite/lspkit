@@ -57,7 +57,7 @@ fn assert_batch(batch: &Value, root: &Path) {
             .unwrap_or_default()
             .into_iter()
             .map(|path| PathBuf::from(path.as_str().unwrap_or_default()))
-            .all(|path| path.starts_with(root))
+            .all(|path| lspkit::path::is_within(&path, root))
     });
     assert!(owned_paths, "batches carry real watched paths");
 }

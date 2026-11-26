@@ -40,7 +40,7 @@ function stringArg(args: unknown, key: string): string | undefined {
 
 /** A fake handler that ignores every request and answers with nothing. */
 function noResponse(): undefined {
-  return undefined;
+  // An empty body returns `undefined`: the handler answers with nothing.
 }
 
 class FakeSession implements DapSessionLike {

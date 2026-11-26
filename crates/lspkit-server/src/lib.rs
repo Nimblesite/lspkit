@@ -5,7 +5,8 @@
 //! - Content-Length framed JSON-RPC 2.0 reader/writer ([`jsonrpc`]).
 //! - Method [`dispatch::Dispatcher`] with cancellation-token plumbing.
 //! - [`capabilities::Capabilities`] builder that does not leak protocol types.
-//! - [`uri`] helpers for `file://` ↔ `PathBuf`.
+//! - [`uri`] — `file://` ↔ `PathBuf`, re-exported from `lspkit::path`, the one
+//!   home of path handling ([PATH-CENTRAL]).
 //! - [`diagnostics::DiagnosticsBus`] for fan-out to LSP and MCP sinks.
 //! - [`progress::ProgressSink`] wrapping `window/workDoneProgress`.
 //! - Multi-root [`workspace::Workspace`] tracking.
@@ -28,8 +29,10 @@ pub mod progress;
 #[cfg(feature = "pull")]
 pub mod pull;
 pub mod reply;
-pub mod uri;
 pub mod workspace;
+
+/// `file://` ↔ `PathBuf` conversion; lives in `lspkit::path`. [PATH-CENTRAL]
+pub use lspkit::path as uri;
 
 pub use crate::capabilities::{Capabilities, Feature, TextSync};
 pub use crate::diagnostics::{
@@ -43,6 +46,6 @@ pub use crate::jsonrpc::{FramingError, JsonRpcError, Message, MessageWriter, Req
 pub use crate::outbound::{Outbound, OutboundError, OutboundResponse, OutboundResult};
 pub use crate::progress::{NoopReporter, ProgressReporter, ProgressSink, ProgressUpdate};
 pub use crate::reply::{EmissionError, ReplyGate};
-pub use crate::uri::{path_to_uri, uri_to_path, UriError};
 pub use crate::workspace::{Workspace, WorkspaceFolder};
+pub use lspkit::path::{path_to_uri, uri_to_path, UriError};
 pub use tokio_util::sync::CancellationToken;

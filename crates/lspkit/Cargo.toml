@@ -21,7 +21,6 @@ workspace = true
 
 [dependencies]
 async-trait.workspace = true
-dashmap.workspace = true
 futures-core.workspace = true
 ropey.workspace = true
 serde.workspace = true

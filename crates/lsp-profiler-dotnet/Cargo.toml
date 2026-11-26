@@ -22,6 +22,8 @@ workspace = true
 [dependencies]
 async-trait.workspace = true
 lsp-profiler.workspace = true
+# Every path goes through `lspkit::path`. [PROF-PATHS]
+lspkit.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

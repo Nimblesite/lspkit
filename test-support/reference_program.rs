@@ -1,6 +1,6 @@
 //! Locate exactly the real producer built for this test profile.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::{Child, Command};
@@ -33,11 +33,10 @@ pub fn reference_binary() -> Result<PathBuf, String> {
 fn profile_binary() -> Result<PathBuf, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let name = format!("diagnostic-reference{}", std::env::consts::EXE_SUFFIX);
+    let example = Path::new("examples").join(&name);
     executable
-        .ancestors()
-        .skip(1)
-        .map(|directory| directory.join("examples").join(&name))
-        .find(|candidate| candidate.is_file())
+        .parent()
+        .and_then(|directory| lspkit::path::find_ancestor(directory, &example))
         .ok_or_else(|| format!("no examples/{name} above {}", executable.display()))
 }
 

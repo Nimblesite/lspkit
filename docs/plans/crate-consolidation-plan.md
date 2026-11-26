@@ -19,7 +19,7 @@ graph TD
 | `lsp-profiler-dotnet` | L1 | — | 3.9k | yes |
 | `lsp-profiler-python` | L1 | `lsp-profiler-python`, `lsp-profiler-helper` | 12.9k | no (parked) |
 
-- **`[CRATE-LAYOUT-LAYERS]`** An L1 crate depends only on its own tree's L0 crate. An L0 crate has no internal dependencies.
+- **`[CRATE-LAYOUT-LAYERS]`** Superseded by the spec: `lspkit` is the only L0 crate; `lspkit-server` and `lsp-profiler` are L1 on `lspkit`; `lsp-profiler-dotnet` is L2 ([PATH-CENTRAL]).
 - **`[CRATE-LAYOUT-MODULES]`** Each absorbed crate becomes a top-level module with the same name: `lspkit::config`, `lspkit::vfs`, `lspkit::treesitter`, `lspkit::sidecar`, `lspkit_server::live`, `lspkit_server::mcp`.
 - **`[CRATE-LAYOUT-FEATURES]`** `lspkit-server`'s `mcp` module is always on: it has no dependencies of its own since the unused `rmcp` SDK was deleted. `treesitter` and `sidecar` become features of `lspkit` only if their dependencies are heavy.
 - **`[CRATE-LAYOUT-HELPER]`** `lsp-profiler-helper` becomes a `[[bin]]` target of `lsp-profiler-python`.

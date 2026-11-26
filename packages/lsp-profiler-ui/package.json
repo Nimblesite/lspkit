@@ -23,11 +23,11 @@
     "lint": "tsc -p ./ --noEmit && oxlint -c ../.oxlintrc.json --type-aware --deny-warnings src",
     "pretest": "node scripts/write-test-host-manifest.mjs",
     "test": "vscode-test && npm run test:debug",
-    "test:paths": "mocha --ui tdd out/src/test/suite/editor-path-key.test.js",
+    "test:paths": "mocha --ui tdd out/src/test/suite/paths.test.js",
     "test:debug": "c8 mocha --ui tdd --timeout 10000 \"out/src/debug/test/**/*.test.js\" \"out/src/test/unit/**/*.test.js\""
   },
   "dependencies": {
-    "@preact/signals-core": "^1.14.4"
+    "@preact/signals-core": "^1.14.5"
   },
   "peerDependencies": {
     "vscode-languageclient": "^9.0.1 || ^10.1.0 || ^11.0.0"
@@ -39,15 +39,15 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.1.2",
-    "@types/vscode": "^1.99.0",
+    "@types/node": "^26.6.6",
+    "@types/vscode": "^1.146.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
     "c8": "^12.0.0",
-    "glob": "^14.0.3",
+    "glob": "^14.0.6",
     "mocha": "^12.0.3",
-    "oxlint": "^1.90.0",
-    "oxlint-tsgolint": "^7.0.2005",
+    "oxlint": "^1.94.0",
+    "oxlint-tsgolint": "^7.0.2007",
     "typescript": "^7.0.2",
     "vscode-languageclient": "^11.0.0",
     "vscode-languageserver": "^11.0.0",

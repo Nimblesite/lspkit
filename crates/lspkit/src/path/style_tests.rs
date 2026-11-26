@@ -1,11 +1,10 @@
 //! [URI-AUTHORITY] [URI-WINDOWS] Path-style rules, isolated so the Linux CI
 //! runs the Windows rules too: the public functions only take the Windows
-//! branch on a Windows build, where `tests/uri_windows.rs` runs the same table.
+//! branch on a Windows build, where `tests/path_uri_windows.rs` runs the same table.
 
 use super::{native_to_uri, uri_to_native, Style, UriError};
 
-#[path = "uri_cases.rs"]
-mod cases;
+use super::cases;
 
 #[test]
 fn windows_uris_decode_to_exact_paths_and_round_trip() {

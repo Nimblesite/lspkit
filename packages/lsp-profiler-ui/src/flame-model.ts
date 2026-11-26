@@ -174,7 +174,7 @@ function insertStack(
   weight: number,
 ): void {
   let children = root;
-  let node: AggNode | undefined = undefined;
+  let node: AggNode | undefined;
   for (const frameIdx of stack) {
     node = childOf(children, frameIdx);
     node.total += weight;

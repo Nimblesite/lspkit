@@ -1,10 +1,90 @@
-//! URI ↔ `PathBuf` conversion: the one place lspkit turns file paths into URIs
-//! and back.
+//! All file path handling in the workspace: path ↔ `file://` URI conversion,
+//! resolution, normalization, containment and rebasing ([PATH-CENTRAL]).
+//! No other module parses, builds, normalizes or compares file paths.
 //!
-//! Handles `file://`, URI authorities, percent-decoding, Windows drive letters,
+//! URIs handle `file://`, authorities, percent-decoding, Windows drive letters,
 //! UNC paths and extended-length prefixes ([URI-AUTHORITY], [URI-WINDOWS]).
 
 use std::path::{Path, PathBuf};
+
+use crate::vfs::DocumentUri;
+
+/// Resolve a relative `raw` against `base` when one is known; an absolute
+/// path, or no base, is kept as given. [PATH-CENTRAL]
+#[must_use]
+pub fn resolve_against(raw: impl AsRef<Path>, base: Option<&Path>) -> PathBuf {
+    let path = raw.as_ref();
+    match base {
+        Some(base) if path.is_relative() => base.join(path),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// Whether `path` is `root` itself or lies under it, compared by whole
+/// components, so `/repo2` is not under `/repo`. [PATH-CENTRAL]
+#[must_use]
+pub fn is_within(path: &Path, root: &Path) -> bool {
+    path.starts_with(root)
+}
+
+/// Whether `a` and `b` spell the same path, compared by whole components.
+/// [PATH-CENTRAL]
+#[must_use]
+pub fn same_path(a: &Path, b: &Path) -> bool {
+    a == b
+}
+
+/// Whether `candidate` is equal to, or nested under, any of `roots`.
+/// [PATH-CENTRAL]
+#[must_use]
+pub fn path_in_roots(candidate: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| is_within(candidate, root))
+}
+
+/// The first `start`, or ancestor of `start`, holding the file `relative`:
+/// that file's path, or `None` when the walk reaches the filesystem root.
+/// [PATH-CENTRAL]
+#[must_use]
+pub fn find_ancestor(start: &Path, relative: impl AsRef<Path>) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .map(|dir| dir.join(relative.as_ref()))
+        .find(|candidate| candidate.is_file())
+}
+
+/// The canonical spelling of an existing path, with every link resolved.
+/// [PATH-CENTRAL]
+///
+/// # Errors
+/// Returns the I/O error when the path does not exist or cannot be resolved.
+pub fn canonical(path: &Path) -> std::io::Result<PathBuf> {
+    std::fs::canonicalize(path)
+}
+
+/// [`canonical`], keeping the original spelling of a path that cannot be
+/// resolved. [PATH-CENTRAL]
+#[must_use]
+pub fn normalize_path(path: &Path) -> PathBuf {
+    canonical(path).unwrap_or_else(|_unresolvable| path.to_path_buf())
+}
+
+/// The [`DocumentUri`] of an absolute path.
+///
+/// # Errors
+/// Returns [`UriError`] if the path cannot be expressed as a URI.
+pub fn document_uri(path: &Path) -> Result<DocumentUri, UriError> {
+    path_to_uri(path).map(DocumentUri::new)
+}
+
+/// The same file named under `to` when `path` lies under `from`; a path
+/// outside `from` is kept. [PATH-CENTRAL]
+#[must_use]
+pub fn rebase(path: PathBuf, from: &Path, to: &Path) -> PathBuf {
+    match path.strip_prefix(from) {
+        Ok(rest) => to.join(rest),
+        Err(_outside) => path,
+    }
+}
 
 /// Errors from URI conversion.
 #[non_exhaustive]
@@ -387,5 +467,6 @@ fn percent_encode(input: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "uri_style_tests.rs"]
+mod cases;
+#[cfg(test)]
 mod style_tests;

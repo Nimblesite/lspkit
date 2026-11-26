@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use lspkit_server::{path_to_uri, uri_to_path};
+use lspkit::path::{path_to_uri, uri_to_path};
 
 /// A `localhost` or empty authority is the host, never the first path folder.
 #[test]

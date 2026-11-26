@@ -5,7 +5,7 @@
 //! folder-scoped iteration so handlers can route queries correctly.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// A named workspace folder.
 #[non_exhaustive]
@@ -42,48 +42,51 @@ impl Workspace {
         Self::default()
     }
 
+    /// Shared access to the folders; a panicked writer left the list whole.
+    fn read(&self) -> RwLockReadGuard<'_, Vec<WorkspaceFolder>> {
+        self.folders.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Exclusive access to the folders; a panicked writer left the list whole.
+    fn write(&self) -> RwLockWriteGuard<'_, Vec<WorkspaceFolder>> {
+        self.folders.write().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// Replace the folder set wholesale (used at `initialize` time).
     pub fn set_folders(&self, folders: Vec<WorkspaceFolder>) {
-        if let Ok(mut guard) = self.folders.write() {
-            *guard = folders;
-        }
+        *self.write() = folders;
     }
 
     /// Append a folder.
     pub fn add(&self, folder: WorkspaceFolder) {
-        if let Ok(mut guard) = self.folders.write() {
-            guard.push(folder);
-        }
+        self.write().push(folder);
     }
 
-    /// Remove a folder by root path.
+    /// Remove a folder by root path. [PATH-CENTRAL]
     pub fn remove(&self, root: &Path) {
-        if let Ok(mut guard) = self.folders.write() {
-            guard.retain(|f| f.root != root);
-        }
+        self.write()
+            .retain(|f| !lspkit::path::same_path(&f.root, root));
     }
 
     /// Snapshot the current folder list.
     #[must_use]
     pub fn folders(&self) -> Vec<WorkspaceFolder> {
-        self.folders
-            .read()
-            .map_or_else(|_| Vec::new(), |g| g.clone())
+        self.read().clone()
     }
 
-    /// Find the folder containing `path`, if any.
+    /// Find the folder containing `path`, if any. [PATH-CENTRAL]
     #[must_use]
     pub fn folder_for(&self, path: &Path) -> Option<WorkspaceFolder> {
-        self.folders
-            .read()
-            .ok()
-            .and_then(|guard| guard.iter().find(|f| path.starts_with(&f.root)).cloned())
+        self.read()
+            .iter()
+            .find(|f| lspkit::path::is_within(path, &f.root))
+            .cloned()
     }
 
     /// Number of configured folders.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.folders.read().map_or(0, |g| g.len())
+        self.read().len()
     }
 
     /// `true` if no folders are configured.

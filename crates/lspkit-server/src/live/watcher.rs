@@ -141,8 +141,8 @@ struct RootAlias {
 impl RootAlias {
     /// Resolve `root` once, when the native watch has already accepted it.
     fn of(root: &Path) -> Result<Self, WatcherError> {
-        let reported =
-            std::fs::canonicalize(root).map_err(|error| WatcherError::Watch(error.to_string()))?;
+        let reported = lspkit::path::canonical(root)
+            .map_err(|error| WatcherError::Watch(error.to_string()))?;
         Ok(Self {
             given: root.to_path_buf(),
             reported,
@@ -151,15 +151,13 @@ impl RootAlias {
 
     /// Whether `path` is the watched root itself rather than anything under it.
     fn is_root(&self, path: &Path) -> bool {
-        path == self.given
+        lspkit::path::same_path(path, &self.given)
     }
 
-    /// The same file under the given root; a path outside the reported root is kept.
+    /// The same file under the given root; a path outside the reported root is
+    /// kept. [PATH-CENTRAL]
     fn rebase(&self, path: PathBuf) -> PathBuf {
-        match path.strip_prefix(&self.reported) {
-            Ok(rest) => self.given.join(rest),
-            Err(_outside_the_reported_root) => path,
-        }
+        lspkit::path::rebase(path, &self.reported, &self.given)
     }
 }
 

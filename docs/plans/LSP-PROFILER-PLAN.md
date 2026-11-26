@@ -6,7 +6,7 @@
 
 ## Status legend
 
-- [x] Source overlays canonicalize symlinks on macOS/Linux and junctions on Windows ([PROF-UI-HEATMAP]); `editor-path-key.test.ts` opens the real HotLeakApp fixture through a linked directory and checks missing-file fallback.
+- [x] Source overlays canonicalize symlinks on macOS/Linux and junctions on Windows ([PROF-UI-HEATMAP]); `paths.test.ts` opens the real HotLeakApp fixture through a linked directory and checks missing-file fallback.
 
 - `[x]` implemented and tested (the test is named or counted)
 - `[~]` implemented, but tests are missing or incomplete, or not yet built

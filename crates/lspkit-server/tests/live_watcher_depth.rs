@@ -59,7 +59,9 @@ fn assert_batch(batch: &Value, root: &Path, child: &Path, recursive: bool, remov
 
 /// Non-recursive watching excludes descendants; both modes retain root ownership.
 fn assert_scope(paths: &[(&str, PathBuf)], root: &Path, child: &Path, recursive: bool) {
-    assert!(paths.iter().all(|(_, path)| path.starts_with(root)));
+    assert!(paths
+        .iter()
+        .all(|(_, path)| lspkit::path::is_within(path, root)));
     if !recursive {
         assert!(
             paths.iter().all(|(_, path)| path != child),

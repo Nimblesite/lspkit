@@ -4,7 +4,7 @@ import * as fs from "node:fs/promises";
 import type { Stats } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { editorPathKey, pathKeyer } from "../../editor-path-key";
+import { editorPathKey, pathKeyer } from "../../paths";
 
 const FIXTURE_FILES = ["Program.cs", "HotLeakApp.csproj"];
 const LINK_TYPE = process.platform === "win32" ? "junction" : "dir";

@@ -13,7 +13,7 @@ import * as vscode from "vscode";
 import { Logger } from "./logger";
 import { recordApplied } from "./profiler-decorations";
 import type { AppliedDecoration } from "./profiler-decorations";
-import { groupByFile, rowAndEditorKeyer } from "./editor-path-key";
+import { groupByFile, rowAndEditorKeyer } from "./paths";
 import { formatBytes } from "./profiler-styles";
 
 // ── Types ─────────────────────────────────────────────────────────────────

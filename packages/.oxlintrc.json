@@ -24,6 +24,10 @@
     "import/prefer-default-export": "off",
     // Removing `undefined` from a call breaks parameters that are required but nullable.
     "unicorn/no-useless-undefined": ["error", { "checkArguments": false }],
+    // Contradicts unicorn/no-useless-undefined, which forbids `let x: T | undefined = undefined`
+    // while this demands an initializer. TypeScript's strict definite-assignment check already
+    // rejects reading an uninitialized `let` whose type excludes `undefined`.
+    "eslint/init-declarations": "off",
     // Contradict co-locating each export with its declaration.
     "import/group-exports": "off",
     "import/exports-last": "off",

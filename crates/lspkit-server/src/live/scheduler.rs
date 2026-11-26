@@ -150,8 +150,20 @@ async fn run(
         match step {
             Step::Event(event) => burst.push(event),
             Step::Quiet => burst.ready = true,
-            Step::Ended => return,
+            Step::Ended => return deliver_ready(&mut burst, &tx).await,
         }
+    }
+}
+
+/// Hand a ready burst to the consumer once the events end: its window elapsed,
+/// so it is owed even when the consumer was still busy. A consumer that already
+/// left needs no last trigger. [MEM-LIFETIME-SCHEDULER-BACKLOG]
+async fn deliver_ready(burst: &mut Burst, tx: &mpsc::Sender<Trigger>) {
+    if !burst.ready {
+        return;
+    }
+    if let Ok(permit) = tx.reserve().await {
+        permit.send(burst.take());
     }
 }
 

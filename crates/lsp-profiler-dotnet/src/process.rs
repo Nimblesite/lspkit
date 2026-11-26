@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use lsp_profiler::paths::resolve_against;
 use lsp_profiler::runtime::{Classification, ProcessCandidate};
+use lspkit::path::resolve_against;
 
 /// Identifies the framework-dependent application launcher across platforms.
 const MUXER_STEM: &str = "dotnet";

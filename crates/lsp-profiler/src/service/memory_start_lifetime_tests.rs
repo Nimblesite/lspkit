@@ -162,7 +162,7 @@ impl ProfilerEvents for Discard {
     async fn notify(&self, _method: &'static str, _params: Value) {}
 }
 
-/// A spawned `sleep`, killed when the test ends. The process table excludes
+/// A spawned idle process, killed when the test ends. The process table excludes
 /// the test binary itself, so the runtime needs another live process to claim.
 struct Child(std::process::Child);
 
@@ -173,13 +173,32 @@ impl Drop for Child {
     }
 }
 
-/// A live process the refusing runtime can claim.
+/// A live process the refusing runtime can claim, on every platform.
 fn child() -> Result<Child, String> {
-    std::process::Command::new("sleep")
-        .arg(CHILD_LIFE)
+    idle_command()
         .spawn()
         .map(Child)
         .map_err(|error| format!("cannot spawn a child process to track: {error}"))
+}
+
+/// A command that idles for [`CHILD_LIFE`] seconds: `sleep` on Unix, and the
+/// same wait through PowerShell on Windows, which has no `sleep` binary.
+fn idle_command() -> std::process::Command {
+    if cfg!(windows) {
+        let mut command = std::process::Command::new("powershell.exe");
+        let _ = command.args([
+            "-NoProfile",
+            "-Command",
+            "Start-Sleep",
+            "-Seconds",
+            CHILD_LIFE,
+        ]);
+        command
+    } else {
+        let mut command = std::process::Command::new("sleep");
+        let _ = command.arg(CHILD_LIFE);
+        command
+    }
 }
 
 /// A `memory/start` request for `pid` on the refusing runtime.

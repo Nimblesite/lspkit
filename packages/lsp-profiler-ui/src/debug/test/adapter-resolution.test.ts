@@ -1,10 +1,10 @@
 import * as assert from "node:assert";
 import path from "node:path";
 import type { AdapterResolutionRequest } from "../adapter-resolution";
+import { looksLikePath } from "../../paths";
 import {
   findExecutableOnPath,
   findOnPath,
-  looksLikePath,
   missingAdapterMessage,
   resolveAdapterCommand,
   resolveAdapterPath,

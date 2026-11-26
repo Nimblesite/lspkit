@@ -1,6 +1,6 @@
 //! [URI-WINDOWS] The Windows conversion table from issue #49, kept once and
-//! run twice: by `uri_style_tests.rs` against the Windows rules on every OS,
-//! and by `tests/uri_windows.rs` through the public API on a Windows build.
+//! run twice: by `style_tests.rs` against the Windows rules on every OS,
+//! and by `tests/path_uri_windows.rs` through the public API on a Windows build.
 //! Test data only; nothing here ships in the library.
 
 /// A URI, the exact Windows path it decodes to, and the canonical URI that

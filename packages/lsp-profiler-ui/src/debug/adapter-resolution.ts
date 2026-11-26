@@ -6,7 +6,7 @@
 // optional platform probe (e.g. `xcrun -f`), then a list of common install
 // locations. This file owns that chain so no extension re-implements it.
 
-import path from "node:path";
+import { looksLikePath, pathRules } from "../paths";
 
 /** All host effects the resolver needs, injected so it is unit-testable. */
 export interface AdapterResolutionRequest {
@@ -33,10 +33,6 @@ export interface AdapterResolutionRequest {
   probe?: (command: string, args: readonly string[]) => string | undefined;
 }
 
-/** True when `value` is a filesystem path rather than a bare PATH command. */
-export function looksLikePath(value: string): boolean {
-  return value.includes("/") || value.includes("\\");
-}
 
 /** True when `value` holds actual text rather than being absent or empty. */
 function hasText(value: string | undefined): value is string {
@@ -50,11 +46,6 @@ function firstNonEmpty(values: readonly (string | undefined)[]): string | undefi
 
 /** Extensions Windows runs when PATHEXT is unset. */
 const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
-
-/** Path rules of `platform`, never of the host running this code. */
-function pathRules(platform: NodeJS.Platform): typeof path.posix {
-  return platform === "win32" ? path.win32 : path.posix;
-}
 
 /**
  * The environment variable `name`. Windows variable names are case-insensitive

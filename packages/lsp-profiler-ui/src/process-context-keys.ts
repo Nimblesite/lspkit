@@ -8,7 +8,7 @@ import type { ProfilerStore as Store } from "./store";
 
 /** Mirror the language client's state to `<prefix>.profiler.serverState` so the welcome copy is honest. */
 export function bindServerStateContextKey(store: Store): vscode.Disposable {
-  let subscription: vscode.Disposable | undefined = undefined;
+  let subscription: vscode.Disposable | undefined;
   const disposeEffect = effect(() => {
     const client = store.client.value;
     subscription?.dispose();

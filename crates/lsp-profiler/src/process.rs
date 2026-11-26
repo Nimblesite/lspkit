@@ -20,9 +20,9 @@ use sysinfo::{
 };
 use tracing::info;
 
-use crate::paths::{normalize_path, path_in_roots, resolve_against};
 use crate::runtime::{Classification, ProcessCandidate, Runtime};
 use crate::wire::ProcessInfo;
+use lspkit::path::{normalize_path, path_in_roots, resolve_against};
 
 /// One recognised process and the runtime that claimed it.
 #[derive(Debug, Clone)]

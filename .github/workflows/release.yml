@@ -213,9 +213,9 @@ jobs:
         run: |
           set -euo pipefail
           for crate in \
+            lspkit \
             lsp-profiler \
             lsp-profiler-dotnet \
-            lspkit \
             lspkit-server; do
             bash scripts/cargo-publish-or-skip.sh "${crate}"
           done

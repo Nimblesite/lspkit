@@ -30,6 +30,14 @@ A change that violates one of these is wrong, whatever else it achieves.
 - **Every language gets the same profiler.** C#, F#, Python, Dart, Rust: each is one runtime crate behind the traits, and nothing above them — the service, the wire, the LSP surface, the UI library, the tests of those layers — changes per language. A feature that works for one runtime and is absent for another is either a capability flag that runtime reports, or a defect. Languages that share a runtime (C# and F# on the CLR) share the crate.
 - **The UI tests move with the UI.** Every test Basilisk's extension had for a screen the library owns runs in the library against a mock server, and every server-backed test runs in each host against that host's real targets, asserting the same behaviour. A host never writes its own copy of a library screen or its tests.
 
+### [PROF-PATHS] Paths and file URIs
+
+🔥 The profiler holds no path handling of its own. Every path it resolves, normalizes, compares or turns into a `file://` URI goes through `lspkit::path`, under the lspkit spec's [path handling rule](lspkit-spec.md#path-central-path-handling). A profiler diagnostic therefore names a file by exactly the URI the language server gives that file. For example, `/home/me/Projects (old)/a+b@c.py` is `file:///home/me/Projects%20%28old%29/a%2Bb%40c.py`, and on Windows `C:\repo\sub\..\a+b.py` is `file:///C:/repo/a%2Bb.py`. The profiler crates take no URL or path crate.
+
+### [PROF-UI-PATHS] UI path handling
+
+🔥 The TypeScript library has one path module: `packages/lsp-profiler-ui/src/paths.ts`. It owns keying a path so runtime and editor paths agree (`editorPathKey`, `pathKeyer`), textual comparison (`comparablePath`), per-platform path rules (`pathRules`) and telling a path from a bare command (`looksLikePath`). No other module normalizes, resolves, case-folds or compares file paths, and none hand-rolls a separator rewrite. An editor URI is built only with VS Code's own `vscode.Uri.file`, never by formatting a string. `paths.ts` stays free of the `vscode` module, so its tests run under plain mocha (`npm run test:paths`).
+
 ## [PROF-ARCHITECTURE] Architecture
 
 ```mermaid

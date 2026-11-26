@@ -286,3 +286,68 @@ async fn a_backlog_past_the_bound_collapses_to_one_rescan() {
     let fresh = triggers.recv().await.expect("trigger after the rescan");
     assert_eq!(paths_of(&fresh), vec![PathBuf::from("fresh.rs")]);
 }
+
+/// [MEM-LIFETIME-SCHEDULER-BACKLOG] A burst whose window has elapsed is owed to
+/// the consumer even when the events end while the consumer is still busy: the
+/// scheduler delivers it before closing, as it does for a free consumer.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn events_ending_behind_a_busy_consumer_still_deliver_the_ready_burst() {
+    let (tx, mut triggers) = build();
+    send_and_quiet(&tx, touched("first.rs"))
+        .await
+        .expect("send the burst the consumer is still holding");
+    send_and_quiet(&tx, removed("second.rs"))
+        .await
+        .expect("send the burst that becomes ready behind it");
+    drop(tx);
+    settle().await;
+
+    let first = triggers.recv().await.expect("the held trigger");
+    assert!(
+        matches!(first.events.as_slice(), [ChangeEvent::Touched(p)] if p == &vec![PathBuf::from("first.rs")])
+    );
+    let second = triggers
+        .recv()
+        .await
+        .expect("the ready burst survives the end of the events");
+    assert!(
+        matches!(second.events.as_slice(), [ChangeEvent::Removed(p)] if p == &vec![PathBuf::from("second.rs")])
+    );
+    assert!(
+        triggers.recv().await.is_none(),
+        "the channel closes after the last burst"
+    );
+}
+
+/// [MEM-LIFETIME-SCHEDULER-BACKLOG] Events that arrive after a burst is ready,
+/// while the consumer is still busy, join that burst and are delivered with it
+/// when the events end.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn events_absorbed_by_a_ready_burst_are_delivered_when_the_events_end() {
+    let (tx, mut triggers) = build();
+    send_and_quiet(&tx, touched("first.rs"))
+        .await
+        .expect("send the burst the consumer is still holding");
+    send_and_quiet(&tx, touched("second.rs"))
+        .await
+        .expect("send the burst that becomes ready behind it");
+    tx.send(removed("late.rs"))
+        .expect("send an event into the ready burst");
+    drop(tx);
+    settle().await;
+
+    let first = triggers.recv().await.expect("the held trigger");
+    assert_eq!(paths_of(&first), vec![PathBuf::from("first.rs")]);
+    let second = triggers
+        .recv()
+        .await
+        .expect("the ready burst with the late event");
+    assert_eq!(
+        paths_of(&second),
+        vec![PathBuf::from("second.rs"), PathBuf::from("late.rs")]
+    );
+    assert!(
+        triggers.recv().await.is_none(),
+        "the channel closes after the last burst"
+    );
+}
